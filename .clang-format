@@ -2,33 +2,42 @@
 BasedOnStyle: LLVM
 IndentWidth: 2
 ColumnLimit: 100
----
+
 Language: Cpp
 Standard: Latest
 UseTab: Never
 
-AlignConsecutiveDeclarations: false
-AlignConsecutiveAssignments: false
+AlignOperands: true
+BreakBeforeBinaryOperators: NonAssignment
+
+AlignAfterOpenBracket: Align
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+BreakStringLiterals: true
+
 AllowShortFunctionsOnASingleLine: Empty
 AlwaysBreakTemplateDeclarations: Yes
+AccessModifierOffset: -2
+
+FixNamespaceComments: True
+
+BinPackParameters: false
+BinPackArguments: false
 
 BreakBeforeBraces: Attach
 IndentCaseLabels: true
-AccessModifierOffset: -2
-NamespaceIndentation: None
 
-SpaceAfterTemplateKeyword: true
-SpaceBeforeParens: ControlStatements
-SpacesInAngles: false
+MaxEmptyLinesToKeep: 1
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: Always
 
 IncludeBlocks: Regroup
+SortIncludes: CaseInsensitive
 IncludeCategories:
-  - Regex:           '^".*"'
-    Priority:        1
   - Regex:           '^<sys.*'
-    Priority:        2
-  - Regex:           '^<.*'
     Priority:        3
-
-NamespaceIndentation: None
-AccessModifierOffset: -2
+  - Regex:           '^<.*'
+    Priority:        2
+  - Regex:           '.*'
+    Priority:        1
