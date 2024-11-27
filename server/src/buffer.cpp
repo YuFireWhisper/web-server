@@ -1,9 +1,9 @@
 #include "include/buffer.h"
 
+#include "include/log.h"
+
 #include <algorithm>
 #include <cassert>
-
-#include "include/log.h"
 
 #ifndef PROJECT_ROOT
 #define PROJECT_ROOT "."
@@ -12,9 +12,7 @@
 namespace server {
 
 Buffer::Buffer(size_t initSize)
-    : buffer_(PREPEND_SIZE + initSize),
-      readerIndex_(PREPEND_SIZE),
-      writerIndex_(PREPEND_SIZE) {}
+    : buffer_(PREPEND_SIZE + initSize), readerIndex_(PREPEND_SIZE), writerIndex_(PREPEND_SIZE) {}
 
 void Buffer::append(std::string_view data) {
   Buffer::append(data.data(), data.size());
@@ -31,8 +29,7 @@ void Buffer::ensureSpace(size_t len) {
     makeSpace(len);
   }
   if (writableBytes() < len) {
-    Logger::log(LogLevel::ERROR, "Failed to ensure space in buffer",
-                "buffer.log");
+    Logger::log(LogLevel::ERROR, "Failed to ensure space in buffer", "buffer.log");
     throw std::runtime_error("Failed to ensure space in buffer");
   }
 }
@@ -42,15 +39,16 @@ void Buffer::makeSpace(size_t len) {
     buffer_.resize(writerIndex_ + len);
   } else {
     size_t readable = readableBytes();
-    std::copy(data() + readerIndex_, data() + writerIndex_,
-              data() + PREPEND_SIZE);
+    std::copy(data() + readerIndex_, data() + writerIndex_, data() + PREPEND_SIZE);
 
     readerIndex_ = PREPEND_SIZE;
     writerIndex_ = readerIndex_ + readable;
   }
 }
 
-void Buffer::hasWritten(size_t len) noexcept { writerIndex_ += len; }
+void Buffer::hasWritten(size_t len) noexcept {
+  writerIndex_ += len;
+}
 
 std::string Buffer::retrieveAsString(size_t len) {
   if (len > readableBytes()) {
@@ -63,11 +61,11 @@ std::string Buffer::retrieveAsString(size_t len) {
 }
 
 void Buffer::retrieve(size_t len) {
-    if (len > readableBytes()) {
-        retrieveAll();
-    } else {
-        readerIndex_ += len;
-    }
+  if (len > readableBytes()) {
+    retrieveAll();
+  } else {
+    readerIndex_ += len;
+  }
 }
 
 void Buffer::retrieveAll() noexcept {
@@ -81,4 +79,4 @@ std::string Buffer::retrieveAllAsString() {
   return result;
 }
 
-}  // namespace server
+} // namespace server

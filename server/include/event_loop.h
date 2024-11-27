@@ -1,10 +1,11 @@
 #pragma once
 
-#include <sys/types.h>
-#include <memory>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <vector>
+
+#include <sys/types.h>
 
 namespace server {
 class Channel;
@@ -24,6 +25,7 @@ private:
 
   std::mutex mutex_;
   std::vector<std::function<void>> pendingFunctors;
+
 public:
   EventLoop();
   ~EventLoop();
@@ -34,11 +36,11 @@ public:
   void runInLoop();
   bool isInLoopThread() const;
 
-  void updateChannel(Channel* channel);
-  void removeChannel(Channel* channel);
-  bool hasChannel(Channel* channel);
+  void updateChannel(Channel *channel);
+  void removeChannel(Channel *channel);
+  bool hasChannel(Channel *channel);
 
 private:
   void handleRead();
 };
-}
+} // namespace server

@@ -1,8 +1,9 @@
 #pragma once
-#include <string_view>
+
+#include <chrono>
 #include <filesystem>
 #include <string>
-#include <chrono>
+#include <string_view>
 
 namespace server {
 
@@ -18,9 +19,12 @@ enum class LogLevel {
 class Logger {
 public:
   static void log(LogLevel level, std::string_view message);
-  static void log(LogLevel level, std::string_view message, const std::filesystem::path& outputFile);
-  static void setDefaultOutputFile(const std::filesystem::path& path);
-  static void clearDefaultOutputFile() { default_output_file_.clear(); }
+  static void
+  log(LogLevel level, std::string_view message, const std::filesystem::path &outputFile);
+  static void setDefaultOutputFile(const std::filesystem::path &path);
+  static void clearDefaultOutputFile() {
+    default_output_file_.clear();
+  }
 
 private:
   static std::filesystem::path default_output_file_;
@@ -35,12 +39,12 @@ private:
     LogEntry(LogLevel, std::string_view msg);
   };
 
-  static void writeToConsole(const LogEntry& entry);
-  static void writeToFile(const LogEntry& entry, const std::filesystem::path& file);
-  static std::string formatLogMessage(const LogEntry& entry);
+  static void writeToConsole(const LogEntry &entry);
+  static void writeToFile(const LogEntry &entry, const std::filesystem::path &file);
+  static std::string formatLogMessage(const LogEntry &entry);
 
-  static const std::string& getLevelString(LogLevel level);
-  static const std::string& getLevelColor(LogLevel level);
+  static const std::string &getLevelString(LogLevel level);
+  static const std::string &getLevelColor(LogLevel level);
 };
 
-};  // namespace server
+}; // namespace server

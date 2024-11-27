@@ -1,14 +1,14 @@
-#pragma
+#pragma once
 
 #include <include/buffer.h>
+#include <memory>
+
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <memory>
-
 namespace server {
 class Socket {
- public:
+public:
   Socket(int domain = AF_INET);
   ~Socket();
 
@@ -26,9 +26,9 @@ class Socket {
 
   int getFd() const;
 
- private:
+private:
   int fd_;
   void close();
 };
 
-}  // namespace server
+} // namespace server

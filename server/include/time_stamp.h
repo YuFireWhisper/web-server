@@ -6,16 +6,22 @@
 namespace server {
 
 class TimeStamp {
- public:
+public:
   TimeStamp() : microSecondsSinceEpoch_(0) {}
 
   explicit TimeStamp(int64_t microSecondsSinceEpoch)
       : microSecondsSinceEpoch_(microSecondsSinceEpoch) {}
 
   static TimeStamp now();
-  static TimeStamp invalid() { return TimeStamp(); }
-  bool valid() const { return microSecondsSinceEpoch_ > 0; }
-  int64_t microSecondsSinceEpoch() const { return microSecondsSinceEpoch_; }
+  static TimeStamp invalid() {
+    return TimeStamp();
+  }
+  bool valid() const {
+    return microSecondsSinceEpoch_ > 0;
+  }
+  int64_t microSecondsSinceEpoch() const {
+    return microSecondsSinceEpoch_;
+  }
   std::string toString() const;
   std::string toFormattedString(bool showMicroseconds = true) const;
 
@@ -32,9 +38,9 @@ class TimeStamp {
     return microSecondsSinceEpoch_ == rhs.microSecondsSinceEpoch_;
   }
 
- private:
+private:
   static constexpr int MicroSecondsPerSecond = 1000 * 1000;
   int64_t microSecondsSinceEpoch_;
 };
 
-}  // namespace server
+} // namespace server

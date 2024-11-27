@@ -1,20 +1,20 @@
 #include "include/socket.h"
 
+#include "include/log.h"
+
 #include <arpa/inet.h>
 #include <asm-generic/socket.h>
 #include <bits/types/struct_iovec.h>
 #include <fcntl.h>
+#include <memory>
 #include <netinet/in.h>
 #include <string.h>
+#include <unistd.h>
+
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
-#include <unistd.h>
-
-#include <memory>
-
-#include "include/log.h"
 
 namespace server {
 Socket::Socket(int domain) {
@@ -24,7 +24,9 @@ Socket::Socket(int domain) {
   }
 }
 
-Socket::~Socket() { close(); }
+Socket::~Socket() {
+  close();
+}
 
 void Socket::close() {
   if (fd_ >= 0) {
@@ -43,7 +45,9 @@ bool Socket::bind(const std::string &ip, int port) {
   return ::bind(fd_, (struct sockaddr *)&addr, sizeof(addr)) == 0;
 }
 
-bool Socket::listen(int backlog) { return ::listen(fd_, backlog) == 0; }
+bool Socket::listen(int backlog) {
+  return ::listen(fd_, backlog) == 0;
+}
 
 std::unique_ptr<Socket> Socket::accept() {
   struct sockaddr_in addr;
@@ -59,27 +63,25 @@ std::unique_ptr<Socket> Socket::accept() {
 
 bool Socket::setNonBlocking() {
   int flags = fcntl(fd_, F_GETFL, 0);
-  if (flags < 0) return false;
+  if (flags < 0)
+    return false;
   flags |= O_NONBLOCK;
   return fcntl(fd_, F_SETFL, flags) == 0;
 }
 
 bool Socket::setReuseAddr() {
   int optval = 1;
-  return setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) ==
-         0;
+  return setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == 0;
 }
 
 bool Socket::setReusePort() {
   int optval = 1;
-  return setsockopt(fd_, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) ==
-         0;
+  return setsockopt(fd_, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval)) == 0;
 }
 
 bool Socket::setKeepAlive() {
   int optval = 1;
-  return setsockopt(fd_, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) ==
-         0;
+  return setsockopt(fd_, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval)) == 0;
 }
 
 ssize_t Socket::read(Buffer &buffer) {
@@ -108,5 +110,7 @@ ssize_t Socket::write(const Buffer &buffer) {
   return ::write(fd_, buffer.peek(), buffer.writableBytes());
 }
 
-int Socket::getFd() const { return fd_; };
-}  // namespace server
+int Socket::getFd() const {
+  return fd_;
+};
+} // namespace server
