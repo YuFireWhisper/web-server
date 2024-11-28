@@ -7,21 +7,29 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
+
 include_directories(${PROJECT_SOURCE_DIR}/server)
 
 add_library(server
     server/src/log.cpp
     server/src/buffer.cpp
     server/src/time_stamp.cpp
+    server/src/timer_queue.cpp
 )
 
 enable_testing()
 find_package(GTest REQUIRED)
 
-# Note: GLOB is used here for convenience but should generally be avoided
-# for production code as it won't catch new files until CMake is run again
-file(GLOB_RECURSE TEST_SOURCES "server/tests/unit/*.cpp")
-foreach(TEST_FILE ${TEST_SOURCES})
+set(TEST_DIR ${PROJECT_SOURCE_DIR}/server/tests/unit)
+
+set(TEST_FILES
+    ${TEST_DIR}/time_stamp_test.cpp
+    ${TEST_DIR}/timer_test.cpp
+    ${TEST_DIR}/timer_id_test.cpp
+)
+
+foreach(TEST_FILE ${TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_FILE})
     target_link_libraries(${TEST_NAME}
@@ -29,6 +37,7 @@ foreach(TEST_FILE ${TEST_SOURCES})
         server
         GTest::GTest
         GTest::Main
+        pthread
     )
     gtest_discover_tests(${TEST_NAME})
 endforeach()
