@@ -19,7 +19,7 @@ public:
   virtual void updateChannel(Channel *channel) = 0;
   virtual void removeChannel(Channel *channel) = 0;
   virtual bool hasChannel(Channel *channel) const = 0;
-  virtual Poller *newDefaultPoller(EventLoop *loop) = 0;
+  virtual Poller *newDefaultPoller(EventLoop *loop);
 
 protected:
   typedef std::map<int, Channel *> ChannelMap;
