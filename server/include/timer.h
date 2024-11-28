@@ -10,8 +10,17 @@ public:
 
   Timer(TimerCallback cb, TimeStamp when, double interval)
       : callback_(std::move(cb)), expiration_(when), interval_(interval), repeat_(interval > 0.0) {}
+
   void run() {
     callback_();
+  }
+
+  void restart() {
+    expiration_ = TimeStamp::now() + interval();
+  }
+
+  TimerCallback callback() const {
+    return callback_;
   }
 
   TimeStamp expiration() const {
