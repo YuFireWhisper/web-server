@@ -15,7 +15,6 @@ add_library(server
     server/src/log.cpp
     server/src/buffer.cpp
     server/src/time_stamp.cpp
-    server/src/timer_queue.cpp
 )
 
 enable_testing()
