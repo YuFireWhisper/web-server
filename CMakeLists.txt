@@ -12,13 +12,21 @@ add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 include_directories(${PROJECT_SOURCE_DIR}/server)
 
 add_library(server
-    server/src/log.cpp
-    server/src/buffer.cpp
+    server/src/thread.cpp
+    server/src/poller.cpp
+    server/src/epoll_poller.cpp
     server/src/time_stamp.cpp
+    server/src/buffer.cpp
+    server/src/log.cpp
+    server/src/time_stamp.cpp
+    server/src/event_loop.cpp
+    server/src/channel.cpp
+    server/src/timer_queue.cpp
 )
 
 enable_testing()
 find_package(GTest REQUIRED)
+include(GoogleTest)
 
 set(TEST_DIR ${PROJECT_SOURCE_DIR}/server/tests/unit)
 
@@ -26,6 +34,7 @@ set(TEST_FILES
     ${TEST_DIR}/time_stamp_test.cpp
     ${TEST_DIR}/timer_test.cpp
     ${TEST_DIR}/timer_id_test.cpp
+    ${TEST_DIR}/event_loop_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
