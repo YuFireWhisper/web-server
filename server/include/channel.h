@@ -1,7 +1,6 @@
 #pragma once
 
 #include <functional>
-#include <memory>
 #include <poll.h>
 
 #include <sys/epoll.h>
@@ -21,18 +20,10 @@ public:
   void handleEvent(TimeStamp receiveTime);
   void handleEventWithGuard(TimeStamp receiveTime);
 
-  void setReadCallback(const ReadEventCallback &cb) {
-    readCallback_ = cb;
-  }
-  void setWriteCallback(const EventCallback &cb) {
-    writeCallback_ = cb;
-  }
-  void setErrorCallback(const EventCallback &cb) {
-    errorCallback_ = cb;
-  }
-  void setCloseCallback(const EventCallback &cb) {
-    closeCallback_ = cb;
-  }
+  void setReadCallback(const ReadEventCallback &cb) { readCallback_ = cb; }
+  void setWriteCallback(const EventCallback &cb) { writeCallback_ = cb; }
+  void setErrorCallback(const EventCallback &cb) { errorCallback_ = cb; }
+  void setCloseCallback(const EventCallback &cb) { closeCallback_ = cb; }
 
   void enableReading() {
     events_ |= kReadEvent;
@@ -55,34 +46,22 @@ public:
     update();
   }
 
-  bool isWriting() const {
-    return events_ & kWriteEvent;
-  }
-  bool isReading() const {
-    return events_ & kReadEvent;
-  }
-  bool isNoneEvent() const {
-    return events_ == kNoneEvent;
-  }
+  bool isWriting() const { return events_ & kWriteEvent; }
+  bool isReading() const { return events_ & kReadEvent; }
+  bool isNoneEvent() const { return events_ == kNoneEvent; }
 
-  int fd() const {
-    return fd_;
-  }
-  int events() const {
-    return events_;
-  }
+  int fd() const { return fd_; }
+  int events() const { return events_; }
+  void set_revents(int revt) { revents_ = revt; }
 
-  void set_revents(int revt) {
-    revents_ = revt;
-  }
+  int index() const { return index_; }
+  void set_index(int idx) { index_ = idx; }
 
-  EventLoop *ownerLoop() {
-    return loop_;
-  }
-
-  void tie(const std::shared_ptr<void> &obj);
+  EventLoop *ownerLoop() const { return loop_; }
 
   void remove();
+  bool isInLoop() const;
+  void assertInLoop();
 
 private:
   void update();
@@ -91,39 +70,13 @@ private:
   static const int kReadEvent = POLLIN | POLLPRI;
   static const int kWriteEvent = POLLOUT;
 
-#ifdef USE_EPOLL
-  static int eventsToEpoll(int events) {
-    int epollEvents = 0;
-    if (events & kReadEvent)
-      epollEvents |= EPOLLIN | EPOLLPRI;
-    if (events & kWriteEvent)
-      epollEvents |= EPOLLOUT;
-    return epollEvents;
-  }
-
-  static int epollToEvents(int epollEvents) {
-    int events = kNoneEvent;
-    if (epollEvents & (EPOLLIN | EPOLLPRI))
-      events |= kReadEvent;
-    if (epollEvents & EPOLLOUT)
-      events |= kWriteEvent;
-    if (epollEvents & EPOLLERR)
-      events |= POLLERR;
-    if (epollEvents & EPOLLHUP)
-      events |= POLLHUP;
-    return events;
-  }
-#endif
-
-  EventLoop *loop_;
+  EventLoop *const loop_;
   const int fd_;
   int events_;
   int revents_;
-  bool tied_;
-  bool eventHandling_;
   bool addedToLoop_;
-
-  std::weak_ptr<void> tie_;
+  bool eventHandling_;
+  int index_;
 
   ReadEventCallback readCallback_;
   EventCallback writeCallback_;
