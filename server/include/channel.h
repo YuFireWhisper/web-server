@@ -36,7 +36,7 @@ public:
   int events() const { return events_; }
   void setRevents(int revt) { revents_ = revt; }
   int index() const { return index_; }
-  void set_index(int idx) { index_ = idx; }
+  void setIndex(int idx) { index_ = idx; }
   EventLoop *ownerLoop() const { return loop_; }
 
   void assertInLoop();

@@ -39,15 +39,15 @@ bool EPollChannel::isNoneEvent() const {
 }
 
 void EPollChannel::setAdded() const {
-  channel_->set_index(static_cast<int>(PollerState::kAdded));
+  channel_->setIndex(static_cast<int>(PollerState::kAdded));
 }
 
 void EPollChannel::setDeleted() const {
-  channel_->set_index(static_cast<int>(PollerState::kDeleted));
+  channel_->setIndex(static_cast<int>(PollerState::kDeleted));
 }
 
 void EPollChannel::setNew() const {
-  channel_->set_index(static_cast<int>(PollerState::kNew));
+  channel_->setIndex(static_cast<int>(PollerState::kNew));
 }
 
 Channel *EPollChannel::get() const {

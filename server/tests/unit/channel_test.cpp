@@ -111,7 +111,7 @@ TEST_F(ChannelTest, HandleEventWithGuard) {
 
 TEST_F(ChannelTest, IndexManagement) {
   const int test_index = 5;
-  channel_->set_index(test_index);
+  channel_->setIndex(test_index);
   EXPECT_EQ(channel_->index(), test_index);
 }
 
