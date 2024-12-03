@@ -31,6 +31,8 @@ public:
   void handleWakeup();
   void assertInLoopThread();
 
+  Poller* getPoller() const { return poller_.get(); }
+
 private:
   void doPendingFunctors();
   int createEventfd();

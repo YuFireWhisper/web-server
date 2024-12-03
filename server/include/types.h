@@ -3,13 +3,15 @@
 #include <functional>
 #include <poll.h>
 #include <set>
-#include <vector>
 #include <unordered_map>
+#include <vector>
+#include <sys/epoll.h>
 
 namespace server {
 class TimeStamp;
 class Timer;
 class Channel;
+class Poller;
 
 using EventCallback = std::function<void()>;
 using ReadEventCallback = std::function<void(TimeStamp)>;
@@ -18,11 +20,13 @@ using Functor = std::function<void()>;
 
 struct EventType {
   static const int kNoneEvent = 0;
-  static const int kReadEvent = POLLIN | POLLPRI;
-  static const int kWriteEvent = POLLOUT;
-  static const int kErrorEvent = POLLERR;
-  static const int kCloseEvent = POLLHUP;
+  static const int kReadEvent = EPOLLIN | EPOLLPRI;
+  static const int kWriteEvent = EPOLLOUT;
+  static const int kErrorEvent = EPOLLERR;
+  static const int kCloseEvent = EPOLLHUP;
 };
+
+enum class PollerState { kNew = -1, kAdded = 1, kDeleted = 2 };
 
 using TimerCallback = std::function<void()>;
 using TimerEntry = std::pair<TimeStamp, Timer *>;

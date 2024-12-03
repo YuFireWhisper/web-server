@@ -1,31 +1,42 @@
 #pragma once
 
-#include <map>
+#include "time_stamp.h"
+
+#include <unordered_map>
 #include <vector>
 
 namespace server {
+
 class Channel;
 class EventLoop;
-class TimeStamp;
 
 class Poller {
 public:
   typedef std::vector<Channel *> ChannelList;
+  typedef std::unordered_map<int, Channel *> ChannelMap;
 
-  Poller(EventLoop *loop);
+  explicit Poller(EventLoop *loop);
   virtual ~Poller() = default;
+
+  Poller(const Poller &) = delete;
+  Poller &operator=(const Poller &) = delete;
 
   virtual TimeStamp poll(int timeoutMs, ChannelList *activeChannels) = 0;
   virtual void updateChannel(Channel *channel) = 0;
   virtual void removeChannel(Channel *channel) = 0;
-  virtual bool hasChannel(Channel *channel) const = 0;
-  virtual Poller *newDefaultPoller(EventLoop *loop);
+  bool hasChannel(Channel *channel) const;
+
+  static Poller *newDefaultPoller(EventLoop *loop);
+
+  void assertInLoopThread() const;
+
+  const ChannelMap &getChannels() const { return channels_; }
 
 protected:
-  typedef std::map<int, Channel *> ChannelMap;
   ChannelMap channels_;
 
 private:
   EventLoop *ownerLoop_;
 };
+
 } // namespace server

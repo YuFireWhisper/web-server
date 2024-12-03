@@ -1,5 +1,6 @@
 #pragma once
 
+#include "include/types.h"
 #include <functional>
 #include <poll.h>
 
@@ -26,29 +27,29 @@ public:
   void setCloseCallback(const EventCallback &cb) { closeCallback_ = cb; }
 
   void enableReading() {
-    events_ |= kReadEvent;
+    events_ |= EventType::kReadEvent;
     update();
   }
   void disableReading() {
-    events_ &= ~kReadEvent;
+    events_ &= ~EventType::kReadEvent;
     update();
   }
   void enableWriting() {
-    events_ |= kWriteEvent;
+    events_ |= EventType::kWriteEvent;
     update();
   }
   void disableWriting() {
-    events_ &= ~kWriteEvent;
+    events_ &= ~EventType::kWriteEvent;
     update();
   }
   void disableAll() {
-    events_ = kNoneEvent;
+    events_ = EventType::kNoneEvent;
     update();
   }
 
-  bool isWriting() const { return events_ & kWriteEvent; }
-  bool isReading() const { return events_ & kReadEvent; }
-  bool isNoneEvent() const { return events_ == kNoneEvent; }
+  bool isWriting() const { return events_ & EventType::kWriteEvent; }
+  bool isReading() const { return events_ & EventType::kReadEvent; }
+  bool isNoneEvent() const { return events_ == EventType::kNoneEvent; }
 
   int fd() const { return fd_; }
   int events() const { return events_; }
@@ -65,10 +66,6 @@ public:
 
 private:
   void update();
-
-  static const int kNoneEvent = 0;
-  static const int kReadEvent = POLLIN | POLLPRI;
-  static const int kWriteEvent = POLLOUT;
 
   EventLoop *const loop_;
   const int fd_;
