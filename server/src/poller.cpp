@@ -3,7 +3,6 @@
 #include "include/channel.h"
 #include "include/epoll_poller.h"
 #include "include/event_loop.h"
-#include "include/log.h"
 
 namespace server {
 
@@ -25,13 +24,6 @@ bool Poller::hasChannel(Channel *channel) const {
 
   assertInLoopThread();
   auto it = channels_.find(channel->fd());
-
-  Logger::log(
-      LogLevel::DEBUG,
-      "hasChannel - checking channel ptr: " + std::to_string((uintptr_t)channel) + " found ptr: "
-          + (it != channels_.end() ? std::to_string((uintptr_t)it->second) : "not found")
-  );
-
   return it != channels_.end() && it->second == channel;
 }
 } // namespace server

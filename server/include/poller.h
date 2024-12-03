@@ -1,9 +1,6 @@
 #pragma once
 
-#include "time_stamp.h"
-
-#include <unordered_map>
-#include <vector>
+#include "include/types.h"
 
 namespace server {
 
@@ -12,9 +9,6 @@ class EventLoop;
 
 class Poller {
 public:
-  typedef std::vector<Channel *> ChannelList;
-  typedef std::unordered_map<int, Channel *> ChannelMap;
-
   explicit Poller(EventLoop *loop);
   virtual ~Poller() = default;
 
