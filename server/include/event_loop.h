@@ -1,5 +1,4 @@
-#ifndef SERVER_EVENT_LOOP_H_
-#define SERVER_EVENT_LOOP_H_
+#pragma once
 
 #include "include/time_stamp.h"
 #include "include/types.h"
@@ -66,5 +65,3 @@ private:
 };
 
 } // namespace server
-
-#endif // SERVER_EVENT_LOOP_H_
