@@ -34,7 +34,7 @@ public:
 
   int fd() const { return fd_; }
   int events() const { return events_; }
-  void set_revents(int revt) { revents_ = revt; }
+  void setRevents(int revt) { revents_ = revt; }
   int index() const { return index_; }
   void set_index(int idx) { index_ = idx; }
   EventLoop *ownerLoop() const { return loop_; }

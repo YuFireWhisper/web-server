@@ -115,7 +115,7 @@ TimeStamp EPollPoller::doPoll(int timeoutMs) {
 void EPollPoller::handleActiveChannels(int numEvents) {
   for (int i = 0; i < numEvents; ++i) {
     auto channel = static_cast<Channel *>(events_[i].data.ptr);
-    channel->set_revents(events_[i].events);
+    channel->setRevents(events_[i].events);
     activeChannels_->push_back(channel);
   }
 

@@ -82,19 +82,19 @@ TEST_F(ChannelTest, EventCallbacks) {
   channel_->setErrorCallback([&]() { error_triggered = true; });
   channel_->setCloseCallback([&]() { close_triggered = true; });
 
-  channel_->set_revents(POLLIN | POLLPRI);
+  channel_->setRevents(POLLIN | POLLPRI);
   channel_->handleEvent(test_time);
   EXPECT_TRUE(read_triggered);
 
-  channel_->set_revents(POLLOUT);
+  channel_->setRevents(POLLOUT);
   channel_->handleEvent(test_time);
   EXPECT_TRUE(write_triggered);
 
-  channel_->set_revents(POLLERR);
+  channel_->setRevents(POLLERR);
   channel_->handleEvent(test_time);
   EXPECT_TRUE(error_triggered);
 
-  channel_->set_revents(POLLHUP);
+  channel_->setRevents(POLLHUP);
   channel_->handleEvent(test_time);
   EXPECT_TRUE(close_triggered);
 }
@@ -104,7 +104,7 @@ TEST_F(ChannelTest, HandleEventWithGuard) {
   bool callback_triggered = false;
   channel_->setReadCallback([&](TimeStamp) { callback_triggered = true; });
 
-  channel_->set_revents(POLLIN);
+  channel_->setRevents(POLLIN);
   channel_->handleEventWithGuard(test_time);
   EXPECT_TRUE(callback_triggered);
 }
