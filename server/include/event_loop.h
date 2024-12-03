@@ -1,14 +1,19 @@
+#ifndef SERVER_EVENT_LOOP_H_
+#define SERVER_EVENT_LOOP_H_
+
 #include "include/time_stamp.h"
 #include "include/types.h"
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <pthread.h>
-#include <unistd.h>
-
-#include <sys/types.h>
+#include <vector>
 
 namespace server {
+
+class Channel;
+class Poller;
 
 class EventLoop {
 public:
@@ -31,17 +36,13 @@ public:
   void handleWakeup();
   void assertInLoopThread();
 
-  Poller* getPoller() const { return poller_.get(); }
+  Poller *getPoller() const { return poller_.get(); }
 
 private:
   void doPendingFunctors();
   int createEventfd();
-
   void writeToWakeupFd();
   void readFromWakeupFd();
-  void checkReturnBytes(ssize_t returnBytes);
-
-  void logFalatMessage(std::string message);
 
   std::atomic<bool> looping_{false};
   std::atomic<bool> quit_{false};
@@ -56,13 +57,14 @@ private:
 
   std::mutex mutex_;
   std::vector<Functor> pendingFunctors_;
-
   ChannelList activeChannels_;
 
   TimeStamp pollReturnTime_;
 
-private:
   static constexpr int kPollTimeMs = 1000;
   static constexpr uint64_t kWakeupNumber = 1;
 };
+
 } // namespace server
+
+#endif // SERVER_EVENT_LOOP_H_

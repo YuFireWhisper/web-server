@@ -2,18 +2,11 @@
 
 #include "include/channel.h"
 #include "include/epoll_poller.h"
-#include "include/log.h"
-#include "include/poller.h"
-#include "include/types.h"
 
-#include <cerrno>
-#include <cstdint>
-#include <cstring>
-#include <string>
+#include <stdexcept>
 #include <unistd.h>
 
 #include <sys/eventfd.h>
-#include <sys/types.h>
 
 namespace server {
 
@@ -32,29 +25,19 @@ EventLoop::~EventLoop() {
   ::close(wakeupFd_);
 }
 
-int EventLoop::createEventfd() {
-  int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-
-  if (evtfd < 0) {
-    std::string message = "Failed to create event fd";
-    logFalatMessage(message);
-    throw std::runtime_error(message);
-  }
-  return evtfd;
-}
-
 void EventLoop::loop() {
   looping_ = true;
   quit_ = false;
 
   while (!quit_) {
     activeChannels_.clear();
-
     pollReturnTime_ = poller_->poll(kPollTimeMs, &activeChannels_);
 
+    eventHandling_ = true;
     for (Channel *channel : activeChannels_) {
       channel->handleEvent(pollReturnTime_);
     }
+    eventHandling_ = false;
 
     doPendingFunctors();
   }
@@ -64,43 +47,16 @@ void EventLoop::loop() {
 
 void EventLoop::quit() {
   quit_ = true;
-
   if (!isInLoopThread() || callingPendingFunctors_) {
     writeToWakeupFd();
   }
-}
-
-void EventLoop::writeToWakeupFd() {
-  ssize_t returnBytes = ::write(wakeupFd_, &kWakeupNumber, sizeof(kWakeupNumber));
-  checkReturnBytes(returnBytes);
-}
-
-void EventLoop::readFromWakeupFd() {
-  uint64_t buffer = 0;
-  ssize_t returnBytes = ::read(wakeupFd_, &buffer, sizeof(kWakeupNumber));
-  checkReturnBytes(returnBytes);
-}
-
-void EventLoop::checkReturnBytes(ssize_t returnBytes) {
-  if (returnBytes == -1) {
-    std::string message = "IO operation failed: " + std::string(strerror(errno));
-    logFalatMessage(message);
-  } else if (returnBytes < sizeof(kWakeupNumber)) {
-    std::string message =
-        "Partial IO operation: " + std::to_string(returnBytes) + " bytes transmitted";
-    logFalatMessage(message);
-  }
-}
-
-void EventLoop::logFalatMessage(std::string message) {
-  Logger::log(LogLevel::FATAL, message, "event_loop.log");
 }
 
 void EventLoop::runInLoop(Functor cb) {
   if (isInLoopThread()) {
     cb();
   } else {
-    queueInLoop(cb);
+    queueInLoop(std::move(cb));
   }
 }
 
@@ -110,9 +66,17 @@ void EventLoop::queueInLoop(Functor cb) {
     pendingFunctors_.push_back(std::move(cb));
   }
 
-  if (!isInLoopThread()) {
+  if (!isInLoopThread() || callingPendingFunctors_) {
     writeToWakeupFd();
   }
+}
+
+void EventLoop::updateChannel(Channel *channel) {
+  poller_->updateChannel(channel);
+}
+
+void EventLoop::removeChannel(Channel *channel) {
+  poller_->removeChannel(channel);
 }
 
 void EventLoop::doPendingFunctors() {
@@ -124,19 +88,33 @@ void EventLoop::doPendingFunctors() {
     functors.swap(pendingFunctors_);
   }
 
-  for (const Functor &functor : functors) {
+  for (const auto &functor : functors) {
     functor();
   }
 
   callingPendingFunctors_ = false;
 }
 
-void EventLoop::updateChannel(Channel *channel) {
-  poller_->updateChannel(channel);
+int EventLoop::createEventfd() {
+  int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  if (evtfd < 0) {
+    throw std::runtime_error("Failed to create event fd");
+  }
+  return evtfd;
 }
 
-void EventLoop::removeChannel(Channel *channel) {
-  poller_->removeChannel(channel);
+void EventLoop::writeToWakeupFd() {
+  uint64_t one = kWakeupNumber;
+  if (::write(wakeupFd_, &one, sizeof one) != sizeof one) {
+    throw std::runtime_error("Failed to write to wakeup fd");
+  }
+}
+
+void EventLoop::readFromWakeupFd() {
+  uint64_t one = 0;
+  if (::read(wakeupFd_, &one, sizeof one) != sizeof one) {
+    throw std::runtime_error("Failed to read from wakeup fd");
+  }
 }
 
 void EventLoop::handleWakeup() {
@@ -145,12 +123,7 @@ void EventLoop::handleWakeup() {
 
 void EventLoop::assertInLoopThread() {
   if (!isInLoopThread()) {
-    Logger::log(
-        LogLevel::WARN,
-        "Assert failed! This Thread is NOT in Loop Thread",
-        "event_loop.log"
-    );
-    abort();
+    throw std::runtime_error("EventLoop was created in a different thread");
   }
 }
 
