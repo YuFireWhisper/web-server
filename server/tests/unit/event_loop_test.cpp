@@ -1,6 +1,7 @@
 #include "include/channel.h"
 #include "include/event_loop.h"
 
+#include <chrono>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thread>
@@ -10,93 +11,98 @@ namespace testing {
 
 class EventLoopTest : public ::testing::Test {
 protected:
-  void SetUp() override { loop_ = std::make_unique<EventLoop>(); }
+  void SetUp() override { eventLoop_ = std::make_unique<EventLoop>(); }
 
-  void TearDown() override { loop_.reset(); }
+  void TearDown() override { eventLoop_.reset(); }
 
-  std::unique_ptr<EventLoop> loop_;
+  std::unique_ptr<EventLoop> eventLoop_;
 };
 
-TEST_F(EventLoopTest, QuitStopsEventLoop) {
-  bool taskExecuted = false;
-  std::thread loopThread([&]() { loop_->loop(); });
+TEST_F(EventLoopTest, ensureQuitStopsEventLoop) {
+  bool taskCompleted = false;
+
+  std::thread eventLoopThread([this]() { eventLoop_->loop(); });
 
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-  loop_->queueInLoop([&taskExecuted]() { taskExecuted = true; });
-  loop_->queueInLoop([this]() { loop_->quit(); });
+  eventLoop_->queueInLoop([&taskCompleted]() { taskCompleted = true; });
 
-  loopThread.join();
+  eventLoop_->queueInLoop([this]() { eventLoop_->quit(); });
 
-  EXPECT_TRUE(taskExecuted);
+  eventLoopThread.join();
+  EXPECT_TRUE(taskCompleted);
 }
 
-TEST_F(EventLoopTest, CrossThreadQuitTriggersWakeup) {
-  bool loopExited = false;
+TEST_F(EventLoopTest, ensureQuitFromOtherThreadTriggersWakeup) {
+  bool quitCompleted = false;
 
-  std::thread worker([this, &loopExited]() {
+  std::thread workerThread([this, &quitCompleted]() {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    loop_->quit();
-    loopExited = true;
+    eventLoop_->quit();
+    quitCompleted = true;
   });
 
-  loop_->loop();
-  worker.join();
+  eventLoop_->loop();
+  workerThread.join();
 
-  EXPECT_TRUE(loopExited);
+  EXPECT_TRUE(quitCompleted);
 }
 
-TEST_F(EventLoopTest, RunInLoopExecutesTask) {
-  int taskValue = 0;
+TEST_F(EventLoopTest, ensureRunInLoopExecutesTaskInLoopThread) {
+  int resultValue = 0;
 
-  std::thread loopThread([&]() { loop_->loop(); });
+  std::thread eventLoopThread([this]() { eventLoop_->loop(); });
+
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-  loop_->runInLoop([&taskValue]() { taskValue = 42; });
-  loop_->queueInLoop([this]() { loop_->quit(); });
+  eventLoop_->runInLoop([&resultValue]() { resultValue = 42; });
 
-  loopThread.join();
+  eventLoop_->queueInLoop([this]() { eventLoop_->quit(); });
 
-  EXPECT_EQ(taskValue, 42);
+  eventLoopThread.join();
+  EXPECT_EQ(resultValue, 42);
 }
 
-TEST_F(EventLoopTest, QueueInLoopPreservesOrder) {
-  std::vector<int> executionOrder;
+TEST_F(EventLoopTest, ensureQueueInLoopPreservesTaskOrder) {
+  std::vector<int> executionSequence;
 
-  std::thread loopThread([&]() { loop_->loop(); });
+  std::thread eventLoopThread([this]() { eventLoop_->loop(); });
 
-  loop_->queueInLoop([&]() { executionOrder.push_back(1); });
+  eventLoop_->queueInLoop([&executionSequence]() { executionSequence.push_back(1); });
 
-  loop_->queueInLoop([&]() {
-    executionOrder.push_back(2);
-    loop_->quit();
+  eventLoop_->queueInLoop([&executionSequence, this]() {
+    executionSequence.push_back(2);
+    eventLoop_->quit();
   });
 
-  loopThread.join();
+  eventLoopThread.join();
 
-  ASSERT_EQ(executionOrder.size(), 2);
-  EXPECT_EQ(executionOrder[0], 1);
-  EXPECT_EQ(executionOrder[1], 2);
+  ASSERT_EQ(executionSequence.size(), 2);
+  EXPECT_EQ(executionSequence[0], 1);
+  EXPECT_EQ(executionSequence[1], 2);
 }
 
-TEST_F(EventLoopTest, IsInLoopThreadReturnsTrueInSameThread) {
-  EXPECT_TRUE(loop_->isInLoopThread());
+TEST_F(EventLoopTest, ensureThreadCheckWorks) {
+  EXPECT_TRUE(eventLoop_->isInLoopThread());
+
+  std::thread otherThread([this]() { EXPECT_FALSE(eventLoop_->isInLoopThread()); });
+
+  otherThread.join();
 }
 
-TEST_F(EventLoopTest, IsWakeupFdIdentifiesWakeupFileDescriptor) {
-  int wakeupFd = loop_->getWakeupFd();
-  EXPECT_TRUE(loop_->isWakeupFd(wakeupFd));
-  EXPECT_FALSE(loop_->isWakeupFd(wakeupFd + 1));
+TEST_F(EventLoopTest, ensureWakeupFdIdentificationWorks) {
+  int wakeupFileDescriptor = eventLoop_->getWakeupFd();
+  EXPECT_TRUE(eventLoop_->isWakeupFd(wakeupFileDescriptor));
+  EXPECT_FALSE(eventLoop_->isWakeupFd(wakeupFileDescriptor + 1));
 }
 
-TEST_F(EventLoopTest, UpdateChannelForwardsToPoller) {
-  Channel testChannel(loop_.get(), 42);
-  EXPECT_NO_FATAL_FAILURE(loop_->updateChannel(&testChannel));
-}
+TEST_F(EventLoopTest, ensureChannelOperationsWork) {
+  Channel testChannel(eventLoop_.get(), 42);
 
-TEST_F(EventLoopTest, RemoveChannelForwardsToPoller) {
-  Channel testChannel(loop_.get(), 42);
-  EXPECT_NO_FATAL_FAILURE(loop_->removeChannel(&testChannel));
+  EXPECT_NO_THROW({
+    eventLoop_->updateChannel(&testChannel);
+    eventLoop_->removeChannel(&testChannel);
+  });
 }
 
 } // namespace testing
