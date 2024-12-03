@@ -1,8 +1,6 @@
-#include "include/channel.h"
 #include "include/epoll_poller.h"
 #include "include/event_loop.h"
-#include "include/log.h"
-#include "include/types.h"
+#include "include/channel.h"
 
 #include <gtest/gtest.h>
 #include <memory>
@@ -15,134 +13,116 @@ namespace testing {
 class EPollPollerTest : public ::testing::Test {
 protected:
   void SetUp() override {
+    eventFd_ = createEventFd();
+    ASSERT_GT(eventFd_, 0);
+
     loop_ = std::make_unique<EventLoop>();
-    poller_ = std::make_unique<EPollPoller>(loop_.get());
-    efd_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    ASSERT_GT(efd_, 0) << "Failed to create event fd";
+    poller_ = dynamic_cast<EPollPoller *>(loop_->getPoller());
+    ASSERT_NE(poller_, nullptr);
+
+    channel_ = std::make_unique<Channel>(loop_.get(), eventFd_);
   }
 
   void TearDown() override {
-    if (efd_ > 0) {
-      ::close(efd_);
+    channel_.reset();
+    if (eventFd_ > 0) {
+      ::close(eventFd_);
+      eventFd_ = -1;
     }
   }
 
-  int CreateEventFd() {
-    int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    if (evtfd < 0) {
-      ADD_FAILURE() << "Failed to create event fd";
-      return -1;
-    }
-    return evtfd;
+  int createEventFd() { return ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); }
+
+  void triggerEvent() {
+    uint64_t one = 1;
+    ASSERT_EQ(write(eventFd_, &one, sizeof(one)), sizeof(one));
   }
 
-  void TriggerEvent(int fd) {
+  void readEvent() {
+    uint64_t value;
+    ASSERT_EQ(read(eventFd_, &value, sizeof(value)), sizeof(value));
+  }
+
+  std::unique_ptr<EventLoop> loop_;
+  EPollPoller *poller_;
+  std::unique_ptr<Channel> channel_;
+  int eventFd_{-1};
+};
+
+TEST_F(EPollPollerTest, initChannelStateIsNew) {
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kNew));
+  EXPECT_FALSE(poller_->hasChannel(channel_.get()));
+}
+
+TEST_F(EPollPollerTest, enableReadingWillAddChannel) {
+  channel_->enableReading();
+  EXPECT_TRUE(poller_->hasChannel(channel_.get()));
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kAdded));
+}
+
+TEST_F(EPollPollerTest, disableAllWillRemoveChannel) {
+  channel_->enableReading();
+  ASSERT_TRUE(poller_->hasChannel(channel_.get()));
+
+  channel_->disableAll();
+  channel_->remove();
+  EXPECT_FALSE(poller_->hasChannel(channel_.get()));
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kNew));
+}
+
+TEST_F(EPollPollerTest, handlesMultipleChannels) {
+  std::vector<int> fds;
+  std::vector<std::unique_ptr<Channel>> channels;
+  const int CHANNEL_COUNT = 3;
+
+  for (int i = 0; i < CHANNEL_COUNT; ++i) {
+    int fd = createEventFd();
+    ASSERT_GT(fd, 0);
+    fds.push_back(fd);
+
+    auto channel = std::make_unique<Channel>(loop_.get(), fd);
+    channel->enableReading();
+    EXPECT_TRUE(poller_->hasChannel(channel.get()));
+    channels.push_back(std::move(channel));
+  }
+
+  for (int fd : fds) {
     uint64_t one = 1;
     ASSERT_EQ(write(fd, &one, sizeof(one)), sizeof(one));
   }
 
-  void ReadEvent(int fd) {
+  ChannelList activeChannels;
+  poller_->poll(0, &activeChannels);
+  EXPECT_EQ(activeChannels.size(), CHANNEL_COUNT);
+
+  for (int fd : fds) {
     uint64_t value;
     ASSERT_EQ(read(fd, &value, sizeof(value)), sizeof(value));
-  }
-
-  std::unique_ptr<EventLoop> loop_;
-  std::unique_ptr<EPollPoller> poller_;
-  int efd_;
-};
-
-TEST_F(EPollPollerTest, InitialChannelStateIsNew) {
-  Channel channel(loop_.get(), efd_);
-  EXPECT_EQ(channel.index(), static_cast<int>(PollerState::kNew));
-  EXPECT_FALSE(poller_->hasChannel(&channel));
-}
-
-TEST_F(EPollPollerTest, EnableReadingShouldAddChannel) {
-  auto poller = dynamic_cast<EPollPoller *>(loop_->getPoller());
-
-  Channel channel(loop_.get(), efd_);
-  Logger::log(LogLevel::DEBUG, "Test: Created channel with fd = " + std::to_string(efd_));
-
-  channel.enableReading();
-
-  Logger::log(
-      LogLevel::DEBUG,
-      "Test: Checking channel with ptr = " + std::to_string((uintptr_t)&channel)
-  );
-
-  EXPECT_TRUE(poller->hasChannel(&channel));
-}
-
-TEST_F(EPollPollerTest, DisableAllShouldRemoveChannel) {
-  auto poller = dynamic_cast<EPollPoller *>(loop_->getPoller());
-
-  Channel channel(loop_.get(), efd_);
-  channel.enableReading();
-  ASSERT_TRUE(poller->hasChannel(&channel));
-
-  channel.disableAll();
-  channel.remove();
-
-  EXPECT_FALSE(poller->hasChannel(&channel));
-  EXPECT_EQ(channel.index(), static_cast<int>(PollerState::kNew));
-}
-
-TEST_F(EPollPollerTest, ShouldHandleMultipleChannels) {
-  auto poller = dynamic_cast<EPollPoller *>(loop_->getPoller());
-
-  std::vector<std::unique_ptr<Channel>> channels;
-  std::vector<int> fds;
-  const int kChannelCount = 3;
-
-  for (int i = 0; i < kChannelCount; ++i) {
-    fds.push_back(CreateEventFd());
-    channels.push_back(std::make_unique<Channel>(loop_.get(), fds.back()));
-    channels.back()->enableReading();
-    EXPECT_TRUE(poller->hasChannel(channels.back().get()));
-  }
-
-  for (int fd : fds) {
-    TriggerEvent(fd);
-  }
-
-  ChannelList activeChannels;
-  poller->poll(0, &activeChannels);
-  EXPECT_EQ(activeChannels.size(), kChannelCount);
-
-  for (int fd : fds) {
-    ReadEvent(fd);
     ::close(fd);
   }
 }
 
-TEST_F(EPollPollerTest, ShouldHandleReadEvents) {
-  auto poller = dynamic_cast<EPollPoller*>(loop_->getPoller());
-  
+TEST_F(EPollPollerTest, handlesReadEvent) {
   bool eventHandled = false;
-  Channel channel(loop_.get(), efd_);
-  channel.setReadCallback([&eventHandled](TimeStamp) { eventHandled = true; });
-  channel.enableReading();
-  
-  TriggerEvent(efd_);
+  channel_->setReadCallback([&eventHandled](TimeStamp) { eventHandled = true; });
+  channel_->enableReading();
+
+  triggerEvent();
 
   ChannelList activeChannels;
-  poller->poll(0, &activeChannels);
-  
+  poller_->poll(0, &activeChannels);
   ASSERT_EQ(activeChannels.size(), 1);
-  
+
   activeChannels[0]->handleEvent(TimeStamp::now());
   EXPECT_TRUE(eventHandled);
-  
-  ReadEvent(efd_);
+
+  readEvent();
 }
 
-TEST_F(EPollPollerTest, ShouldHandleWriteEvents) {
+TEST_F(EPollPollerTest, handlesWriteEvent) {
   bool eventHandled = false;
-  Channel channel(loop_.get(), efd_);
-
-  channel.setWriteCallback([&eventHandled]() { eventHandled = true; });
-
-  channel.enableWriting();
+  channel_->setWriteCallback([&eventHandled]() { eventHandled = true; });
+  channel_->enableWriting();
 
   ChannelList activeChannels;
   poller_->poll(0, &activeChannels);
@@ -153,31 +133,67 @@ TEST_F(EPollPollerTest, ShouldHandleWriteEvents) {
   }
 }
 
-TEST_F(EPollPollerTest, ShouldIgnoreInvalidFileDescriptor) {
-  Channel channel(loop_.get(), -1);
-  EXPECT_FALSE(poller_->hasChannel(&channel));
+TEST_F(EPollPollerTest, ignoresInvalidFileDescriptor) {
+  int invalidFd = -1;
+  Channel invalidChannel(loop_.get(), invalidFd);
+  EXPECT_FALSE(poller_->hasChannel(&invalidChannel));
 
-  channel.enableReading();
-  EXPECT_FALSE(poller_->hasChannel(&channel));
+  invalidChannel.enableReading();
+  EXPECT_FALSE(poller_->hasChannel(&invalidChannel));
 }
 
-TEST_F(EPollPollerTest, ShouldHandleRepeatedOperations) {
-  auto poller = dynamic_cast<EPollPoller*>(loop_->getPoller());
-  
-  Channel channel(loop_.get(), efd_);
+TEST_F(EPollPollerTest, handlesRepeatedOperations) {
+  channel_->enableReading();
+  EXPECT_TRUE(poller_->hasChannel(channel_.get()));
 
-  channel.enableReading();
-  EXPECT_TRUE(poller->hasChannel(&channel));
-  
-  channel.enableReading();
-  EXPECT_TRUE(poller->hasChannel(&channel));
+  channel_->enableReading();
+  EXPECT_TRUE(poller_->hasChannel(channel_.get()));
 
-  channel.disableAll();
-  channel.remove();
-  EXPECT_FALSE(poller->hasChannel(&channel));
-  
-  channel.remove();
-  EXPECT_FALSE(poller->hasChannel(&channel));
+  channel_->disableAll();
+  channel_->remove();
+  EXPECT_FALSE(poller_->hasChannel(channel_.get()));
+
+  channel_->remove();
+  EXPECT_FALSE(poller_->hasChannel(channel_.get()));
+}
+
+TEST_F(EPollPollerTest, channelStateTransitions) {
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kNew));
+
+  channel_->enableReading();
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kAdded));
+
+  channel_->disableAll();
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kDeleted));
+
+  channel_->remove();
+  EXPECT_EQ(channel_->index(), static_cast<int>(PollerState::kNew));
+}
+
+TEST_F(EPollPollerTest, eventDataIsCorrect) {
+  channel_->enableReading();
+  triggerEvent();
+
+  ChannelList activeChannels;
+  poller_->poll(0, &activeChannels);
+
+  ASSERT_FALSE(activeChannels.empty());
+  EXPECT_EQ(activeChannels[0]->fd(), eventFd_);
+  EXPECT_TRUE(activeChannels[0]->isReading());
+
+  readEvent();
+}
+
+TEST_F(EPollPollerTest, pollTimeoutWorks) {
+  channel_->enableReading();
+
+  ChannelList activeChannels;
+  auto start = TimeStamp::now();
+
+  poller_->poll(100, &activeChannels);
+  auto end = TimeStamp::now();
+
+  EXPECT_GE(end.microSecondsSinceEpoch() - start.microSecondsSinceEpoch(), 100 * 1000);
 }
 
 } // namespace testing
