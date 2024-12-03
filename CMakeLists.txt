@@ -38,6 +38,7 @@ set(TEST_FILES
     ${TEST_DIR}/channel_test.cpp
     ${TEST_DIR}/epoll_poller_test.cpp
     ${TEST_DIR}/log_test.cpp
+    ${TEST_DIR}/poller_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
