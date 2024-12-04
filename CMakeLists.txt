@@ -22,6 +22,7 @@ add_library(server
     server/src/event_loop.cpp
     server/src/channel.cpp
     server/src/timer_queue.cpp
+    server/src/inter_address.cpp
 )
 
 enable_testing()
@@ -39,6 +40,7 @@ set(TEST_FILES
     ${TEST_DIR}/epoll_poller_test.cpp
     ${TEST_DIR}/log_test.cpp
     ${TEST_DIR}/poller_test.cpp
+    ${TEST_DIR}/inter_address_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
