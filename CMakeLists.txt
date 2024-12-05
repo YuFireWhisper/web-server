@@ -23,6 +23,7 @@ add_library(server
     server/src/channel.cpp
     server/src/timer_queue.cpp
     server/src/inter_address.cpp
+    server/src/socket.cpp
 )
 
 enable_testing()
@@ -41,6 +42,7 @@ set(TEST_FILES
     ${TEST_DIR}/log_test.cpp
     ${TEST_DIR}/poller_test.cpp
     ${TEST_DIR}/inter_address_test.cpp
+    ${TEST_DIR}/socket_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
