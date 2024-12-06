@@ -1,5 +1,5 @@
 #include "include/buffer.h"
-#include "include/inter_address.h"
+#include "include/inet_address.h"
 #include "include/socket.h"
 
 #include <chrono>
@@ -88,7 +88,7 @@ TEST_F(SocketTestFixture, establishServerSocketConnection) {
   initializeServerSocket();
   auto socket = getServerSocket();
 
-  InterAddress addr = socket->getLocalAddress();
+  InetAddress addr = socket->getLocalAddress();
   EXPECT_EQ(addr.getPort(), NetworkTestConfig::BASE_PORT);
   EXPECT_TRUE(NetworkTestHelper::verifyListeningPort(addr.getPort()));
 }

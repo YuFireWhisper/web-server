@@ -14,7 +14,7 @@ public:
 };
 
 class Buffer;
-class InterAddress;
+class InetAddress;
 
 class Socket {
 public:
@@ -26,7 +26,7 @@ public:
   Socket &operator=(const Socket &) = delete;
 
   void bindToPort(uint16_t port);
-  void bindToAddress(const InterAddress &address);
+  void bindToAddress(const InetAddress &address);
   void startListening(int backlog);
   Socket acceptNewConnection();
 
@@ -38,7 +38,7 @@ public:
 
   void closeWriteEnd();
 
-  int getSocketFd() const { return socketFd_; } 
+  int getSocketFd() const { return socketFd_; }
 
   struct ConnectionInfo {
     uint32_t stateCode;
@@ -50,8 +50,8 @@ public:
   };
 
   ConnectionInfo getConnectionInfo() const;
-  InterAddress getLocalAddress() const;
-  InterAddress getRemoteAddress() const;
+  InetAddress getLocalAddress() const;
+  InetAddress getRemoteAddress() const;
 
   bool hasActiveConnection() const;
   bool hasError() const;

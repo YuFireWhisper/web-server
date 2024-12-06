@@ -1,7 +1,7 @@
 #include "include/socket.h"
 
 #include "include/buffer.h"
-#include "include/inter_address.h"
+#include "include/inet_address.h"
 
 #include <asm-generic/socket.h>
 #include <cstring>
@@ -50,11 +50,11 @@ int Socket::createTcpSocket() {
 }
 
 void Socket::bindToPort(uint16_t port) {
-  InterAddress address(port);
+  InetAddress address(port);
   bindToAddress(address);
 }
 
-void Socket::bindToAddress(const InterAddress &address) {
+void Socket::bindToAddress(const InetAddress &address) {
   int result = ::bind(socketFd_, address.getSockAddr(), address.getSockLen());
   if (result < 0) {
     throw SocketException("Socket bind", errno);
@@ -86,11 +86,11 @@ Socket Socket::acceptNewConnection() {
 }
 
 void Socket::setSocketFlag(int level, int flag, bool enabled) {
-    int value = enabled ? 1 : 0;
-    int result = ::setsockopt(socketFd_, level, flag, &value, sizeof(value));
-    if (result < 0) {
-        throw SocketException("Socket flag configuration", errno);
-    }
+  int value = enabled ? 1 : 0;
+  int result = ::setsockopt(socketFd_, level, flag, &value, sizeof(value));
+  if (result < 0) {
+    throw SocketException("Socket flag configuration", errno);
+  }
 }
 
 void Socket::enableAddressReuse() {
@@ -153,7 +153,7 @@ Socket::ConnectionInfo Socket::getConnectionInfo() const {
   };
 }
 
-InterAddress Socket::getLocalAddress() const {
+InetAddress Socket::getLocalAddress() const {
   sockaddr_in addr{};
   socklen_t len = sizeof(addr);
 
@@ -162,10 +162,10 @@ InterAddress Socket::getLocalAddress() const {
     throw SocketException("Get local address", errno);
   }
 
-  return InterAddress(addr);
+  return InetAddress(addr);
 }
 
-InterAddress Socket::getRemoteAddress() const {
+InetAddress Socket::getRemoteAddress() const {
   sockaddr_in addr{};
   socklen_t len = sizeof(addr);
 
@@ -174,7 +174,7 @@ InterAddress Socket::getRemoteAddress() const {
     throw SocketException("Get remote address", errno);
   }
 
-  return InterAddress(addr);
+  return InetAddress(addr);
 }
 
 bool Socket::hasActiveConnection() const {

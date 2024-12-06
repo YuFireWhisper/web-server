@@ -22,7 +22,7 @@ add_library(server
     server/src/event_loop.cpp
     server/src/channel.cpp
     server/src/timer_queue.cpp
-    server/src/inter_address.cpp
+    server/src/inet_address.cpp
     server/src/socket.cpp
 )
 
@@ -41,7 +41,7 @@ set(TEST_FILES
     ${TEST_DIR}/epoll_poller_test.cpp
     ${TEST_DIR}/log_test.cpp
     ${TEST_DIR}/poller_test.cpp
-    ${TEST_DIR}/inter_address_test.cpp
+    ${TEST_DIR}/inet_address_test.cpp
     ${TEST_DIR}/socket_test.cpp
 )
 

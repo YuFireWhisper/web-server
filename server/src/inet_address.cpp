@@ -1,4 +1,4 @@
-#include "include/inter_address.h"
+#include "include/inet_address.h"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -7,7 +7,7 @@
 
 namespace server {
 
-InterAddress::InterAddress(in_port_t port, bool loopbackOnly) {
+InetAddress::InetAddress(in_port_t port, bool loopbackOnly) {
   addr_ = {};
 
   initializeAddr(port);
@@ -19,12 +19,12 @@ InterAddress::InterAddress(in_port_t port, bool loopbackOnly) {
   }
 }
 
-void InterAddress::initializeAddr(in_port_t port) {
+void InetAddress::initializeAddr(in_port_t port) {
   addr_.sin_family = AF_INET;
   addr_.sin_port = htons(port);
 }
 
-InterAddress::InterAddress(const std::string &ip, in_port_t port) {
+InetAddress::InetAddress(const std::string &ip, in_port_t port) {
   addr_ = {};
 
   initializeAddr(port);
@@ -34,24 +34,24 @@ InterAddress::InterAddress(const std::string &ip, in_port_t port) {
   }
 }
 
-InterAddress::InterAddress(const struct sockaddr_in &addr)
+InetAddress::InetAddress(const struct sockaddr_in &addr)
     : addr_(addr) {}
 
-std::string InterAddress::getIp() const {
+std::string InetAddress::getIp() const {
   char buf[64] = {0};
   ::inet_ntop(AF_INET, &addr_.sin_addr, buf, sizeof(buf));
   return buf;
 }
 
-in_port_t InterAddress::getPort() const {
+in_port_t InetAddress::getPort() const {
   return ::ntohs(addr_.sin_port);
 }
 
-std::string InterAddress::getIpPort() const {
+std::string InetAddress::getIpPort() const {
   return getIp() + ":" + std::to_string(getPort());
 }
 
-bool InterAddress::resolveHostname(const std::string &hostname, InterAddress *result) {
+bool InetAddress::resolveHostname(const std::string &hostname, InetAddress *result) {
   addrinfo hints = {};
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
