@@ -3,7 +3,11 @@
 #include "include/log.h"
 
 #include <algorithm>
+#include <bits/types/struct_iovec.h>
 #include <cassert>
+
+#include <sys/types.h>
+#include <sys/uio.h>
 
 #ifndef PROJECT_ROOT
 #define PROJECT_ROOT "."
@@ -12,7 +16,9 @@
 namespace server {
 
 Buffer::Buffer(size_t initSize)
-    : buffer_(PREPEND_SIZE + initSize), readerIndex_(PREPEND_SIZE), writerIndex_(PREPEND_SIZE) {}
+    : buffer_(PREPEND_SIZE + initSize)
+    , readerIndex_(PREPEND_SIZE)
+    , writerIndex_(PREPEND_SIZE) {}
 
 void Buffer::append(std::string_view data) {
   Buffer::append(data.data(), data.size());
@@ -77,6 +83,31 @@ std::string Buffer::retrieveAllAsString() {
   std::string result(peek(), readableBytes());
   retrieveAll();
   return result;
+}
+
+ssize_t Buffer::readData(int fd, int *savedErrno) {
+  char extraBuffer[65536];
+  struct iovec vec[2];
+
+  const size_t writable = writableBytes();
+
+  vec[0].iov_base = beginWrite();
+  vec[0].iov_len = writable;
+  vec[1].iov_base = extraBuffer;
+  vec[1].iov_len = sizeof(extraBuffer);
+
+  const ssize_t n = ::readv(fd, vec, 2);
+
+  if (n < 0) {
+    *savedErrno = errno;
+  } else if (static_cast<size_t>(n) <= writable) {
+    writerIndex_ += n;
+  } else {
+    writerIndex_ = buffer_.size();
+    append(extraBuffer, n - writable);
+  }
+
+  return n;
 }
 
 } // namespace server

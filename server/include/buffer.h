@@ -29,6 +29,8 @@ public:
   void append(std::string_view str);
   void append(const char *data, size_t len);
 
+  ssize_t readData(int fd, int* saveErrno);
+
   std::string retrieveAsString(size_t len);
   std::string retrieveAllAsString();
 
