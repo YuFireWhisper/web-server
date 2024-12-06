@@ -25,6 +25,7 @@ add_library(server
     server/src/inet_address.cpp
     server/src/socket.cpp
     server/src/acceptor.cpp
+    server/src/tcp_connection.cpp
 )
 
 enable_testing()
@@ -45,6 +46,7 @@ set(TEST_FILES
     ${TEST_DIR}/inet_address_test.cpp
     ${TEST_DIR}/socket_test.cpp
     ${TEST_DIR}/acceptor_test.cpp
+    ${TEST_DIR}/tcp_connection_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
