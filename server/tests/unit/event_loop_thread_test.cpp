@@ -36,7 +36,7 @@ TEST_F(EventLoopThreadTest, ShouldBeRunningAfterStart) {
 }
 
 TEST_F(EventLoopThreadTest, ShouldExecuteCallbackOnStart) {
-  EventLoopThread::ThreadInitCallback callback =
+  ThreadInitCallback callback =
       std::bind(&EventLoopThreadTest::OnThreadInit, this, std::placeholders::_1);
   EventLoopThread loop_thread(callback);
 
@@ -48,7 +48,7 @@ TEST_F(EventLoopThreadTest, ShouldExecuteCallbackOnStart) {
 }
 
 TEST_F(EventLoopThreadTest, ShouldHandleEmptyCallback) {
-  EventLoopThread::ThreadInitCallback empty_callback;
+  ThreadInitCallback empty_callback;
   EventLoopThread loop_thread(empty_callback);
   EventLoop *loop = loop_thread.startLoop();
 
@@ -72,7 +72,7 @@ TEST_F(EventLoopThreadTest, ShouldCleanupOnDestruction) {
 
 TEST_F(EventLoopThreadTest, ShouldSupportCustomName) {
   const std::string thread_name = "TestThread";
-  EventLoopThread::ThreadInitCallback empty_callback;
+  ThreadInitCallback empty_callback;
   EventLoopThread loop_thread(empty_callback, thread_name);
 
   EventLoop *loop = loop_thread.startLoop();
@@ -82,7 +82,7 @@ TEST_F(EventLoopThreadTest, ShouldSupportCustomName) {
 }
 
 TEST_F(EventLoopThreadTest, ShouldMaintainSingleInstanceOnMultipleStarts) {
-  EventLoopThread::ThreadInitCallback callback =
+  ThreadInitCallback callback =
       std::bind(&EventLoopThreadTest::OnThreadInit, this, std::placeholders::_1);
   EventLoopThread loop_thread(callback);
 

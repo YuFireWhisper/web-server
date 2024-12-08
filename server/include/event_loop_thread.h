@@ -1,7 +1,8 @@
 #pragma once
 
+#include "include/types.h"
+
 #include <condition_variable>
-#include <functional>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -12,8 +13,6 @@ class EventLoop;
 
 class EventLoopThread {
 public:
-  using ThreadInitCallback = std::function<void(EventLoop *)>;
-
   EventLoopThread(
       const ThreadInitCallback &cb = ThreadInitCallback(),
       const std::string &name = std::string()

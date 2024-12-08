@@ -5,6 +5,7 @@
 #include <set>
 #include <unordered_map>
 #include <vector>
+
 #include <sys/epoll.h>
 
 namespace server {
@@ -12,6 +13,7 @@ class TimeStamp;
 class Timer;
 class Channel;
 class Poller;
+class EventLoop;
 
 using EventCallback = std::function<void()>;
 using ReadEventCallback = std::function<void(TimeStamp)>;
@@ -36,4 +38,6 @@ using ChannelList = std::vector<Channel *>;
 using ChannelMap = std::unordered_map<int, Channel *>;
 
 static constexpr int MicroSecondsPerSecond = 1000 * 1000;
+
+using ThreadInitCallback = std::function<void(EventLoop *)>;
 } // namespace server
