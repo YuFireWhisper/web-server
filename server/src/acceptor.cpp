@@ -59,4 +59,8 @@ void Acceptor::handleResourceLimit(const std::string &errorMessage) {
   abort();
 }
 
+void Acceptor::enablePortReuse() {
+  serverSocket_->enablePortReuse();
+}
+
 } // namespace server

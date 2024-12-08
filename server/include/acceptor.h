@@ -21,6 +21,8 @@ public:
   bool isListening() const { return isListening_; }
   void startListen();
 
+  void enablePortReuse();
+
 private:
   void handleConnection();
   void processConnection(Socket &&connection, const InetAddress &peerAddress);
