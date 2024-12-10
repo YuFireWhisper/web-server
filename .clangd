@@ -1,0 +1,24 @@
+Diagnostics:
+  Suppress: 
+    - "missing-braces"
+    - "missing-field-initializers"
+    - "suggest-braces-around-initialization"
+  ClangTidy:
+    Add: 
+      - performance-*
+      - bugprone-*
+      - modernize-*
+      - readability-*
+    Remove:
+      - modernize-use-trailing-return-type
+    CheckOptions:
+      readability-identifier-length.MinimumVariableNameLength: 2
+      readability-identifier-length.MinimumParameterNameLength: 2
+
+CompileFlags:
+  Add: 
+    - -Wall
+    - -Wextra
+    - -Wpedantic
+    - -std=c++20
+
