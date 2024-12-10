@@ -7,8 +7,7 @@
 #include <memory>
 #include <thread>
 
-namespace server {
-namespace testing {
+namespace server::testing {
 
 class EventLoopThreadPoolTest : public ::testing::Test {
 protected:
@@ -57,7 +56,7 @@ TEST_F(EventLoopThreadPoolTest, StartWithMultipleThreads) {
   auto loops = pool.getAllLoops();
   EXPECT_EQ(loops.size(), 3);
 
-  for (auto loop : loops) {
+  for (auto *loop : loops) {
     EXPECT_NE(loop, nullptr);
     EXPECT_NE(loop, baseLoop_.get());
   }
@@ -71,10 +70,10 @@ TEST_F(EventLoopThreadPoolTest, GetNextLoopWithRoundRobin) {
   auto loops = pool.getAllLoops();
   EXPECT_EQ(loops.size(), 3);
 
-  auto loop1 = pool.getNextLoop();
-  auto loop2 = pool.getNextLoop();
-  auto loop3 = pool.getNextLoop();
-  auto loop4 = pool.getNextLoop();
+  auto *loop1 = pool.getNextLoop();
+  auto *loop2 = pool.getNextLoop();
+  auto *loop3 = pool.getNextLoop();
+  auto *loop4 = pool.getNextLoop();
 
   EXPECT_EQ(loop1, loops[0]);
   EXPECT_EQ(loop2, loops[1]);
@@ -88,12 +87,12 @@ TEST_F(EventLoopThreadPoolTest, GetLoopForHashWithConsistentResults) {
   pool.start();
 
   auto loops = pool.getAllLoops();
-  size_t hashCode1 = 100;
-  size_t hashCode2 = 101;
+  const static size_t hashCode1 = 100;
+  const static size_t hashCode2 = 101;
 
-  auto loop1 = pool.getLoopForHash(hashCode1);
-  auto loop2 = pool.getLoopForHash(hashCode2);
-  auto loop1Again = pool.getLoopForHash(hashCode1);
+  auto *loop1 = pool.getLoopForHash(hashCode1);
+  auto *loop2 = pool.getLoopForHash(hashCode2);
+  auto *loop1Again = pool.getLoopForHash(hashCode1);
 
   EXPECT_EQ(loop1, loops[hashCode1 % 3]);
   EXPECT_EQ(loop2, loops[hashCode2 % 3]);
@@ -119,10 +118,10 @@ TEST_F(EventLoopThreadPoolTest, ThreadInitCallbackInvocation) {
   };
 
   pool.start(callback);
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  const static int sleepTime = 100;
+  std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
 
   EXPECT_EQ(callbackCount, 3); // 2 threads + baseLoop
 }
 
-} // namespace testing
-} // namespace server
+} // namespace server::testing
