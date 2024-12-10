@@ -16,12 +16,12 @@
 namespace server {
 
 Buffer::Buffer(size_t initSize)
-    : buffer_(PREPEND_SIZE + initSize)
-    , readerIndex_(PREPEND_SIZE)
-    , writerIndex_(PREPEND_SIZE) {}
+    : buffer_(kPrependSize + initSize)
+    , readerIndex_(kPrependSize)
+    , writerIndex_(kPrependSize) {}
 
-void Buffer::append(std::string_view data) {
-  Buffer::append(data.data(), data.size());
+void Buffer::append(std::string_view str) {
+  Buffer::append(str.data(), str.size());
 }
 
 void Buffer::append(const char *data, size_t len) {
@@ -41,13 +41,13 @@ void Buffer::ensureSpace(size_t len) {
 }
 
 void Buffer::makeSpace(size_t len) {
-  if (writableBytes() + prependableBytes() < len + PREPEND_SIZE) {
-    buffer_.resize(writerIndex_ + len);
+  if (writableBytes() + prependableBytes() < len + kPrependSize) {
+    buffer_.resize(writerIndex_ + len + (kExtraBufferSize / 2));
   } else {
     size_t readable = readableBytes();
-    std::copy(data() + readerIndex_, data() + writerIndex_, data() + PREPEND_SIZE);
+    std::copy(data() + readerIndex_, data() + writerIndex_, data() + kPrependSize);
 
-    readerIndex_ = PREPEND_SIZE;
+    readerIndex_ = kPrependSize;
     writerIndex_ = readerIndex_ + readable;
   }
 }
@@ -75,8 +75,8 @@ void Buffer::retrieve(size_t len) {
 }
 
 void Buffer::retrieveAll() noexcept {
-  readerIndex_ = PREPEND_SIZE;
-  writerIndex_ = PREPEND_SIZE;
+  readerIndex_ = kPrependSize;
+  writerIndex_ = kPrependSize;
 }
 
 std::string Buffer::retrieveAllAsString() {
@@ -86,28 +86,28 @@ std::string Buffer::retrieveAllAsString() {
 }
 
 ssize_t Buffer::readData(int fd, int *savedErrno) {
-  char extraBuffer[65536];
-  struct iovec vec[2];
+  std::array<char, kExtraBufferSize> extraBuffer;
+  std::array<iovec, 2> vec;
 
   const size_t writable = writableBytes();
 
   vec[0].iov_base = beginWrite();
   vec[0].iov_len = writable;
-  vec[1].iov_base = extraBuffer;
+  vec[1].iov_base = extraBuffer.data();
   vec[1].iov_len = sizeof(extraBuffer);
 
-  const ssize_t n = ::readv(fd, vec, 2);
+  const ssize_t result = ::readv(fd, vec.data(), 2);
 
-  if (n < 0) {
+  if (result < 0) {
     *savedErrno = errno;
-  } else if (static_cast<size_t>(n) <= writable) {
-    writerIndex_ += n;
+  } else if (static_cast<size_t>(result) <= writable) {
+    writerIndex_ += result;
   } else {
     writerIndex_ = buffer_.size();
-    append(extraBuffer, n - writable);
+    append(extraBuffer.data(), result - writable);
   }
 
-  return n;
+  return result;
 }
 
 } // namespace server

@@ -43,5 +43,8 @@ static constexpr int kMillisecondPerSecond = kTimeScaleFactor;
 static constexpr int MicroSecondsPerSecond = kMillisecondPerSecond * kTimeScaleFactor;
 static constexpr int kNanosecondPerSecond = MicroSecondsPerSecond * kTimeScaleFactor;
 
+static constexpr size_t kKib = 1024;
+static constexpr size_t kMib = kKib * 1024;
+
 using ThreadInitCallback = std::function<void(EventLoop *)>;
 } // namespace server
