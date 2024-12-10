@@ -1,14 +1,20 @@
 #include "include/time_stamp.h"
+#include "include/types.h"
 
 #include <gtest/gtest.h>
 
 namespace server {
 
+namespace {
+constexpr int64_t kBaseTestTime = static_cast<int64_t>(1000) * MicroSecondsPerSecond;
+constexpr int64_t kTestTime1 = 1000 * kBaseTestTime;
+constexpr int64_t kTestTime2 = 2000 * kBaseTestTime;
+constexpr int64_t kLargeTestTime = 1234567890LL * MicroSecondsPerSecond;
+} // namespace
+
 class TimeStampTest : public ::testing::Test {
 protected:
-  void SetUp() override {
-    baseTime = TimeStamp(1000000000);
-  }
+  void SetUp() override { baseTime = TimeStamp(kBaseTestTime); }
 
   TimeStamp baseTime;
 };
@@ -20,28 +26,31 @@ TEST_F(TimeStampTest, DefaultConstructorCreatesInvalidTimeStamp) {
 }
 
 TEST_F(TimeStampTest, ConstructorWithMicroSecondsCreatesValidTimeStamp) {
-  int64_t microseconds = 1000000000;
-  TimeStamp ts(microseconds);
+  TimeStamp ts(kBaseTestTime);
   EXPECT_TRUE(ts.valid());
-  EXPECT_EQ(ts.microSecondsSinceEpoch(), microseconds);
+  EXPECT_EQ(ts.microSecondsSinceEpoch(), kBaseTestTime);
 }
 
 TEST_F(TimeStampTest, ArithmeticOperationsWorkCorrectly) {
   TimeStamp future = baseTime + 1.0;
-  EXPECT_EQ(future.microSecondsSinceEpoch(),
-            baseTime.microSecondsSinceEpoch() + TimeStamp::MicroSecondsPerSecond);
+  EXPECT_EQ(
+      future.microSecondsSinceEpoch(),
+      baseTime.microSecondsSinceEpoch() + MicroSecondsPerSecond
+  );
 
   TimeStamp past = baseTime - 1.0;
-  EXPECT_EQ(past.microSecondsSinceEpoch(),
-            baseTime.microSecondsSinceEpoch() - TimeStamp::MicroSecondsPerSecond);
+  EXPECT_EQ(
+      past.microSecondsSinceEpoch(),
+      baseTime.microSecondsSinceEpoch() - MicroSecondsPerSecond
+  );
 
   double diff = future - baseTime;
   EXPECT_DOUBLE_EQ(diff, 1.0);
 }
 
 TEST_F(TimeStampTest, ComparisonOperatorsWorkCorrectly) {
-  TimeStamp earlier(1000000);
-  TimeStamp later(2000000);
+  TimeStamp earlier(kTestTime1);
+  TimeStamp later(kTestTime2);
 
   EXPECT_TRUE(earlier < later);
   EXPECT_TRUE(earlier <= later);
@@ -52,7 +61,7 @@ TEST_F(TimeStampTest, ComparisonOperatorsWorkCorrectly) {
 }
 
 TEST_F(TimeStampTest, StringConversionProducesCorrectFormat) {
-  TimeStamp ts(1234567890000000);
+  TimeStamp ts(kLargeTestTime);
   std::string str = ts.toString();
   EXPECT_FALSE(str.empty());
 
