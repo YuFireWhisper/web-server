@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 namespace server {
+using std::bind;
 
 TcpConnection::TcpConnection(
     EventLoop *loop,
@@ -26,16 +27,16 @@ TcpConnection::TcpConnection(
     , name_(std::move(name))
     , state_(State::kConnecting)
     , socket_(std::move(socket))
+    , channel_(std::make_unique<Channel>(loop, socket_->getSocketFd()))
     , localAddr_(localAddr)
-    , peerAddr_(peerAddr)
-    , channel_(std::make_unique<Channel>(loop, socket_->getSocketFd())) {
+    , peerAddr_(peerAddr) {
   socket_->enableNonBlocking();
   socket_->enableKeepAlive();
 
-  channel_->setReadCallback(std::bind(&TcpConnection::handleRead, this, std::placeholders::_1));
-  channel_->setWriteCallback(std::bind(&TcpConnection::handleWrite, this));
-  channel_->setCloseCallback(std::bind(&TcpConnection::handleClose, this));
-  channel_->setErrorCallback(std::bind(&TcpConnection::handleError, this));
+  channel_->setReadCallback([this](auto &&PH1) { handleRead(std::forward<decltype(PH1)>(PH1)); });
+  channel_->setWriteCallback([this] { handleWrite(); });
+  channel_->setCloseCallback([this] { handleClose(); });
+  channel_->setErrorCallback([this] { handleError(); });
 
   Logger::log(
       LogLevel::INFO,
@@ -65,7 +66,7 @@ void TcpConnection::send(std::string_view message) {
 }
 
 void TcpConnection::send(Buffer *buffer) {
-  if (!buffer) {
+  if (buffer == nullptr) {
     Logger::log(LogLevel::ERROR, "Attempting to send null buffer");
     return;
   }
@@ -80,7 +81,7 @@ void TcpConnection::send(Buffer *buffer) {
   }
 }
 
-void TcpConnection::sendInLoop(const void *data, size_t len) {
+void TcpConnection::sendInLoop(const void *message, size_t len) {
   loop_->assertInLoopThread();
 
   Logger::log(
@@ -90,7 +91,7 @@ void TcpConnection::sendInLoop(const void *data, size_t len) {
 
   if (len >= highWaterMark_ && highWaterMarkCallback_) {
     Logger::log(LogLevel::INFO, name_ + ": High water mark reached before write");
-    loop_->queueInLoop(std::bind(highWaterMarkCallback_, shared_from_this(), len));
+    loop_->queueInLoop([this, len]() { highWaterMarkCallback_(shared_from_this(), len); });
   }
 
   ssize_t nwrote = 0;
@@ -98,7 +99,7 @@ void TcpConnection::sendInLoop(const void *data, size_t len) {
   bool faultError = false;
 
   if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0) {
-    nwrote = ::write(channel_->fd(), data, len);
+    nwrote = ::write(channel_->fd(), message, len);
     Logger::log(LogLevel::INFO, name_ + ": Write result: " + std::to_string(nwrote) + " bytes");
 
     if (nwrote >= 0) {
@@ -106,7 +107,7 @@ void TcpConnection::sendInLoop(const void *data, size_t len) {
       Logger::log(LogLevel::INFO, name_ + ": Remaining bytes: " + std::to_string(remaining));
 
       if (remaining == 0 && writeCompleteCallback_) {
-        loop_->queueInLoop(std::bind(writeCompleteCallback_, shared_from_this()));
+        loop_->queueInLoop([this]() { writeCompleteCallback_(shared_from_this()); });
       }
     } else {
       if (errno != EWOULDBLOCK) {
@@ -119,8 +120,7 @@ void TcpConnection::sendInLoop(const void *data, size_t len) {
   }
 
   if (!faultError && remaining > 0) {
-    size_t oldLen = outputBuffer_.readableBytes();
-    outputBuffer_.append(static_cast<const char *>(data) + nwrote, remaining);
+    outputBuffer_.append(static_cast<const char *>(message) + nwrote, remaining);
 
     if (!channel_->isWriting()) {
       channel_->enableWriting();
@@ -131,7 +131,7 @@ void TcpConnection::sendInLoop(const void *data, size_t len) {
 void TcpConnection::shutdown() {
   if (state_ == State::kConnected) {
     setState(State::kDisconnecting);
-    loop_->runInLoop(std::bind(&TcpConnection::shutdownInLoop, shared_from_this()));
+    loop_->runInLoop([capture0 = shared_from_this()] { capture0->shutdownInLoop(); });
   }
 }
 
@@ -158,7 +158,7 @@ void TcpConnection::forceClose() {
   if (loop_->isInLoopThread()) {
     forceCloseInLoop();
   } else {
-    loop_->runInLoop(std::bind(&TcpConnection::forceCloseInLoop, shared_from_this()));
+    loop_->runInLoop([capture0 = shared_from_this()] { capture0->forceCloseInLoop(); });
   }
 }
 
@@ -187,15 +187,15 @@ void TcpConnection::handleWrite() {
   loop_->assertInLoopThread();
 
   if (channel_->isWriting()) {
-    ssize_t n = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableBytes());
+    ssize_t result = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableBytes());
 
-    if (n > 0) {
-      outputBuffer_.retrieve(n);
+    if (result > 0) {
+      outputBuffer_.retrieve(result);
       if (outputBuffer_.readableBytes() == 0) {
         channel_->disableWriting();
 
         if (writeCompleteCallback_) {
-          loop_->queueInLoop(std::bind(writeCompleteCallback_, shared_from_this()));
+          loop_->queueInLoop([this]() { writeCompleteCallback_(shared_from_this()); });
         }
 
         if (state_ == State::kDisconnecting) {
@@ -273,11 +273,11 @@ void TcpConnection::handleError() {
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
   int savedErrno = 0;
-  ssize_t n = inputBuffer_.readData(socket_->getSocketFd(), &savedErrno);
+  ssize_t result = inputBuffer_.readData(socket_->getSocketFd(), &savedErrno);
 
-  if (n > 0) {
+  if (result > 0) {
     messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
-  } else if (n == 0) {
+  } else if (result == 0) {
     handleClose();
   } else {
     errno = savedErrno;
@@ -294,10 +294,10 @@ void TcpConnection::connectEstablished() {
 
   channel_->enableReading();
 
-  channel_->setReadCallback(std::bind(&TcpConnection::handleRead, this, std::placeholders::_1));
-  channel_->setWriteCallback(std::bind(&TcpConnection::handleWrite, this));
-  channel_->setCloseCallback(std::bind(&TcpConnection::handleClose, this));
-  channel_->setErrorCallback(std::bind(&TcpConnection::handleError, this));
+  channel_->setReadCallback([this](auto &&PH1) { handleRead(std::forward<decltype(PH1)>(PH1)); });
+  channel_->setWriteCallback([this] { handleWrite(); });
+  channel_->setCloseCallback([this] { handleClose(); });
+  channel_->setErrorCallback([this] { handleError(); });
 
   if (connectionCallback_) {
     connectionCallback_(shared_from_this());

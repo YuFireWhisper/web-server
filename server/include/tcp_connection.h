@@ -7,9 +7,12 @@
 #include "socket.h"
 #include "types.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+
 namespace server {
+
 class TcpConnection;
 
 using TcpConnectionPtr = std::shared_ptr<TcpConnection>;
@@ -23,7 +26,7 @@ public:
   using HighWaterMarkCallback = std::function<void(const TcpConnectionPtr &, size_t)>;
   using ErrorCallback = std::function<void(const TcpConnectionPtr &)>;
 
-  enum class State { kDisconnected, kConnecting, kConnected, kDisconnecting };
+  enum class State : int8_t { kDisconnected, kConnecting, kConnected, kDisconnecting };
 
   TcpConnection(
       EventLoop *loop,
@@ -74,7 +77,7 @@ private:
   void shutdownInLoop();
   void forceCloseInLoop();
 
-  void setState(State s) { state_ = s; }
+  void setState(State state) { state_ = state; }
 
   EventLoop *loop_;
   const std::string name_;
@@ -94,7 +97,7 @@ private:
   CloseCallback closeCallback_ = [](const TcpConnectionPtr &) {};
   HighWaterMarkCallback highWaterMarkCallback_ = [](const TcpConnectionPtr &, size_t) {};
   ErrorCallback errorCallback_ = [](const TcpConnectionPtr &) {};
-  size_t highWaterMark_ = 64 * 1024 * 1024;
+  size_t highWaterMark_ = kDefaultHighWaterMark;
 };
 
 } // namespace server

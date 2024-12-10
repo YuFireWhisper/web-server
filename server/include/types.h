@@ -46,5 +46,7 @@ static constexpr int kNanosecondPerSecond = MicroSecondsPerSecond * kTimeScaleFa
 static constexpr size_t kKib = 1024;
 static constexpr size_t kMib = kKib * 1024;
 
+static constexpr size_t kDefaultHighWaterMark = kMib * 64;
+
 using ThreadInitCallback = std::function<void(EventLoop *)>;
 } // namespace server
