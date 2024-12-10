@@ -12,8 +12,8 @@ protected:
 
 TEST_F(BufferTest, InitialState) {
   EXPECT_EQ(buffer_.readableBytes(), 0);
-  EXPECT_EQ(buffer_.writableBytes(), Buffer::DEFAULT_INIT_SIZE);
-  EXPECT_EQ(buffer_.prependableBytes(), Buffer::PREPEND_SIZE);
+  EXPECT_EQ(buffer_.writableBytes(), Buffer::kDefaultInitSize);
+  EXPECT_EQ(buffer_.prependableBytes(), Buffer::kPrependSize);
 }
 
 TEST_F(BufferTest, AppendAndRetrieve) {
@@ -37,7 +37,7 @@ TEST_F(BufferTest, MultipleAppendAndRetrieveAll) {
 }
 
 TEST_F(BufferTest, EnsureSpace) {
-  std::string large_str(Buffer::DEFAULT_INIT_SIZE * 2, 'x');
+  std::string large_str(Buffer::kDefaultInitSize * 2, 'x');
   buffer_.append(large_str);
 
   EXPECT_EQ(buffer_.readableBytes(), large_str.length());
@@ -48,7 +48,8 @@ TEST_F(BufferTest, PartialRetrieve) {
   std::string test_str = "Hello, World!";
   buffer_.append(test_str);
 
-  std::string part = buffer_.retrieveAsString(5);
+  const static int retrieveLen = 5;
+  std::string part = buffer_.retrieveAsString(retrieveLen);
   EXPECT_EQ(part, "Hello");
   EXPECT_EQ(buffer_.readableBytes(), test_str.length() - 5);
   EXPECT_EQ(buffer_.retrieveAllAsString(), ", World!");
@@ -59,7 +60,7 @@ TEST_F(BufferTest, RetrieveAll) {
   buffer_.retrieveAll();
 
   EXPECT_EQ(buffer_.readableBytes(), 0);
-  EXPECT_EQ(buffer_.prependableBytes(), Buffer::PREPEND_SIZE);
+  EXPECT_EQ(buffer_.prependableBytes(), Buffer::kPrependSize);
 }
 
 TEST_F(BufferTest, RetrieveMoreThanAvailable) {
@@ -75,7 +76,7 @@ TEST_F(BufferTest, EmptyStringOperations) {
 
 TEST_F(BufferTest, LargeDataOperations) {
 
-  const size_t large_size = Buffer::DEFAULT_INIT_SIZE * 4;
+  const size_t large_size = Buffer::kDefaultInitSize * 4;
   std::string large_data(large_size, 'A');
 
   buffer_.append(large_data);
@@ -84,7 +85,8 @@ TEST_F(BufferTest, LargeDataOperations) {
 }
 
 TEST_F(BufferTest, ContinuousWriteAndRead) {
-  for (int i = 0; i < 100; ++i) {
+  const static int numOfLoop = 100;
+  for (int i = 0; i < numOfLoop; ++i) {
     std::string data = "test" + std::to_string(i);
     buffer_.append(data);
     EXPECT_EQ(buffer_.retrieveAsString(data.length()), data);
