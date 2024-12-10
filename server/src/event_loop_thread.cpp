@@ -3,12 +3,11 @@
 #include "include/event_loop.h"
 
 namespace server {
-EventLoopThread::EventLoopThread(const ThreadInitCallback &cb, const std::string &name)
+EventLoopThread::EventLoopThread(ThreadInitCallback cb, std::string name)
     : loop_(nullptr)
     , exiting_(false)
-    , thread_()
-    , callback_(cb)
-    , name_(name) {}
+    , callback_(std::move(cb))
+    , name_(std::move(name)) {}
 
 EventLoopThread::~EventLoopThread() {
   exiting_ = true;

@@ -14,8 +14,8 @@ class EventLoop;
 class EventLoopThread {
 public:
   EventLoopThread(
-      const ThreadInitCallback &cb = ThreadInitCallback(),
-      const std::string &name = std::string()
+      ThreadInitCallback cb = ThreadInitCallback(),
+      std::string name = std::string()
   );
   ~EventLoopThread();
 
