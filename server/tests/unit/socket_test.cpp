@@ -14,7 +14,6 @@ class NetworkTestConfig {
 public:
   static constexpr uint16_t BASE_PORT = 50000;
   static constexpr int LISTEN_BACKLOG = 5;
-  static constexpr auto OPERATION_TIMEOUT = std::chrono::seconds(1);
   static constexpr auto RETRY_DELAY = std::chrono::milliseconds(100);
   static constexpr int MAX_BIND_ATTEMPTS = 3;
 };
@@ -32,7 +31,10 @@ public:
 
 class SocketTestFixture : public ::testing::Test {
 protected:
-  void TearDown() override { std::this_thread::sleep_for(std::chrono::milliseconds(500)); }
+  void TearDown() override {
+    const static int sleepTime = 500;
+    std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+  }
 
   void initializeServerSocket() {
     serverSocket_ = std::make_unique<Socket>();
@@ -86,7 +88,7 @@ TEST_F(SocketTestFixture, configureSocketOptionsSuccessfully) {
 
 TEST_F(SocketTestFixture, establishServerSocketConnection) {
   initializeServerSocket();
-  auto socket = getServerSocket();
+  auto *socket = getServerSocket();
 
   InetAddress addr = socket->getLocalAddress();
   EXPECT_EQ(addr.getPort(), NetworkTestConfig::BASE_PORT);
@@ -95,7 +97,7 @@ TEST_F(SocketTestFixture, establishServerSocketConnection) {
 
 TEST_F(SocketTestFixture, handleBufferDataOperations) {
   initializeServerSocket();
-  auto socket = getServerSocket();
+  auto *socket = getServerSocket();
 
   uint16_t serverPort = socket->getLocalAddress().getPort();
   EXPECT_GT(serverPort, 0);
@@ -109,7 +111,7 @@ TEST_F(SocketTestFixture, handleBufferDataOperations) {
 
 TEST_F(SocketTestFixture, handleNonBlockingSocketOperations) {
   initializeServerSocket();
-  auto socket = getServerSocket();
+  auto *socket = getServerSocket();
 
   EXPECT_NO_THROW({
     socket->enableNonBlocking();
@@ -120,9 +122,8 @@ TEST_F(SocketTestFixture, handleNonBlockingSocketOperations) {
 
 TEST_F(SocketTestFixture, provideAccurateConnectionInfo) {
   initializeServerSocket();
-  auto socket = getServerSocket();
+  auto *socket = getServerSocket();
 
-  auto connInfo = socket->getConnectionInfo();
   EXPECT_FALSE(socket->hasActiveConnection());
   EXPECT_FALSE(socket->hasError());
 
