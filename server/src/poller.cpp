@@ -18,7 +18,7 @@ Poller *Poller::newDefaultPoller(EventLoop *loop) {
 }
 
 bool Poller::hasChannel(Channel *channel) const {
-  if (!channel) {
+  if (channel == nullptr) {
     return false;
   }
 
