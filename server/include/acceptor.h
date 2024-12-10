@@ -18,15 +18,17 @@ public:
 
   void setConnectionHandler(const ConnectionHandler &handler) { connectionHandler_ = handler; }
 
-  bool isListening() const { return isListening_; }
+  [[nodiscard]] bool isListening() const { return isListening_; }
   void startListen();
 
   void enablePortReuse();
 
+  [[nodiscard]] InetAddress getLocalAddress() const;
+
 private:
   void handleConnection();
   void processConnection(Socket &&connection, const InetAddress &peerAddress);
-  void handleResourceLimit(const std::string &errorMessage);
+  static void handleResourceLimit(const std::string &errorMessage);
 
   EventLoop *eventLoop_;
   std::unique_ptr<Socket> serverSocket_;

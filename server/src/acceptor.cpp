@@ -22,7 +22,7 @@ Acceptor::Acceptor(EventLoop *eventLoop, const InetAddress &listenAddress)
   serverSocket_->enablePortReuse();
   serverSocket_->bindToAddress(listenAddress);
 
-  serverChannel_->setReadCallback(std::bind(&Acceptor::handleConnection, this));
+  serverChannel_->setReadCallback([this]() { handleConnection(); });
 }
 
 void Acceptor::startListen() {
@@ -61,6 +61,10 @@ void Acceptor::handleResourceLimit(const std::string &errorMessage) {
 
 void Acceptor::enablePortReuse() {
   serverSocket_->enablePortReuse();
+}
+
+InetAddress Acceptor::getLocalAddress() const {
+  return serverSocket_->getLocalAddress();
 }
 
 } // namespace server
