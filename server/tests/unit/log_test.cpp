@@ -19,21 +19,21 @@ protected:
 
   std::string getTestFileContent() { return readFileContent(testFilePath_); }
 
-  const std::filesystem::path &getTestFilePath() const { return testFilePath_; }
+  [[nodiscard]] const std::filesystem::path &getTestFilePath() const { return testFilePath_; }
 
-  std::string captureConsoleOutput(const std::function<void()> &logOperation) {
+  static std::string captureConsoleOutput(const std::function<void()> &logOperation) {
     testing::internal::CaptureStdout();
     logOperation();
     return testing::internal::GetCapturedStdout();
   }
 
-  std::string captureErrorOutput(const std::function<void()> &logOperation) {
+  static std::string captureErrorOutput(const std::function<void()> &logOperation) {
     testing::internal::CaptureStderr();
     logOperation();
     return testing::internal::GetCapturedStderr();
   }
 
-  void assertContains(const std::string &content, const std::string &expectedText) {
+  static void assertContains(const std::string &content, const std::string &expectedText) {
     EXPECT_TRUE(content.find(expectedText) != std::string::npos)
         << "Expected to find: " << expectedText << " in: " << content;
   }
@@ -47,7 +47,7 @@ private:
     }
   }
 
-  std::string readFileContent(const std::filesystem::path &path) {
+  static std::string readFileContent(const std::filesystem::path &path) {
     std::ifstream file(path);
     if (!file.is_open()) {
       return {};
@@ -122,6 +122,7 @@ TEST_F(LogTestBase, HandlesMultipleThreadsSafely) {
   std::vector<std::thread> threads;
   Logger::setDefaultOutputFile(getTestFilePath());
 
+  threads.reserve(threadCount);
   for (int i = 0; i < threadCount; ++i) {
     threads.emplace_back([i] { Logger::log(LogLevel::INFO, "Thread" + std::to_string(i)); });
   }
