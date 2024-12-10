@@ -15,7 +15,7 @@ EventLoop::EventLoop()
     , poller_(new EPollPoller(this))
     , wakeupFd_(createEventfd())
     , wakeupChannel_(new Channel(this, wakeupFd_)) {
-  wakeupChannel_->setReadCallback(std::bind(&EventLoop::readFromWakeupFd, this));
+  wakeupChannel_->setReadCallback([this](const TimeStamp &) { readFromWakeupFd(); });
   wakeupChannel_->enableReading();
 }
 
@@ -103,14 +103,14 @@ int EventLoop::createEventfd() {
   return evtfd;
 }
 
-void EventLoop::writeToWakeupFd() {
+void EventLoop::writeToWakeupFd() const {
   uint64_t one = kWakeupNumber;
   if (::write(wakeupFd_, &one, sizeof one) != sizeof one) {
     throw std::runtime_error("Failed to write to wakeup fd");
   }
 }
 
-void EventLoop::readFromWakeupFd() {
+void EventLoop::readFromWakeupFd() const {
   uint64_t one = 0;
   if (::read(wakeupFd_, &one, sizeof one) != sizeof one) {
     throw std::runtime_error("Failed to read from wakeup fd");
@@ -121,7 +121,7 @@ void EventLoop::handleWakeup() {
   readFromWakeupFd();
 }
 
-void EventLoop::assertInLoopThread() {
+void EventLoop::assertInLoopThread() const {
   if (!isInLoopThread()) {
     throw std::runtime_error("EventLoop was created in a different thread");
   }

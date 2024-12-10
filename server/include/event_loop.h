@@ -28,20 +28,22 @@ public:
   void updateChannel(Channel *channel);
   void removeChannel(Channel *channel);
 
-  bool isInLoopThread() const { return pthread_equal(threadId_, pthread_self()); }
-  bool isWakeupFd(int fd) const { return fd == wakeupFd_; }
-  int getWakeupFd() const { return wakeupFd_; }
+  [[nodiscard]] bool isInLoopThread() const {
+    return pthread_equal(threadId_, pthread_self()) != 0;
+  }
+  [[nodiscard]] bool isWakeupFd(int fd) const { return fd == wakeupFd_; }
+  [[nodiscard]] int getWakeupFd() const { return wakeupFd_; }
 
   void handleWakeup();
-  void assertInLoopThread();
+  void assertInLoopThread() const;
 
-  Poller *getPoller() const { return poller_.get(); }
+  [[nodiscard]] Poller *getPoller() const { return poller_.get(); }
 
 private:
   void doPendingFunctors();
-  int createEventfd();
-  void writeToWakeupFd();
-  void readFromWakeupFd();
+  static int createEventfd();
+  void writeToWakeupFd() const;
+  void readFromWakeupFd() const;
 
   std::atomic<bool> looping_{false};
   std::atomic<bool> quit_{false};
