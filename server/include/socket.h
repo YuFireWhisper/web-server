@@ -25,10 +25,10 @@ public:
   Socket(const Socket &) = delete;
   Socket &operator=(const Socket &) = delete;
 
-  void bindToPort(uint16_t port);
-  void bindToAddress(const InetAddress &address);
-  void startListening(int backlog);
-  Socket acceptNewConnection();
+  void bindToPort(uint16_t port) const;
+  void bindToAddress(const InetAddress &address) const;
+  void startListening(int backlog) const;
+  [[nodiscard]] Socket acceptNewConnection() const;
 
   void enableAddressReuse();
   void enablePortReuse();
@@ -36,9 +36,9 @@ public:
   void disableNagle();
   void enableNonBlocking();
 
-  void closeWriteEnd();
+  void closeWriteEnd() const;
 
-  int getSocketFd() const { return socketFd_; }
+  [[nodiscard]] int getSocketFd() const { return socketFd_; }
 
   struct ConnectionInfo {
     uint32_t stateCode;
@@ -49,24 +49,24 @@ public:
     uint32_t totalRetransmits;
   };
 
-  ConnectionInfo getConnectionInfo() const;
-  InetAddress getLocalAddress() const;
-  InetAddress getRemoteAddress() const;
+  [[nodiscard]] ConnectionInfo getConnectionInfo() const;
+  [[nodiscard]] InetAddress getLocalAddress() const;
+  [[nodiscard]] InetAddress getRemoteAddress() const;
 
-  bool hasActiveConnection() const;
-  bool hasError() const;
+  [[nodiscard]] bool hasActiveConnection() const;
+  [[nodiscard]] bool hasError() const;
 
-  size_t readData(Buffer &targetBuffer);
-  size_t writeData(const Buffer &sourceBuffer);
-  size_t writeData(const void *dataPtr, size_t dataLength);
+  size_t readData(Buffer &targetBuffer) const;
+  [[nodiscard]] size_t writeData(const Buffer &sourceBuffer) const;
+  size_t writeData(const void *dataPtr, size_t dataLength) const;
 
 private:
   const int socketFd_;
 
   static int createTcpSocket();
-  void setSocketFlag(int level, int flag, bool enabled);
-  void configureBlockingMode(bool shouldBlock);
-  int getLastError() const;
+  void setSocketFlag(int level, int flag, bool enabled) const;
+  void configureBlockingMode(bool shouldBlock) const;
+  [[nodiscard]] int getLastError() const;
 };
 
 } // namespace server

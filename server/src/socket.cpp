@@ -15,7 +15,6 @@
 #include <sys/uio.h>
 
 namespace {
-constexpr int EXTRA_BUFFER_SIZE = 65536;
 constexpr int TEMPORARY_SLEEP_MS = 100;
 } // namespace
 
@@ -49,26 +48,26 @@ int Socket::createTcpSocket() {
   return fd;
 }
 
-void Socket::bindToPort(uint16_t port) {
+void Socket::bindToPort(uint16_t port) const {
   InetAddress address(port);
   bindToAddress(address);
 }
 
-void Socket::bindToAddress(const InetAddress &address) {
+void Socket::bindToAddress(const InetAddress &address) const {
   int result = ::bind(socketFd_, address.getSockAddr(), address.getSockLen());
   if (result < 0) {
     throw SocketException("Socket bind", errno);
   }
 }
 
-void Socket::startListening(int backlog) {
+void Socket::startListening(int backlog) const {
   int result = ::listen(socketFd_, backlog);
   if (result < 0) {
     throw SocketException("Socket listen", errno);
   }
 }
 
-Socket Socket::acceptNewConnection() {
+Socket Socket::acceptNewConnection() const {
   while (true) {
     int newFd = ::accept4(socketFd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
 
@@ -85,7 +84,7 @@ Socket Socket::acceptNewConnection() {
   }
 }
 
-void Socket::setSocketFlag(int level, int flag, bool enabled) {
+void Socket::setSocketFlag(int level, int flag, bool enabled) const {
   int value = enabled ? 1 : 0;
   int result = ::setsockopt(socketFd_, level, flag, &value, sizeof(value));
   if (result < 0) {
@@ -109,7 +108,7 @@ void Socket::disableNagle() {
   setSocketFlag(IPPROTO_TCP, TCP_NODELAY, true);
 }
 
-void Socket::configureBlockingMode(bool shouldBlock) {
+void Socket::configureBlockingMode(bool shouldBlock) const {
   int flags = fcntl(socketFd_, F_GETFL, 0);
   if (flags < 0) {
     throw SocketException("Get socket flags", errno);
@@ -127,7 +126,7 @@ void Socket::enableNonBlocking() {
   configureBlockingMode(false);
 }
 
-void Socket::closeWriteEnd() {
+void Socket::closeWriteEnd() const {
   int result = ::shutdown(socketFd_, SHUT_WR);
   if (result < 0) {
     throw SocketException("Socket shutdown", errno);
@@ -144,12 +143,12 @@ Socket::ConnectionInfo Socket::getConnectionInfo() const {
   }
 
   return ConnectionInfo{
-      rawInfo.tcpi_state,
-      rawInfo.tcpi_rtt,
-      rawInfo.tcpi_rttvar,
-      rawInfo.tcpi_snd_cwnd,
-      rawInfo.tcpi_retransmits,
-      rawInfo.tcpi_total_retrans
+      .stateCode = rawInfo.tcpi_state,
+      .rtt = rawInfo.tcpi_rtt,
+      .rttVar = rawInfo.tcpi_rttvar,
+      .congestionWindow = rawInfo.tcpi_snd_cwnd,
+      .retransmits = rawInfo.tcpi_retransmits,
+      .totalRetransmits = rawInfo.tcpi_total_retrans
   };
 }
 
@@ -196,41 +195,25 @@ bool Socket::hasError() const {
   return getLastError() != 0;
 }
 
-size_t Socket::readData(Buffer &targetBuffer) {
-  char extraBuffer[EXTRA_BUFFER_SIZE];
-  struct iovec vec[2];
-
-  const size_t mainSpace = targetBuffer.writableBytes();
-  vec[0].iov_base = targetBuffer.beginWrite();
-  vec[0].iov_len = mainSpace;
-  vec[1].iov_base = extraBuffer;
-  vec[1].iov_len = sizeof(extraBuffer);
-
-  const int vectorCount = (mainSpace < sizeof(extraBuffer)) ? 2 : 1;
-  const ssize_t bytesRead = ::readv(socketFd_, vec, vectorCount);
+size_t Socket::readData(Buffer &targetBuffer) const {
+  int savedErrno = 0;
+  ssize_t bytesRead = targetBuffer.readData(socketFd_, &savedErrno);
 
   if (bytesRead < 0) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+    if (savedErrno == EAGAIN || savedErrno == EWOULDBLOCK || savedErrno == EINTR) {
       return 0;
     }
-    throw SocketException("Socket read", errno);
-  }
-
-  if (static_cast<size_t>(bytesRead) <= mainSpace) {
-    targetBuffer.hasWritten(bytesRead);
-  } else {
-    targetBuffer.hasWritten(mainSpace);
-    targetBuffer.append(extraBuffer, bytesRead - mainSpace);
+    throw SocketException("Socket read", savedErrno);
   }
 
   return bytesRead;
 }
 
-size_t Socket::writeData(const Buffer &sourceBuffer) {
+size_t Socket::writeData(const Buffer &sourceBuffer) const {
   return writeData(sourceBuffer.peek(), sourceBuffer.readableBytes());
 }
 
-size_t Socket::writeData(const void *dataPtr, size_t dataLength) {
+size_t Socket::writeData(const void *dataPtr, size_t dataLength) const {
   size_t bytesSent = 0;
   const char *currentPtr = static_cast<const char *>(dataPtr);
 
