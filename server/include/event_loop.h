@@ -53,7 +53,7 @@ private:
   const pthread_t threadId_;
   std::unique_ptr<Poller> poller_;
 
-  int wakeupFd_;
+  std::atomic<int> wakeupFd_;
   std::unique_ptr<Channel> wakeupChannel_;
 
   std::mutex mutex_;
