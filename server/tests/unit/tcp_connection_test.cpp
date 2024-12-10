@@ -2,13 +2,20 @@
 #include "include/log.h"
 #include "include/tcp_connection.h"
 
+#include <array>
+#include <csignal>
 #include <future>
 #include <gtest/gtest.h>
-#include <signal.h>
 #include <thread>
 
-namespace server {
-namespace testing {
+namespace server::testing {
+
+namespace {
+constexpr int DEFAULT_SERVER_PORT = 1234;
+constexpr int DEFAULT_CLIENT_PORT = 4321;
+constexpr size_t BUFFER_SIZE = 1024;
+constexpr int TIMEOUT_SECONDS = 5;
+} // namespace
 
 void ignoreSigPipe() {
   struct sigaction sa;
@@ -20,8 +27,8 @@ void ignoreSigPipe() {
 class SocketPair {
 public:
   SocketPair() {
-    int sockets[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) < 0) {
+    std::array<int, 2> sockets{};
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) < 0) {
       throw std::runtime_error("Failed to create socket pair");
     }
     serverSocket = std::make_unique<Socket>(sockets[0]);
@@ -33,7 +40,7 @@ public:
 
   std::unique_ptr<Socket> releaseServer() { return std::move(serverSocket); }
 
-  int getClientFd() const { return clientSocket ? clientSocket->getSocketFd() : -1; }
+  [[nodiscard]] int getClientFd() const { return clientSocket ? clientSocket->getSocketFd() : -1; }
 
 private:
   std::unique_ptr<Socket> serverSocket;
@@ -68,8 +75,8 @@ protected:
           loop,
           "test-connection",
           sockets->releaseServer(),
-          InetAddress(1234),
-          InetAddress("127.0.0.1", 4321)
+          InetAddress(DEFAULT_SERVER_PORT),
+          InetAddress("127.0.0.1", DEFAULT_CLIENT_PORT)
       );
       initPromise.set_value();
     });
@@ -78,7 +85,7 @@ protected:
   }
 
   void TearDown() override {
-    if (connection && loop) {
+    if (connection && (loop != nullptr)) {
       std::promise<void> promise;
       auto future = promise.get_future();
 
@@ -93,7 +100,7 @@ protected:
       future.wait();
     }
 
-    if (loop) {
+    if (loop != nullptr) {
       loop->quit();
     }
 
@@ -119,9 +126,9 @@ protected:
     });
 
     Logger::log(LogLevel::INFO, "Waiting for task completion");
-    auto status = future.wait_for(std::chrono::seconds(5));
+    auto status = future.wait_for(std::chrono::seconds(TIMEOUT_SECONDS));
     ASSERT_EQ(std::future_status::ready, status)
-        << "Task in event loop did not complete within 5 seconds";
+        << "Task in event loop did not complete within " << TIMEOUT_SECONDS << " seconds";
     Logger::log(LogLevel::INFO, "Task completed successfully");
   }
 
@@ -136,8 +143,8 @@ TEST_F(TcpConnectionTest, ShouldProvideConnectionInfo) {
   EXPECT_FALSE(connection->connected());
   EXPECT_EQ(connection->name(), "test-connection");
   EXPECT_EQ(connection->getLoop(), loop);
-  EXPECT_EQ(connection->localAddress().getPort(), 1234);
-  EXPECT_EQ(connection->peerAddress().getPort(), 4321);
+  EXPECT_EQ(connection->localAddress().getPort(), DEFAULT_SERVER_PORT);
+  EXPECT_EQ(connection->peerAddress().getPort(), DEFAULT_CLIENT_PORT);
 }
 
 TEST_F(TcpConnectionTest, ShouldHandleConnectionLifecycle) {
@@ -178,10 +185,10 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageSendingWithString) {
 
   writeComplete.get_future().wait();
 
-  char buffer[1024] = {0};
-  ssize_t n = read(clientFd, buffer, sizeof(buffer));
-  EXPECT_GT(n, 0);
-  EXPECT_EQ(std::string(buffer, n), testMessage);
+  std::array<char, BUFFER_SIZE> buffer{};
+  ssize_t bytesRead = read(clientFd, buffer.data(), buffer.size());
+  EXPECT_GT(bytesRead, 0);
+  EXPECT_EQ(std::string(buffer.data(), bytesRead), testMessage);
 }
 
 TEST_F(TcpConnectionTest, ShouldHandleMessageSendingWithStringView) {
@@ -198,10 +205,10 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageSendingWithStringView) {
 
   writeComplete.get_future().wait();
 
-  char buffer[1024] = {0};
-  ssize_t n = read(clientFd, buffer, sizeof(buffer));
-  EXPECT_GT(n, 0);
-  EXPECT_EQ(std::string(buffer, n), std::string(testMessage));
+  std::array<char, BUFFER_SIZE> buffer{};
+  ssize_t bytesRead = read(clientFd, buffer.data(), buffer.size());
+  EXPECT_GT(bytesRead, 0);
+  EXPECT_EQ(std::string(buffer.data(), bytesRead), std::string(testMessage));
 }
 
 TEST_F(TcpConnectionTest, ShouldHandleMessageSendingWithBuffer) {
@@ -220,10 +227,10 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageSendingWithBuffer) {
 
   writeComplete.get_future().wait();
 
-  char buffer[1024] = {0};
-  ssize_t n = read(clientFd, buffer, sizeof(buffer));
-  EXPECT_GT(n, 0);
-  EXPECT_EQ(std::string(buffer, n), testMessage);
+  std::array<char, BUFFER_SIZE> buffer{};
+  ssize_t bytesRead = read(clientFd, buffer.data(), buffer.size());
+  EXPECT_GT(bytesRead, 0);
+  EXPECT_EQ(std::string(buffer.data(), bytesRead), testMessage);
 }
 
 TEST_F(TcpConnectionTest, ShouldHandleMessageReceiving) {
@@ -270,7 +277,7 @@ TEST_F(TcpConnectionTest, ShouldHandleHighWaterMark) {
     connection->send(std::string(testDataSize, 'X'));
   });
 
-  auto status = future.wait_for(std::chrono::seconds(5));
+  auto status = future.wait_for(std::chrono::seconds(TIMEOUT_SECONDS));
   ASSERT_EQ(std::future_status::ready, status)
       << "High water mark callback not triggered within timeout";
 
@@ -291,7 +298,7 @@ TEST_F(TcpConnectionTest, ShouldHandleGracefulShutdown) {
     connection->shutdown();
   });
 
-  auto status = future.wait_for(std::chrono::seconds(5));
+  auto status = future.wait_for(std::chrono::seconds(TIMEOUT_SECONDS));
   ASSERT_EQ(std::future_status::ready, status) << "Shutdown did not complete within timeout";
   EXPECT_FALSE(connection->connected());
 }
@@ -309,5 +316,4 @@ TEST_F(TcpConnectionTest, ShouldHandleForceClose) {
   EXPECT_FALSE(connection->connected());
 }
 
-} // namespace testing
-} // namespace server
+} // namespace server::testing
