@@ -9,29 +9,20 @@ public:
   using TimerCallback = std::function<void()>;
 
   Timer(TimerCallback cb, TimeStamp when, double interval)
-      : callback_(std::move(cb)), expiration_(when), interval_(interval), repeat_(interval > 0.0) {}
+      : callback_(std::move(cb))
+      , expiration_(when)
+      , interval_(interval)
+      , repeat_(interval > 0.0) {}
 
-  void run() {
-    callback_();
-  }
+  void run() { callback_(); }
 
-  void restart() {
-    expiration_ = TimeStamp::now() + interval();
-  }
+  void restart() { expiration_ = TimeStamp::now() + interval(); }
 
-  TimerCallback callback() const {
-    return callback_;
-  }
+  [[nodiscard]] TimerCallback callback() const { return callback_; }
 
-  TimeStamp expiration() const {
-    return expiration_;
-  }
-  bool repeat() const {
-    return repeat_;
-  }
-  double interval() const {
-    return interval_;
-  }
+  [[nodiscard]] TimeStamp expiration() const { return expiration_; }
+  [[nodiscard]] bool repeat() const { return repeat_; }
+  [[nodiscard]] double interval() const { return interval_; }
 
 private:
   const TimerCallback callback_;
