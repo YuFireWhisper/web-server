@@ -50,17 +50,20 @@ const char *LogFormatter::getLevelColor(LogLevel level) {
   return LEVEL_COLORS[static_cast<size_t>(level)];
 }
 
-std::string LogFormatter::format(const LogEntry &entry) const {
+std::string LogFormatter::format(const LogEntry &entry) {
   auto time = std::chrono::system_clock::to_time_t(entry.getTimestamp());
-  auto localTime = std::localtime(&time);
+  auto *localTime = std::localtime(&time);
 
-  char timestamp[32];
-  std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localTime);
+  const static size_t timeStampSize = 32;
+  std::array<char, timeStampSize> timestamp;
+  std::strftime(timestamp.data(), timestamp.size(), "%Y-%m-%d %H:%M:%S", localTime);
+
+  std::string timestampStr(timestamp.data());
 
   return std::format(
       "{}{} [{}] {}:{} - {}\033[0m",
       getLevelColor(entry.getLevel()),
-      timestamp,
+      timestampStr,
       getLevelName(entry.getLevel()),
       entry.getFile(),
       entry.getLine(),
@@ -69,7 +72,7 @@ std::string LogFormatter::format(const LogEntry &entry) const {
 }
 
 void LogWriter::writeConsole(const std::string &message) {
-  std::cout << message << std::endl;
+  std::cout << message << '\n';
 }
 
 void LogWriter::writeFile(const std::string &message, const std::filesystem::path &path) {
@@ -77,22 +80,21 @@ void LogWriter::writeFile(const std::string &message, const std::filesystem::pat
 
   std::ofstream outfile(path, std::ios::app);
   if (!outfile) {
-    std::cerr << "Failed to open log file: " << path << std::endl;
+    std::cerr << "Failed to open log file: " << path << '\n';
     return;
   }
 
-  outfile << message << std::endl;
+  outfile << message << '\n';
 }
 
 std::filesystem::path Logger::defaultOutputPath_;
-LogFormatter Logger::formatter_;
 LogWriter Logger::writer_;
 
 void Logger::log(LogLevel level, std::string_view message) {
   LogEntry entry(level, message);
-  auto formattedMessage = formatter_.format(entry);
+  auto formattedMessage = LogFormatter::format(entry);
 
-  writer_.writeConsole(formattedMessage);
+  server::LogWriter::writeConsole(formattedMessage);
   if (!defaultOutputPath_.empty()) {
     writer_.writeFile(formattedMessage, defaultOutputPath_);
   }
@@ -104,9 +106,9 @@ void Logger::log(
     const std::filesystem::path &outputPath
 ) {
   LogEntry entry(level, message);
-  auto formattedMessage = formatter_.format(entry);
+  auto formattedMessage = LogFormatter::format(entry);
 
-  writer_.writeConsole(formattedMessage);
+  server::LogWriter::writeConsole(formattedMessage);
   writer_.writeFile(formattedMessage, outputPath);
 }
 

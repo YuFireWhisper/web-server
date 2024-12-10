@@ -8,17 +8,17 @@
 
 namespace server {
 
-enum class LogLevel { TRACE, DEBUG, INFO, WARN, ERROR, FATAL };
+enum class LogLevel : int8_t { TRACE, DEBUG, INFO, WARN, ERROR, FATAL };
 
 class LogEntry {
 public:
   LogEntry(LogLevel level, std::string_view message);
 
-  LogLevel getLevel() const;
-  std::string_view getMessage() const;
-  const auto &getTimestamp() const;
-  std::string_view getFile() const;
-  int getLine() const;
+  [[nodiscard]] LogLevel getLevel() const;
+  [[nodiscard]] std::string_view getMessage() const;
+  [[nodiscard]] const auto &getTimestamp() const;
+  [[nodiscard]] std::string_view getFile() const;
+  [[nodiscard]] int getLine() const;
 
 private:
   LogLevel level_;
@@ -30,7 +30,7 @@ private:
 
 class LogFormatter {
 public:
-  std::string format(const LogEntry &entry) const;
+  [[nodiscard]] static std::string format(const LogEntry &entry);
 
 private:
   static const char *getLevelName(LogLevel level);
@@ -39,7 +39,7 @@ private:
 
 class LogWriter {
 public:
-  void writeConsole(const std::string &message);
+  static void writeConsole(const std::string &message);
   void writeFile(const std::string &message, const std::filesystem::path &path);
 
 private:
@@ -56,7 +56,6 @@ public:
 
 private:
   static std::filesystem::path defaultOutputPath_;
-  static LogFormatter formatter_;
   static LogWriter writer_;
 };
 
