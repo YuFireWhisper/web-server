@@ -16,6 +16,7 @@ public:
   void handleEventWithGuard(TimeStamp receiveTime);
 
   void setReadCallback(const ReadEventCallback &cb) { readCallback_ = cb; }
+  void setReadCallback(const Functor &cb);
   void setWriteCallback(const EventCallback &cb) { writeCallback_ = cb; }
   void setErrorCallback(const EventCallback &cb) { errorCallback_ = cb; }
   void setCloseCallback(const EventCallback &cb) { closeCallback_ = cb; }
@@ -27,17 +28,17 @@ public:
   void disableAll() { updateEventStatus(EventType::kNoneEvent); }
   void remove();
 
-  bool isWriting() const { return events_ & EventType::kWriteEvent; }
-  bool isReading() const { return events_ & EventType::kReadEvent; }
-  bool isNoneEvent() const { return events_ == EventType::kNoneEvent; }
-  bool isInLoop() const;
+  [[nodiscard]] bool isWriting() const { return (events_ & EventType::kWriteEvent) != 0; }
+  [[nodiscard]] bool isReading() const { return (events_ & EventType::kReadEvent) != 0; }
+  [[nodiscard]] bool isNoneEvent() const { return events_ == EventType::kNoneEvent; }
+  [[nodiscard]] bool isInLoop() const;
 
-  int fd() const { return fd_; }
-  int events() const { return events_; }
+  [[nodiscard]] int fd() const { return fd_; }
+  [[nodiscard]] int events() const { return events_; }
   void setRevents(int revt) { revents_ = revt; }
-  int index() const { return index_; }
+  [[nodiscard]] int index() const { return index_; }
   void setIndex(int idx) { index_ = idx; }
-  EventLoop *ownerLoop() const { return loop_; }
+  [[nodiscard]] EventLoop *ownerLoop() const { return loop_; }
 
   void assertInLoop();
 

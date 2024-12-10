@@ -24,6 +24,10 @@ Channel::~Channel() {
   cleanupResources();
 }
 
+void Channel::setReadCallback(const Functor &cb) {
+  readCallback_ = [cb](TimeStamp) { cb(); };
+}
+
 void Channel::cleanupResources() {
   if (addedToLoop_) {
     disableAll();
@@ -50,26 +54,30 @@ void Channel::handleEventWithGuard(TimeStamp receiveTime) {
 }
 
 void Channel::processEvents(TimeStamp receiveTime) {
-  if (fd_ == loop_->getWakeupFd() && revents_ & EPOLLIN) {
+  if (fd_ == loop_->getWakeupFd() && (revents_ & EPOLLIN) != 0) {
     loop_->handleWakeup();
     return;
   }
 
-  if ((revents_ & EPOLLHUP) && !(revents_ & EPOLLIN)) {
-    if (closeCallback_)
+  if (((revents_ & EPOLLHUP) != 0) && ((revents_ & EPOLLIN) == 0)) {
+    if (closeCallback_) {
       closeCallback_();
+    }
   }
-  if (revents_ & EPOLLERR) {
-    if (errorCallback_)
+  if ((revents_ & EPOLLERR) != 0) {
+    if (errorCallback_) {
       errorCallback_();
+    }
   }
-  if (revents_ & (EPOLLIN | EPOLLPRI)) {
-    if (readCallback_)
+  if ((revents_ & (EPOLLIN | EPOLLPRI)) != 0) {
+    if (readCallback_) {
       readCallback_(receiveTime);
+    }
   }
-  if (revents_ & EPOLLOUT) {
-    if (writeCallback_)
+  if ((revents_ & EPOLLOUT) != 0) {
+    if (writeCallback_) {
       writeCallback_();
+    }
   }
 }
 
@@ -79,7 +87,7 @@ void Channel::updateEventStatus(int events) {
 }
 
 void Channel::notifyLoopOfUpdate() {
-  if (loop_) {
+  if (loop_ != nullptr) {
     loop_->updateChannel(this);
     addedToLoop_ = true;
   }
