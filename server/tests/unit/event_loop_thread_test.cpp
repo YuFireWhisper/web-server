@@ -2,8 +2,7 @@
 
 #include <gtest/gtest.h>
 
-namespace server {
-namespace testing {
+namespace server::testing {
 
 class EventLoopThreadTest : public ::testing::Test {
 public:
@@ -36,8 +35,9 @@ TEST_F(EventLoopThreadTest, ShouldBeRunningAfterStart) {
 }
 
 TEST_F(EventLoopThreadTest, ShouldExecuteCallbackOnStart) {
-  ThreadInitCallback callback =
-      std::bind(&EventLoopThreadTest::OnThreadInit, this, std::placeholders::_1);
+  ThreadInitCallback callback = [this](auto &&PH1) {
+    OnThreadInit(std::forward<decltype(PH1)>(PH1));
+  };
   EventLoopThread loop_thread(callback);
 
   EventLoop *loop = loop_thread.startLoop();
@@ -82,8 +82,9 @@ TEST_F(EventLoopThreadTest, ShouldSupportCustomName) {
 }
 
 TEST_F(EventLoopThreadTest, ShouldMaintainSingleInstanceOnMultipleStarts) {
-  ThreadInitCallback callback =
-      std::bind(&EventLoopThreadTest::OnThreadInit, this, std::placeholders::_1);
+  ThreadInitCallback callback = [this](auto &&PH1) {
+    OnThreadInit(std::forward<decltype(PH1)>(PH1));
+  };
   EventLoopThread loop_thread(callback);
 
   EventLoop *first_loop = loop_thread.startLoop();
@@ -93,5 +94,4 @@ TEST_F(EventLoopThreadTest, ShouldMaintainSingleInstanceOnMultipleStarts) {
   EXPECT_EQ(first_loop, second_loop);
 }
 
-} // namespace testing
-} // namespace server
+} // namespace server::testing
