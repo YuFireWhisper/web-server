@@ -7,14 +7,15 @@
 #include <gtest/gtest.h>
 #include <memory>
 
-namespace server {
-namespace testing {
+namespace server::testing {
 
 class AcceptorTest : public ::testing::Test {
 protected:
+  static constexpr uint16_t kDefaultTestPort = 8080;
+
   void SetUp() override {
     eventLoop_ = std::make_unique<EventLoop>();
-    listenAddr_ = std::make_unique<InetAddress>(8080);
+    listenAddr_ = std::make_unique<InetAddress>(kDefaultTestPort);
   }
 
   std::unique_ptr<EventLoop> eventLoop_;
@@ -80,5 +81,4 @@ TEST_F(AcceptorTest, ShouldAllowChangingConnectionHandlerAfterConstruction) {
   EXPECT_EQ(handlerCallCount, 0);
 }
 
-} // namespace testing
-} // namespace server
+} // namespace server::testing
