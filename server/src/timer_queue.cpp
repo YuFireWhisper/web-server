@@ -6,6 +6,7 @@
 #include "include/time_stamp.h"
 #include "include/timer.h"
 #include "include/timer_id.h"
+#include "include/types.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -21,15 +22,15 @@
 namespace server {
 
 TimerQueue::TimerQueue(EventLoop *loop)
-    : loop_(loop)
-    , sequence_(0)
-    , timerfd_(::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC)) {
+    : timerfd_(::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC))
+    , loop_(loop)
+    , sequence_(0) {
   if (timerfd_ < 0) {
     Logger::log(LogLevel::FATAL, "TimerQueue::TimerQueue timerfd create error");
     abort();
   }
   timerfdChannel_ = std::make_unique<Channel>(loop, timerfd_);
-  timerfdChannel_->setReadCallback(std::bind(&TimerQueue::handleRead, this));
+  timerfdChannel_->setReadCallback([this] { handleRead(); });
   timerfdChannel_->enableReading();
 }
 
@@ -42,9 +43,9 @@ TimerQueue::~TimerQueue() {
 
 TimerId TimerQueue::addTimer(TimerCallback cb, TimeStamp when, double interval) {
   std::lock_guard<std::mutex> lock(mutex_);
-  Timer *timer = new Timer(std::move(cb), when, interval);
+  auto *timer = new Timer(std::move(cb), when, interval);
   TimerId id(timer, sequence_++);
-  loop_->runInLoop(std::bind(&TimerQueue::addTimerInLoop, this, timer));
+  loop_->runInLoop([this, timer] { addTimerInLoop(timer); });
   return id;
 }
 
@@ -59,13 +60,13 @@ void TimerQueue::addTimerInLoop(Timer *timer) {
 bool TimerQueue::insert(Timer *timer) {
   bool earliestChanged = false;
   TimeStamp when = timer->expiration();
-  TimerList::iterator it = timers_.begin();
+  auto it = timers_.begin();
 
   if (it == timers_.end() || when < it->first) {
     earliestChanged = true;
   }
 
-  std::pair<TimerList::iterator, bool> result = timers_.insert(TimerEntry(when, timer));
+  timers_.insert(TimerEntry(when, timer));
 
   return earliestChanged;
 }
@@ -78,19 +79,20 @@ void TimerQueue::resetTimerfd() {
     earliestTime = timers_.begin()->first;
   }
 
+  constexpr int64_t kMicrosendconsMin = 100;
+  constexpr long kNanosecond = 1000;
+
   if (earliestTime.valid()) {
-    struct timespec howlong;
     TimeStamp now = TimeStamp::now();
     int64_t microsendconds = earliestTime.microSecondsSinceEpoch() - now.microSecondsSinceEpoch();
-    if (microsendconds < 100) {
-      microsendconds = 100;
-    }
+    microsendconds = std::max<int64_t>(microsendconds, kMicrosendconsMin);
 
     struct itimerspec newValue;
-    bzero(&newValue, sizeof newValue);
+    memset(&newValue, 0, sizeof(newValue));
 
     newValue.it_value.tv_sec = static_cast<time_t>(microsendconds / MicroSecondsPerSecond);
-    newValue.it_value.tv_nsec = static_cast<long>((microsendconds % MicroSecondsPerSecond) * 1000);
+    newValue.it_value.tv_nsec =
+        static_cast<long>((microsendconds % MicroSecondsPerSecond) * kNanosecond);
 
     int ret = ::timerfd_settime(timerfd_, 0, &newValue, nullptr);
     if (ret < 0) {
@@ -107,7 +109,6 @@ void TimerQueue::handleRead() {
 
   readTimerfd();
 
-  TimeStamp now(TimeStamp::now());
   std::vector<TimerEntry> expired = getExpired();
   for (const TimerEntry &it : expired) {
     it.second->run();
@@ -128,19 +129,19 @@ void TimerQueue::handleRead() {
 std::vector<TimerEntry> TimerQueue::getExpired() {
   TimeStamp now = TimeStamp::now();
   TimerEntry sentry(now, nullptr);
-  TimerList::iterator end = timers_.lower_bound(sentry);
+  auto end = timers_.lower_bound(sentry);
   std::vector<TimerEntry> expried(timers_.begin(), end);
   timers_.erase(timers_.begin(), end);
   return expried;
 }
 
-void TimerQueue::readTimerfd() {
+void TimerQueue::readTimerfd() const {
   uint64_t howmany;
 
-  ssize_t n = ::read(timerfd_, &howmany, sizeof howmany);
+  ssize_t result = ::read(timerfd_, &howmany, sizeof howmany);
 
-  if (n != sizeof(howmany)) {
-    std::string errorMessage = std::format("Reads {} bytes instead of 8", n);
+  if (result != sizeof(howmany)) {
+    std::string errorMessage = std::format("Reads {} bytes instead of 8", result);
     Logger::log(LogLevel::ERROR, errorMessage);
   }
 }
@@ -167,7 +168,7 @@ int TimerQueue::getTimeout() const {
 
   int64_t microSeconds = next.microSecondsSinceEpoch() - now.microSecondsSinceEpoch();
 
-  int timeoutMs = static_cast<int>(microSeconds / 1000);
+  int timeoutMs = static_cast<int>(microSeconds / kMillisecondPerSecond);
   return std::max(0, timeoutMs);
 }
 

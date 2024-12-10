@@ -38,7 +38,9 @@ using TimerList = std::set<TimerEntry>;
 using ChannelList = std::vector<Channel *>;
 using ChannelMap = std::unordered_map<int, Channel *>;
 
-static constexpr int MicroSecondsPerSecond = 1000 * 1000;
+static constexpr int kMillisecondPerSecond = 1000;
+static constexpr int MicroSecondsPerSecond = kMillisecondPerSecond * 1000;
+static constexpr int kNanosecondPerSecond = MicroSecondsPerSecond * 1000;
 
 using ThreadInitCallback = std::function<void(EventLoop *)>;
 } // namespace server

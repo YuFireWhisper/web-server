@@ -19,16 +19,16 @@ public:
   TimerId addTimer(TimerCallback, TimeStamp when, double interval = 0.0);
   ~TimerQueue();
 
-  TimeStamp nextExpiredTime() const;
+  [[nodiscard]] TimeStamp nextExpiredTime() const;
 
-  bool hasTimer() const { return !timers_.empty(); }
+  [[nodiscard]] bool hasTimer() const { return !timers_.empty(); }
 
-  int getTimeout() const;
+  [[nodiscard]] int getTimeout() const;
 
 private:
   void addTimerInLoop(Timer *timer);
   void handleRead();
-  void readTimerfd();
+  void readTimerfd() const;
 
   bool insert(Timer *timer);
   void resetTimerfd();
