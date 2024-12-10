@@ -74,39 +74,35 @@ bool TimerQueue::insert(Timer *timer) {
 void TimerQueue::resetTimerfd() {
   loop_->assertInLoopThread();
 
-  TimeStamp earliestTime;
-  if (!timers_.empty()) {
-    earliestTime = timers_.begin()->first;
-  }
-
-  constexpr int64_t kMicrosendconsMin = 100;
-  constexpr long kNanosecond = 1000;
-
-  if (earliestTime.valid()) {
-    TimeStamp now = TimeStamp::now();
-    int64_t microsendconds = earliestTime.microSecondsSinceEpoch() - now.microSecondsSinceEpoch();
-    microsendconds = std::max<int64_t>(microsendconds, kMicrosendconsMin);
-
+  if (timers_.empty()) {
     struct itimerspec newValue;
     memset(&newValue, 0, sizeof(newValue));
-
-    newValue.it_value.tv_sec = static_cast<time_t>(microsendconds / MicroSecondsPerSecond);
-    newValue.it_value.tv_nsec =
-        static_cast<long>((microsendconds % MicroSecondsPerSecond) * kNanosecond);
-
     int ret = ::timerfd_settime(timerfd_, 0, &newValue, nullptr);
     if (ret < 0) {
-      int saveErrno = errno;
-      std::string errorMessage =
-          std::format("Failed to set timer: {} (errno={})", strerror(saveErrno), saveErrno);
-      Logger::log(LogLevel::ERROR, errorMessage, "timer_queue.log");
+      Logger::log(LogLevel::ERROR, "timerfd_settime() failed");
     }
+    return;
+  }
+
+  TimeStamp earliestTime = timers_.begin()->first;
+  TimeStamp now = TimeStamp::now();
+
+  int64_t microsendconds = earliestTime.microSecondsSinceEpoch() - now.microSecondsSinceEpoch();
+  microsendconds = std::max<int64_t>(microsendconds, microsendconds);
+
+  struct itimerspec newValue;
+  memset(&newValue, 0, sizeof(newValue));
+  newValue.it_value.tv_sec = static_cast<time_t>(microsendconds / MicroSecondsPerSecond);
+  newValue.it_value.tv_nsec = static_cast<long>((microsendconds % MicroSecondsPerSecond) * kTimeScaleFactor);
+
+  int ret = ::timerfd_settime(timerfd_, 0, &newValue, nullptr);
+  if (ret < 0) {
+    Logger::log(LogLevel::ERROR, "timerfd_settime() failed");
   }
 }
 
 void TimerQueue::handleRead() {
   loop_->assertInLoopThread();
-
   readTimerfd();
 
   std::vector<TimerEntry> expired = getExpired();
@@ -119,11 +115,9 @@ void TimerQueue::handleRead() {
     } else {
       delete it.second;
     }
-
-    if (!timers_.empty()) {
-      resetTimerfd();
-    }
   }
+
+  resetTimerfd();
 }
 
 std::vector<TimerEntry> TimerQueue::getExpired() {
@@ -162,7 +156,7 @@ int TimerQueue::getTimeout() const {
   TimeStamp now = TimeStamp::now();
   TimeStamp next = nextExpiredTime();
 
-  if (next.valid()) {
+  if (!next.valid()) {
     return -1;
   }
 
