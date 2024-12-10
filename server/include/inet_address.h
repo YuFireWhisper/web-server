@@ -1,3 +1,5 @@
+#pragma once
+
 #include <netinet/in.h>
 #include <string>
 #include <unistd.h>
@@ -10,12 +12,14 @@ public:
   InetAddress(const std::string &ip, in_port_t port);
   explicit InetAddress(const struct sockaddr_in &addr);
 
-  std::string getIp() const;
-  std::string getIpPort() const;
-  in_port_t getPort() const;
+  [[nodiscard]] std::string getIp() const;
+  [[nodiscard]] std::string getIpPort() const;
+  [[nodiscard]] in_port_t getPort() const;
 
-  const sockaddr *getSockAddr() const { return reinterpret_cast<const sockaddr *>(&addr_); }
-  const socklen_t getSockLen() const { return sizeof(addr_); }
+  [[nodiscard]] const sockaddr *getSockAddr() const {
+    return reinterpret_cast<const sockaddr *>(&addr_);
+  }
+  [[nodiscard]] socklen_t getSockLen() const { return sizeof(addr_); }
   void setSockAddr(const struct sockaddr_in &addr) { addr_ = addr; }
 
   static bool resolveHostname(const std::string &hostname, InetAddress *result);

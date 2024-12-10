@@ -1,6 +1,7 @@
 #include "include/inet_address.h"
 
 #include <arpa/inet.h>
+#include <array>
 #include <cstring>
 #include <netdb.h>
 #include <stdexcept>
@@ -38,9 +39,10 @@ InetAddress::InetAddress(const struct sockaddr_in &addr)
     : addr_(addr) {}
 
 std::string InetAddress::getIp() const {
-  char buf[64] = {0};
-  ::inet_ntop(AF_INET, &addr_.sin_addr, buf, sizeof(buf));
-  return buf;
+  const static int bufSize = 64;
+  std::array<char, bufSize> buf;
+  ::inet_ntop(AF_INET, &addr_.sin_addr, buf.data(), sizeof(buf));
+  return buf.data();
 }
 
 in_port_t InetAddress::getPort() const {
