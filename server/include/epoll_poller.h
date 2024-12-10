@@ -26,15 +26,15 @@ class EPollChannel {
 public:
   explicit EPollChannel(Channel *channel);
 
-  bool isNew() const;
-  bool isDeleted() const;
-  bool isNoneEvent() const;
+  [[nodiscard]] bool isNew() const;
+  [[nodiscard]] bool isDeleted() const;
+  [[nodiscard]] bool isNoneEvent() const;
   void setAdded() const;
   void setDeleted() const;
   void setNew() const;
 
-  Channel *get() const;
-  int fd() const;
+  [[nodiscard]] Channel *get() const;
+  [[nodiscard]] int fd() const;
 
 private:
   Channel *channel_;
@@ -44,12 +44,12 @@ class EPollOperator {
 public:
   explicit EPollOperator();
 
-  bool add(int epollFd, const EPollChannel &channel, EPollEvent &event);
-  bool modify(int epollFd, const EPollChannel &channel, EPollEvent &event);
-  bool remove(int epollFd, const EPollChannel &channel, EPollEvent &event);
+  static bool add(int epollFd, const EPollChannel &channel, EPollEvent &event);
+  static bool modify(int epollFd, const EPollChannel &channel, EPollEvent &event);
+  static bool remove(int epollFd, const EPollChannel &channel, EPollEvent &event);
 
 private:
-  bool control(int epollFd, int operation, const EPollChannel &channel, EPollEvent &event);
+  static bool control(int epollFd, int operation, const EPollChannel &channel, EPollEvent &event);
 };
 
 class EPollPoller : public Poller {
@@ -63,7 +63,7 @@ public:
 
 private:
   void processNewChannel(EPollChannel &epollChannel);
-  void processExistingChannel(EPollChannel &epollChannel);
+  void processExistingChannel(EPollChannel &epollChannel) const;
   void cleanupChannels();
   TimeStamp doPoll(int timeoutMs);
   void handleActiveChannels(int numEvents);

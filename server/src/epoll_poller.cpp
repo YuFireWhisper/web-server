@@ -2,13 +2,15 @@
 
 #include "include/channel.h"
 
+#include <climits>
+#include <cstring>
 #include <stdexcept>
 #include <unistd.h>
 
 namespace server {
 
 EPollEvent::EPollEvent() {
-  event_ = {0};
+  std::memset(&event_, 0, sizeof(event_));
 }
 
 void EPollEvent::setEvents(uint32_t events) {
@@ -114,8 +116,9 @@ TimeStamp EPollPoller::doPoll(int timeoutMs) {
 
 void EPollPoller::handleActiveChannels(int numEvents) {
   for (int i = 0; i < numEvents; ++i) {
-    auto channel = static_cast<Channel *>(events_[i].data.ptr);
-    channel->setRevents(events_[i].events);
+    auto *channel = static_cast<Channel *>(events_[i].data.ptr);
+    int events = static_cast<int>(events_[i].events & INT_MAX);
+    channel->setRevents(events);
     activeChannels_->push_back(channel);
   }
 
@@ -127,8 +130,9 @@ void EPollPoller::handleActiveChannels(int numEvents) {
 void EPollPoller::updateChannel(Channel *channel) {
   assertInLoopThread();
 
-  if (channel->fd() < 0)
+  if (channel->fd() < 0) {
     return;
+  }
 
   EPollChannel epollChannel(channel);
   EPollEvent event;
@@ -147,31 +151,32 @@ void EPollPoller::processNewChannel(EPollChannel &epollChannel) {
   event.setEvents(epollChannel.get()->events());
   event.setChannelPtr(epollChannel.get());
 
-  if (operator_.add(epollFd_, epollChannel, event)) {
+  if (EPollOperator::add(epollFd_, epollChannel, event)) {
     channels_[epollChannel.fd()] = epollChannel.get();
     epollChannel.setAdded();
   }
 }
 
-void EPollPoller::processExistingChannel(EPollChannel &epollChannel) {
+void EPollPoller::processExistingChannel(EPollChannel &epollChannel) const {
   EPollEvent event;
   event.setEvents(epollChannel.get()->events());
   event.setChannelPtr(epollChannel.get());
 
   if (epollChannel.isNoneEvent()) {
-    if (operator_.remove(epollFd_, epollChannel, event)) {
+    if (EPollOperator::remove(epollFd_, epollChannel, event)) {
       epollChannel.setDeleted();
     }
   } else if (epollChannel.get()->index() == static_cast<int>(PollerState::kAdded)) {
-    operator_.modify(epollFd_, epollChannel, event);
+    EPollOperator::modify(epollFd_, epollChannel, event);
   }
 }
 
 void EPollPoller::removeChannel(Channel *channel) {
   assertInLoopThread();
 
-  if (!hasChannel(channel))
+  if (!hasChannel(channel)) {
     return;
+  }
 
   EPollChannel epollChannel(channel);
   EPollEvent event;
@@ -179,7 +184,7 @@ void EPollPoller::removeChannel(Channel *channel) {
   event.setChannelPtr(channel);
 
   if (channel->index() == static_cast<int>(PollerState::kAdded)) {
-    operator_.remove(epollFd_, epollChannel, event);
+    EPollOperator::remove(epollFd_, epollChannel, event);
   }
 
   channels_.erase(channel->fd());
@@ -193,10 +198,9 @@ void EPollPoller::cleanupChannels() {
       EPollEvent event;
       event.setEvents(channel->events());
       event.setChannelPtr(channel);
-      operator_.remove(epollFd_, epollChannel, event);
+      EPollOperator::remove(epollFd_, epollChannel, event);
     }
   }
   channels_.clear();
 }
-
 } // namespace server
