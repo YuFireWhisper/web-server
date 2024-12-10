@@ -54,6 +54,7 @@ set(TEST_FILES
     ${TEST_DIR}/event_loop_thread_pool_test.cpp
     ${TEST_DIR}/tcp_server_test.cpp
     ${TEST_DIR}/timer_queue_test.cpp
+    ${TEST_DIR}/buffer_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})

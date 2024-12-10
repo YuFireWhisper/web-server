@@ -1,14 +1,13 @@
+#include "include/channel.h"
 #include "include/epoll_poller.h"
 #include "include/event_loop.h"
-#include "include/channel.h"
 
 #include <gtest/gtest.h>
 #include <memory>
 
 #include <sys/eventfd.h>
 
-namespace server {
-namespace testing {
+namespace server::testing {
 
 class EPollPollerTest : public ::testing::Test {
 protected:
@@ -31,14 +30,14 @@ protected:
     }
   }
 
-  int createEventFd() { return ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); }
+  static int createEventFd() { return ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); }
 
-  void triggerEvent() {
+  void triggerEvent() const {
     uint64_t one = 1;
     ASSERT_EQ(write(eventFd_, &one, sizeof(one)), sizeof(one));
   }
 
-  void readEvent() {
+  void readEvent() const {
     uint64_t value;
     ASSERT_EQ(read(eventFd_, &value, sizeof(value)), sizeof(value));
   }
@@ -190,11 +189,11 @@ TEST_F(EPollPollerTest, pollTimeoutWorks) {
   ChannelList activeChannels;
   auto start = TimeStamp::now();
 
-  poller_->poll(100, &activeChannels);
+  const static int timeoutMs = 100;
+  poller_->poll(timeoutMs, &activeChannels);
   auto end = TimeStamp::now();
 
   EXPECT_GE(end.microSecondsSinceEpoch() - start.microSecondsSinceEpoch(), 100 * 1000);
 }
 
-} // namespace testing
-} // namespace server
+} // namespace server::testing
