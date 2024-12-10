@@ -27,6 +27,8 @@ add_library(server
     server/src/acceptor.cpp
     server/src/tcp_connection.cpp
     server/src/event_loop_thread.cpp
+    server/src/tcp_server.cpp
+    server/src/event_loop_thread_pool.cpp
 )
 
 enable_testing()
@@ -49,6 +51,8 @@ set(TEST_FILES
     ${TEST_DIR}/acceptor_test.cpp
     ${TEST_DIR}/tcp_connection_test.cpp
     ${TEST_DIR}/event_loop_thread_test.cpp
+    ${TEST_DIR}/event_loop_thread_pool_test.cpp
+    ${TEST_DIR}/tcp_server_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
