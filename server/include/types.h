@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <poll.h>
 #include <set>
@@ -28,7 +29,7 @@ struct EventType {
   static const int kCloseEvent = EPOLLHUP;
 };
 
-enum class PollerState { kNew = -1, kAdded = 1, kDeleted = 2 };
+enum class PollerState : std::int8_t { kNew = -1, kAdded = 1, kDeleted = 2 };
 
 using TimerCallback = std::function<void()>;
 using TimerEntry = std::pair<TimeStamp, Timer *>;
