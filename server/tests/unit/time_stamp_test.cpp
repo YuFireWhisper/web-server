@@ -6,10 +6,10 @@
 namespace server {
 
 namespace {
-constexpr int64_t kBaseTestTime = static_cast<int64_t>(1000) * MicroSecondsPerSecond;
+constexpr int64_t kBaseTestTime = static_cast<int64_t>(1000) * kMicroSecondsPerSecond;
 constexpr int64_t kTestTime1 = 1000 * kBaseTestTime;
 constexpr int64_t kTestTime2 = 2000 * kBaseTestTime;
-constexpr int64_t kLargeTestTime = 1234567890LL * MicroSecondsPerSecond;
+constexpr int64_t kLargeTestTime = 1234567890LL * kMicroSecondsPerSecond;
 } // namespace
 
 class TimeStampTest : public ::testing::Test {
@@ -35,13 +35,13 @@ TEST_F(TimeStampTest, ArithmeticOperationsWorkCorrectly) {
   TimeStamp future = baseTime + 1.0;
   EXPECT_EQ(
       future.microSecondsSinceEpoch(),
-      baseTime.microSecondsSinceEpoch() + MicroSecondsPerSecond
+      baseTime.microSecondsSinceEpoch() + kMicroSecondsPerSecond
   );
 
   TimeStamp past = baseTime - 1.0;
   EXPECT_EQ(
       past.microSecondsSinceEpoch(),
-      baseTime.microSecondsSinceEpoch() - MicroSecondsPerSecond
+      baseTime.microSecondsSinceEpoch() - kMicroSecondsPerSecond
   );
 
   double diff = future - baseTime;

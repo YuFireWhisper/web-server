@@ -92,8 +92,8 @@ void TimerQueue::resetTimerfd() {
 
   struct itimerspec newValue;
   memset(&newValue, 0, sizeof(newValue));
-  newValue.it_value.tv_sec = static_cast<time_t>(microsendconds / MicroSecondsPerSecond);
-  newValue.it_value.tv_nsec = static_cast<long>((microsendconds % MicroSecondsPerSecond) * kTimeScaleFactor);
+  newValue.it_value.tv_sec = static_cast<time_t>(microsendconds / kMicroSecondsPerSecond);
+  newValue.it_value.tv_nsec = static_cast<long>((microsendconds % kMicroSecondsPerSecond) * kTimeScaleFactor);
 
   int ret = ::timerfd_settime(timerfd_, 0, &newValue, nullptr);
   if (ret < 0) {

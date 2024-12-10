@@ -40,8 +40,8 @@ using ChannelMap = std::unordered_map<int, Channel *>;
 
 static constexpr int kTimeScaleFactor = 1000;
 static constexpr int kMillisecondPerSecond = kTimeScaleFactor;
-static constexpr int MicroSecondsPerSecond = kMillisecondPerSecond * kTimeScaleFactor;
-static constexpr int kNanosecondPerSecond = MicroSecondsPerSecond * kTimeScaleFactor;
+static constexpr int kMicroSecondsPerSecond = kMillisecondPerSecond * kTimeScaleFactor;
+static constexpr int kNanosecondPerSecond = kMicroSecondsPerSecond * kTimeScaleFactor;
 
 static constexpr size_t kKib = 1024;
 static constexpr size_t kMib = kKib * 1024;

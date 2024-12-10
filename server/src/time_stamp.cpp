@@ -21,27 +21,27 @@ TimeStamp TimeStamp::now() {
     return TimeStamp::invalid();
   }
 
-  int64_t microSecondsSinceEpoch = (ts.tv_sec * MicroSecondsPerSecond)
-                                   + (ts.tv_nsec / (kNanosecondPerSecond / MicroSecondsPerSecond));
+  int64_t microSecondsSinceEpoch = (ts.tv_sec * kMicroSecondsPerSecond)
+                                   + (ts.tv_nsec / (kNanosecondPerSecond / kMicroSecondsPerSecond));
   return TimeStamp(microSecondsSinceEpoch);
 }
 
 std::string TimeStamp::toString() const {
   std::array<char, kBufferSize32> buf{};
-  int64_t seconds = microSecondsSinceEpoch_ / MicroSecondsPerSecond;
-  int64_t microseconds = microSecondsSinceEpoch_ % MicroSecondsPerSecond;
+  int64_t seconds = microSecondsSinceEpoch_ / kMicroSecondsPerSecond;
+  int64_t microseconds = microSecondsSinceEpoch_ % kMicroSecondsPerSecond;
   snprintf(buf.data(), buf.size() - 1, "%" PRId64 ".%06" PRId64 "", seconds, microseconds);
   return buf.data();
 }
 
 std::string TimeStamp::toFormattedString(bool showMicroseconds) const {
   std::array<char, kBufferSize64> buf{};
-  auto seconds = static_cast<time_t>(microSecondsSinceEpoch_ / MicroSecondsPerSecond);
+  auto seconds = static_cast<time_t>(microSecondsSinceEpoch_ / kMicroSecondsPerSecond);
   struct tm tm_time;
   gmtime_r(&seconds, &tm_time);
 
   if (showMicroseconds) {
-    int microseconds = static_cast<int>(microSecondsSinceEpoch_ % MicroSecondsPerSecond);
+    int microseconds = static_cast<int>(microSecondsSinceEpoch_ % kMicroSecondsPerSecond);
     snprintf(
         buf.data(),
         buf.size(),

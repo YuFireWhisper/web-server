@@ -24,14 +24,14 @@ public:
   }
 
   [[nodiscard]] constexpr double secondsSinceEpoch() const noexcept {
-    return static_cast<double>(microSecondsSinceEpoch_) / MicroSecondsPerSecond;
+    return static_cast<double>(microSecondsSinceEpoch_) / kMicroSecondsPerSecond;
   }
 
   [[nodiscard]] std::string toString() const;
   [[nodiscard]] std::string toFormattedString(bool showMicroseconds = true) const;
 
   [[nodiscard]] constexpr TimeStamp operator+(double seconds) const noexcept {
-    auto delta = static_cast<int64_t>(seconds * MicroSecondsPerSecond);
+    auto delta = static_cast<int64_t>(seconds * kMicroSecondsPerSecond);
     return TimeStamp(microSecondsSinceEpoch_ + delta);
   }
 
@@ -41,7 +41,7 @@ public:
 
   [[nodiscard]] constexpr double operator-(const TimeStamp &rhs) const noexcept {
     int64_t diff = microSecondsSinceEpoch_ - rhs.microSecondsSinceEpoch_;
-    return static_cast<double>(diff) / MicroSecondsPerSecond;
+    return static_cast<double>(diff) / kMicroSecondsPerSecond;
   }
 
   [[nodiscard]] constexpr auto operator<=>(const TimeStamp &) const noexcept = default;
