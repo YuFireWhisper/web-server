@@ -1,5 +1,6 @@
 #pragma once
 
+#include "event_loop_thread.h"
 #include "include/types.h"
 
 #include <memory>
@@ -7,11 +8,10 @@
 
 namespace server {
 class EventLoop;
-class EventLoopThread;
 
 class EventLoopThreadPool {
 public:
-  EventLoopThreadPool(EventLoop *baseLoop, const std::string &nameArg = std::string());
+  EventLoopThreadPool(EventLoop *baseLoop, std::string nameArg = std::string());
   ~EventLoopThreadPool() = default;
 
   EventLoopThreadPool(const EventLoopThreadPool &) = delete;
@@ -24,8 +24,8 @@ public:
   EventLoop *getLoopForHash(size_t hashCode);
   std::vector<EventLoop *> getAllLoops();
 
-  bool isStarted() const { return started_; }
-  const std::string &name() const { return name_; }
+  [[nodiscard]] bool isStarted() const { return started_; }
+  [[nodiscard]] const std::string &name() const { return name_; }
 
 private:
   EventLoop *baseLoop_;

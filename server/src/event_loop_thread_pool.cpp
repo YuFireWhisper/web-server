@@ -12,9 +12,9 @@
 namespace server {
 void checkBaseLoop(EventLoop *baseLoop);
 
-EventLoopThreadPool::EventLoopThreadPool(EventLoop *baseLoop, const std::string &nameArg)
+EventLoopThreadPool::EventLoopThreadPool(EventLoop *baseLoop, std::string nameArg)
     : baseLoop_(baseLoop)
-    , name_(nameArg)
+    , name_(std::move(nameArg))
     , started_(false)
     , numThreads_(0)
     , next_(0) {
@@ -33,10 +33,12 @@ void EventLoopThreadPool::start(const ThreadInitCallback &cb) {
   started_ = true;
 
   for (int i = 0; i < numThreads_; ++i) {
-    char buf[name_.size() + 32];
-    snprintf(buf, sizeof(buf), "%s%d", name_.c_str(), i);
+    const size_t kMoreSize = 32;
+    size_t bufSize = name_.size() + kMoreSize;
+    std::vector<char> buf(bufSize);
+    snprintf(buf.data(), buf.size(), "%s%d", name_.c_str(), i);
 
-    auto thread = std::make_unique<EventLoopThread>(cb, std::string(buf));
+    auto thread = std::make_unique<EventLoopThread>(cb, std::string(buf.data()));
 
     EventLoop *loop = thread.get()->startLoop();
 
@@ -54,7 +56,7 @@ EventLoop *EventLoopThreadPool::getNextLoop() {
 
   if (!loops_.empty()) {
     loop = loops_[next_];
-    next_ = (next_ + 1) % loops_.size();
+    next_ = (next_ + 1) % static_cast<int>(loops_.size());
   }
 
   return loop;
@@ -72,7 +74,7 @@ EventLoop *EventLoopThreadPool::getLoopForHash(size_t hashCode) {
 
 std::vector<EventLoop *> EventLoopThreadPool::getAllLoops() {
   if (!started_) {
-    return std::vector<EventLoop *>();
+    return {};
   }
 
   if (loops_.empty()) {
