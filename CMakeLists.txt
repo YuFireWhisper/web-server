@@ -29,6 +29,7 @@ add_library(server
     server/src/event_loop_thread.cpp
     server/src/tcp_server.cpp
     server/src/event_loop_thread_pool.cpp
+    server/src/http_request.cpp
 )
 
 enable_testing()
@@ -55,6 +56,7 @@ set(TEST_FILES
     ${TEST_DIR}/tcp_server_test.cpp
     ${TEST_DIR}/timer_queue_test.cpp
     ${TEST_DIR}/buffer_test.cpp
+    ${TEST_DIR}/http_request_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
