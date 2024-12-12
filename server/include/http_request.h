@@ -43,9 +43,6 @@ public:
   [[nodiscard]] size_t contentLength() const { return contentLength_; }
 
 private:
-  static constexpr std::string_view kCRLF{"\r\n"};
-  static constexpr std::string_view kCRLFCRLF{"\r\n\r\n"};
-
   struct RequestLineResult {
     Method method;
     std::string path;

@@ -4,6 +4,7 @@
 #include <functional>
 #include <poll.h>
 #include <set>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -49,6 +50,9 @@ static constexpr size_t kMib = kKib * 1024;
 static constexpr size_t kDefaultHighWaterMark = kMib * 64;
 
 using ThreadInitCallback = std::function<void(EventLoop *)>;
+
+static constexpr std::string_view kCRLF{"\r\n"};
+static constexpr std::string_view kCRLFCRLF{"\r\n\r\n"};
 
 enum class Version : int8_t { kUnknown, kHttp10, kHttp11 };
 } // namespace server
