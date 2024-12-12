@@ -7,6 +7,7 @@
 #include "socket.h"
 #include "types.h"
 
+#include <any>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -40,6 +41,11 @@ public:
 
   TcpConnection(const TcpConnection &) = delete;
   TcpConnection &operator=(const TcpConnection &) = delete;
+
+  void setContext(const std::any &context) { context_ = context; }
+  void setContext(std::any &&context) { context_ = std::move(context); }
+  const std::any &getContext() const { return context_; }
+  std::any *getMutableContext() { return &context_; }
 
   EventLoop *getLoop() const { return loop_; }
   const std::string &name() const { return name_; }
@@ -90,6 +96,7 @@ private:
 
   Buffer inputBuffer_;
   Buffer outputBuffer_;
+  std::any context_;
 
   ConnectionCallback connectionCallback_ = [](const TcpConnectionPtr &) {};
   MessageCallback messageCallback_ = [](const TcpConnectionPtr &, Buffer *, TimeStamp) {};
