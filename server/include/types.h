@@ -49,4 +49,6 @@ static constexpr size_t kMib = kKib * 1024;
 static constexpr size_t kDefaultHighWaterMark = kMib * 64;
 
 using ThreadInitCallback = std::function<void(EventLoop *)>;
+
+enum class Version : int8_t { kUnknown, kHttp10, kHttp11 };
 } // namespace server

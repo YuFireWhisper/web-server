@@ -1,5 +1,7 @@
 #pragma once
 
+#include "include/types.h"
+
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -11,8 +13,6 @@ class Buffer;
 class HttpRequest {
 public:
   enum class Method : int8_t { kInvalid, kGet, kPost, kHead, kPut, kDelete };
-
-  enum class Version : int8_t { kUnknown, kHttp10, kHttp11 };
 
   enum class ParseState : int8_t {
     kExpectRequestLine,

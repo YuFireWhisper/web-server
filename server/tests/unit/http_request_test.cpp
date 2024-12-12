@@ -24,7 +24,7 @@ protected:
 
 TEST_F(HttpRequestTest, InitialStateIsValid) {
   EXPECT_EQ(request_->method(), HttpRequest::Method::kInvalid);
-  EXPECT_EQ(request_->version(), HttpRequest::Version::kUnknown);
+  EXPECT_EQ(request_->version(), Version::kUnknown);
   EXPECT_TRUE(request_->path().empty());
   EXPECT_TRUE(request_->query().empty());
   EXPECT_TRUE(request_->headers().empty());
@@ -40,7 +40,7 @@ TEST_F(HttpRequestTest, ResetClearsAllFields) {
   request_->reset();
 
   EXPECT_EQ(request_->method(), HttpRequest::Method::kInvalid);
-  EXPECT_EQ(request_->version(), HttpRequest::Version::kUnknown);
+  EXPECT_EQ(request_->version(), Version::kUnknown);
   EXPECT_TRUE(request_->path().empty());
   EXPECT_TRUE(request_->query().empty());
   EXPECT_TRUE(request_->headers().empty());
@@ -56,7 +56,7 @@ TEST_F(HttpRequestTest, ParseSimpleGetRequest) {
   EXPECT_FALSE(request_->hasError());
 
   EXPECT_EQ(request_->method(), HttpRequest::Method::kGet);
-  EXPECT_EQ(request_->version(), HttpRequest::Version::kHttp11);
+  EXPECT_EQ(request_->version(), Version::kHttp11);
   EXPECT_EQ(request_->path(), "/api/users");
   EXPECT_TRUE(request_->query().empty());
 }
@@ -122,14 +122,14 @@ TEST_F(HttpRequestTest, MethodStringConversion) {
 
 TEST_F(HttpRequestTest, VersionStringConversion) {
   struct TestCase {
-    HttpRequest::Version version;
+    Version version;
     const char *expected;
   };
 
   const std::array<TestCase, 3> testCases{
-      {TestCase{.version = HttpRequest::Version::kHttp10, .expected = "HTTP/1.0"},
-       TestCase{.version = HttpRequest::Version::kHttp11, .expected = "HTTP/1.1"},
-       TestCase{.version = HttpRequest::Version::kUnknown, .expected = "UNKNOWN"}}
+      {TestCase{.version = Version::kHttp10, .expected = "HTTP/1.0"},
+       TestCase{.version = Version::kHttp11, .expected = "HTTP/1.1"},
+       TestCase{.version = Version::kUnknown, .expected = "UNKNOWN"}}
   };
 
   for (const auto &tc : testCases) {

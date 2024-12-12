@@ -1,5 +1,6 @@
 #include "include/http_request.h"
 
+#include "include/types.h"
 #include "include/buffer.h"
 
 #include <csignal>
@@ -283,7 +284,7 @@ HttpRequest::Method HttpRequest::stringToMethod(const std::string_view &methodSt
   return (it != methodMap.end()) ? it->second : Method::kInvalid;
 }
 
-HttpRequest::Version HttpRequest::stringToVersion(const std::string_view &versionStr) {
+Version HttpRequest::stringToVersion(const std::string_view &versionStr) {
   if (versionStr == "HTTP/1.0") {
     return Version::kHttp10;
   }
