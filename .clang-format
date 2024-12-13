@@ -10,6 +10,7 @@ UseTab: Never
 # Alignment and Indentation
 AlignAfterOpenBracket: BlockIndent
 AlignOperands: true
+AlignConsecutiveAssignments: true
 ConstructorInitializerIndentWidth: 4
 AccessModifierOffset: -2
 IndentCaseLabels: true
