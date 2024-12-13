@@ -32,14 +32,14 @@ void checkBaseLoop(EventLoop *baseLoop) {
 void EventLoopThreadPool::start(const ThreadInitCallback &cb) {
   started_ = true;
 
+  if (numThreads_ == 0) {
+    numThreads_ = static_cast<int>(std::thread::hardware_concurrency());
+  }
+
   for (int i = 0; i < numThreads_; ++i) {
-    const size_t kMoreSize = 32;
-    size_t bufSize = name_.size() + kMoreSize;
-    std::vector<char> buf(bufSize);
-    snprintf(buf.data(), buf.size(), "%s%d", name_.c_str(), i);
+    std::string threadName = name_ + std::to_string(i);
 
-    auto thread = std::make_unique<EventLoopThread>(cb, std::string(buf.data()));
-
+    auto thread     = std::make_unique<EventLoopThread>(cb, threadName);
     EventLoop *loop = thread.get()->startLoop();
 
     loops_.push_back(loop);
@@ -55,7 +55,7 @@ EventLoop *EventLoopThreadPool::getNextLoop() {
   EventLoop *loop = baseLoop_;
 
   if (!loops_.empty()) {
-    loop = loops_[next_];
+    loop  = loops_[next_];
     next_ = (next_ + 1) % static_cast<int>(loops_.size());
   }
 
