@@ -51,7 +51,7 @@ const char *LogFormatter::getLevelColor(LogLevel level) {
 }
 
 std::string LogFormatter::format(const LogEntry &entry) {
-  auto time = std::chrono::system_clock::to_time_t(entry.getTimestamp());
+  auto time       = std::chrono::system_clock::to_time_t(entry.getTimestamp());
   auto *localTime = std::localtime(&time);
 
   const static size_t timeStampSize = 32;
@@ -94,7 +94,9 @@ void Logger::log(LogLevel level, std::string_view message) {
   LogEntry entry(level, message);
   auto formattedMessage = LogFormatter::format(entry);
 
-  server::LogWriter::writeConsole(formattedMessage);
+  LogWriter::writeConsole(formattedMessage);
+  writer_.writeFile(formattedMessage, SYSTEM_LOG_FILE);
+
   if (!defaultOutputPath_.empty()) {
     writer_.writeFile(formattedMessage, defaultOutputPath_);
   }
@@ -108,7 +110,8 @@ void Logger::log(
   LogEntry entry(level, message);
   auto formattedMessage = LogFormatter::format(entry);
 
-  server::LogWriter::writeConsole(formattedMessage);
+  LogWriter::writeConsole(formattedMessage);
+  writer_.writeFile(formattedMessage, SYSTEM_LOG_FILE);
   writer_.writeFile(formattedMessage, outputPath);
 }
 
