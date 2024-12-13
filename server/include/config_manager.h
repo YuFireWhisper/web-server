@@ -18,6 +18,25 @@ enum class CommandType : uint32_t {
   location     = 0x00080000,
 };
 
+inline CommandType operator|(CommandType first, CommandType second) {
+  return static_cast<CommandType>(
+      static_cast<std::underlying_type_t<CommandType>>(first)
+      | static_cast<std::underlying_type_t<CommandType>>(second)
+  );
+}
+
+inline CommandType &operator|=(CommandType &first, CommandType second) {
+  first = first | second;
+  return first;
+}
+
+inline bool operator&(CommandType first, CommandType second) {
+  return static_cast<bool>(
+      static_cast<std::underlying_type_t<CommandType>>(first)
+      & static_cast<std::underlying_type_t<CommandType>>(second)
+  );
+}
+
 using ConfigPtr = std::shared_ptr<void>;
 
 struct ServerCommand {
