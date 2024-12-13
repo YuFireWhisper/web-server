@@ -4,7 +4,6 @@
 #include <format>
 #include <fstream>
 #include <iostream>
-
 namespace server {
 
 namespace {
@@ -87,8 +86,13 @@ void LogWriter::writeFile(const std::string &message, const std::filesystem::pat
   outfile << message << '\n';
 }
 
+std::filesystem::path Logger::systemLogPath_;
 std::filesystem::path Logger::defaultOutputPath_;
 LogWriter Logger::writer_;
+
+void Logger::initialize(const LogConfig &config) {
+  systemLogPath_ = config.systemLogPath;
+}
 
 void Logger::log(LogLevel level, std::string_view message) {
   LogEntry entry(level, message);
@@ -111,7 +115,7 @@ void Logger::log(
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
-  writer_.writeFile(formattedMessage, SYSTEM_LOG_FILE);
+  writer_.writeFile(formattedMessage, systemLogPath_);
   writer_.writeFile(formattedMessage, outputPath);
 }
 

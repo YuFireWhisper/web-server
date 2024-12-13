@@ -1,5 +1,7 @@
 #pragma once
 
+#include "include/config_types.h"
+
 #include <chrono>
 #include <filesystem>
 #include <mutex>
@@ -50,6 +52,7 @@ private:
 
 class Logger {
 public:
+  static void initialize(const LogConfig& config);
   static void log(LogLevel level, std::string_view message);
   static void
   log(LogLevel level, std::string_view message, const std::filesystem::path &outputPath);
@@ -57,6 +60,7 @@ public:
   static void clearDefaultOutputFile();
 
 private:
+  static std::filesystem::path systemLogPath_;
   static std::filesystem::path defaultOutputPath_;
   static LogWriter writer_;
 };

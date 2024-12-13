@@ -31,10 +31,7 @@ struct BufferConfig {
 };
 
 struct LogConfig {
-  std::string logLevel = "INFO";
-  std::string logPath  = "/var/log/myserver.log";
-  bool asyncLogging    = true;
-  size_t flushInterval = 3;
+  std::string systemLogPath  = "logs/system.log";
 };
 
 struct TcpConfig {
@@ -84,10 +81,7 @@ std::vector<ServerCommand> getBufferCommands() {
 
 std::vector<ServerCommand> getLogCommands() {
   return {
-      {"log_level", CommandType::configTake1 | CommandType::global},
-      {"log_path", CommandType::configTake1 | CommandType::global},
-      {"async_logging", CommandType::configBool | CommandType::global},
-      {"flush_interval", CommandType::configTake1 | CommandType::global},
+      {"system_log_path", CommandType::configTake1 | CommandType::global},
   };
 }
 
