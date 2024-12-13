@@ -12,6 +12,7 @@ Diagnostics:
     Remove:
       - modernize-use-trailing-return-type
       - bugprone-easily-swappable-parameters
+      - readability-magic-numbers
     CheckOptions:
       readability-identifier-length.MinimumVariableNameLength: 2
       readability-identifier-length.MinimumParameterNameLength: 2
