@@ -34,17 +34,21 @@ TEST_F(EventLoopThreadPoolTest, ThrowsExceptionWhenBaseLoopIsNull) {
   EXPECT_THROW(EventLoopThreadPool(nullptr), std::invalid_argument);
 }
 
-TEST_F(EventLoopThreadPoolTest, StartWithZeroThreads) {
+TEST_F(EventLoopThreadPoolTest, StartWithZeroThreadsUsesSystemThreads) {
   EventLoopThreadPool pool(baseLoop_.get());
   pool.setThreadNum(0);
   pool.start();
 
   EXPECT_TRUE(pool.isStarted());
-  EXPECT_EQ(pool.getNextLoop(), baseLoop_.get());
-
   auto loops = pool.getAllLoops();
-  EXPECT_EQ(loops.size(), 1);
-  EXPECT_EQ(loops[0], baseLoop_.get());
+
+  size_t expectedThreads = std::thread::hardware_concurrency();
+  EXPECT_EQ(loops.size(), expectedThreads);
+
+  for (auto *loop : loops) {
+    EXPECT_NE(loop, nullptr);
+    EXPECT_NE(loop, baseLoop_.get());
+  }
 }
 
 TEST_F(EventLoopThreadPoolTest, StartWithMultipleThreads) {
@@ -86,12 +90,12 @@ TEST_F(EventLoopThreadPoolTest, GetLoopForHashWithConsistentResults) {
   pool.setThreadNum(3);
   pool.start();
 
-  auto loops = pool.getAllLoops();
+  auto loops                    = pool.getAllLoops();
   const static size_t hashCode1 = 100;
   const static size_t hashCode2 = 101;
 
-  auto *loop1 = pool.getLoopForHash(hashCode1);
-  auto *loop2 = pool.getLoopForHash(hashCode2);
+  auto *loop1      = pool.getLoopForHash(hashCode1);
+  auto *loop2      = pool.getLoopForHash(hashCode2);
   auto *loop1Again = pool.getLoopForHash(hashCode1);
 
   EXPECT_EQ(loop1, loops[hashCode1 % 3]);
@@ -112,7 +116,7 @@ TEST_F(EventLoopThreadPoolTest, ThreadInitCallbackInvocation) {
   pool.setThreadNum(2);
 
   int callbackCount = 0;
-  auto callback = [&callbackCount](EventLoop *loop) {
+  auto callback     = [&callbackCount](EventLoop *loop) {
     EXPECT_NE(loop, nullptr);
     ++callbackCount;
   };
