@@ -99,7 +99,7 @@ void Logger::log(LogLevel level, std::string_view message) {
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
-  writer_.writeFile(formattedMessage, SYSTEM_LOG_FILE);
+  writer_.writeFile(formattedMessage, systemLogPath_);
 
   if (!defaultOutputPath_.empty()) {
     writer_.writeFile(formattedMessage, defaultOutputPath_);

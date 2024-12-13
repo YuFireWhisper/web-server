@@ -10,8 +10,6 @@
 
 namespace server {
 
-inline constexpr const char *SYSTEM_LOG_FILE = "logs/system.log";
-
 enum class LogLevel : int8_t { TRACE, DEBUG, INFO, WARN, ERROR, FATAL };
 
 class LogEntry {
