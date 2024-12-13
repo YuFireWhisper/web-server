@@ -1,3 +1,5 @@
+#pragma once
+
 #include "include/config_manager.h"
 #include "include/types.h"
 
@@ -31,7 +33,7 @@ struct BufferConfig {
 };
 
 struct LogConfig {
-  std::string systemLogPath  = "logs/system.log";
+  std::string systemLogPath = "logs/system.log";
 };
 
 struct TcpConfig {
@@ -52,7 +54,7 @@ struct EventLoopConfig {
   size_t maxEvents  = 4096;
 };
 
-std::vector<ServerCommand> getServerCommands() {
+inline std::vector<ServerCommand> getServerCommands() {
   return {
       {"port", CommandType::configTake1 | CommandType::server},
       {"listen", CommandType::configTake1 | CommandType::server},
@@ -61,7 +63,7 @@ std::vector<ServerCommand> getServerCommands() {
   };
 }
 
-std::vector<ServerCommand> getHttpCommands() {
+inline std::vector<ServerCommand> getHttpCommands() {
   return {
       {"client_max_body_size", CommandType::configTake1 | CommandType::http},
       {"client_header_timeout", CommandType::configTake1 | CommandType::http},
@@ -71,7 +73,7 @@ std::vector<ServerCommand> getHttpCommands() {
   };
 }
 
-std::vector<ServerCommand> getBufferCommands() {
+inline std::vector<ServerCommand> getBufferCommands() {
   return {
       {"buffer_initial_size", CommandType::configTake1 | CommandType::global},
       {"buffer_max_size", CommandType::configTake1 | CommandType::global},
@@ -79,13 +81,13 @@ std::vector<ServerCommand> getBufferCommands() {
   };
 }
 
-std::vector<ServerCommand> getLogCommands() {
+inline std::vector<ServerCommand> getLogCommands() {
   return {
       {"system_log_path", CommandType::configTake1 | CommandType::global},
   };
 }
 
-std::vector<ServerCommand> getTcpCommands() {
+inline std::vector<ServerCommand> getTcpCommands() {
   return {
       {"tcp_nodelay", CommandType::configBool | CommandType::server},
       {"tcp_keepalive", CommandType::configBool | CommandType::server},
@@ -95,14 +97,14 @@ std::vector<ServerCommand> getTcpCommands() {
   };
 }
 
-std::vector<ServerCommand> getTimerCommands() {
+inline std::vector<ServerCommand> getTimerCommands() {
   return {
       {"timer_check_interval", CommandType::configTake1 | CommandType::global},
       {"max_timers", CommandType::configTake1 | CommandType::global},
   };
 }
 
-std::vector<ServerCommand> getEventLoopCommands() {
+inline std::vector<ServerCommand> getEventLoopCommands() {
   return {
       {"poll_timeout", CommandType::configTake1 | CommandType::global},
       {"max_events", CommandType::configTake1 | CommandType::global},
