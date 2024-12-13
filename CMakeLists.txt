@@ -32,6 +32,7 @@ add_library(server
     server/src/http_request.cpp
     server/src/http_response.cpp
     server/src/http_server.cpp
+    server/src/config_manager.cpp
 )
 
 enable_testing()
@@ -61,6 +62,7 @@ set(TEST_FILES
     ${TEST_DIR}/http_request_test.cpp
     ${TEST_DIR}/http_response_test.cpp
     ${TEST_DIR}/http_server_test.cpp
+    ${TEST_DIR}/config_manager_test.cpp
 )
 
 foreach(TEST_FILE ${TEST_FILES})
