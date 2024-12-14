@@ -1,5 +1,7 @@
 #include "include/log.h"
 
+#include "auto/auto_config.h"
+
 #include <array>
 #include <format>
 #include <fstream>
@@ -86,20 +88,15 @@ void LogWriter::writeFile(const std::string &message, const std::filesystem::pat
   outfile << message << '\n';
 }
 
-std::filesystem::path Logger::systemLogPath_;
 std::filesystem::path Logger::defaultOutputPath_;
 LogWriter Logger::writer_;
-
-void Logger::initialize(const LogConfig &config) {
-  systemLogPath_ = config.systemLogPath;
-}
 
 void Logger::log(LogLevel level, std::string_view message) {
   LogEntry entry(level, message);
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
-  writer_.writeFile(formattedMessage, systemLogPath_);
+  writer_.writeFile(formattedMessage, kSystemLog);
 
   if (!defaultOutputPath_.empty()) {
     writer_.writeFile(formattedMessage, defaultOutputPath_);
@@ -115,7 +112,7 @@ void Logger::log(
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
-  writer_.writeFile(formattedMessage, systemLogPath_);
+  writer_.writeFile(formattedMessage, kSystemLog);
   writer_.writeFile(formattedMessage, outputPath);
 }
 

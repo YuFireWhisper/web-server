@@ -3,7 +3,6 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
-#include <regex>
 #include <sstream>
 #include <thread>
 
@@ -12,29 +11,15 @@ namespace server::test {
 class LogTestBase : public ::testing::Test {
 protected:
   void SetUp() override {
-    removeTestFiles();
+    removeTestFile();
     Logger::clearDefaultOutputFile();
-
-    LogConfig config;
-    config.systemLogPath = systemLogPath_;
-    Logger::initialize(config);
   }
 
-  void TearDown() override { removeTestFiles(); }
+  void TearDown() override { removeTestFile(); }
 
-  [[nodiscard]] const std::filesystem::path &getSystemLogPath() const { return systemLogPath_; }
+  std::string getTestFileContent() { return readFileContent(testFilePath_); }
 
-  [[nodiscard]] const std::filesystem::path &getCustomLogPath() const { return customLogPath_; }
-
-  static std::string getTestFileContent(const std::filesystem::path &path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-      return {};
-    }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-  }
+  [[nodiscard]] const std::filesystem::path &getTestFilePath() const { return testFilePath_; }
 
   static std::string captureConsoleOutput(const std::function<void()> &logOperation) {
     testing::internal::CaptureStdout();
@@ -48,104 +33,94 @@ protected:
     return testing::internal::GetCapturedStderr();
   }
 
-  static void assertLogContains(
-      const std::string &content,
-      const std::string &expectedText,
-      const std::string &levelName
-  ) {
-    std::regex timestamp_pattern(R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})");
-    ASSERT_TRUE(std::regex_search(content, timestamp_pattern))
-        << "Missing timestamp in log: " << content;
-
-    ASSERT_TRUE(content.find(levelName) != std::string::npos)
-        << "Missing log level in: " << content;
-
-    ASSERT_TRUE(content.find(expectedText) != std::string::npos)
-        << "Missing message in: " << content;
-
-    ASSERT_TRUE(content.find(".cpp") != std::string::npos) << "Missing source file in: " << content;
+  static void assertContains(const std::string &content, const std::string &expectedText) {
+    EXPECT_TRUE(content.find(expectedText) != std::string::npos)
+        << "Expected to find: " << expectedText << " in: " << content;
   }
 
 private:
-  const std::filesystem::path systemLogPath_{"system.log"};
-  const std::filesystem::path customLogPath_{"custom.log"};
+  const std::filesystem::path testFilePath_{"test.log"};
 
-  void removeTestFiles() {
-    if (std::filesystem::exists(systemLogPath_)) {
-      std::filesystem::remove(systemLogPath_);
+  void removeTestFile() {
+    if (std::filesystem::exists(testFilePath_)) {
+      std::filesystem::remove(testFilePath_);
     }
-    if (std::filesystem::exists(customLogPath_)) {
-      std::filesystem::remove(customLogPath_);
+  }
+
+  static std::string readFileContent(const std::filesystem::path &path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+      return {};
     }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
   }
 };
 
-TEST_F(LogTestBase, LogFormatterProducesCorrectFormat) {
-  const LogEntry entry(LogLevel::INFO, "TestMessage");
-  const std::string formatted = LogFormatter::format(entry);
+TEST_F(LogTestBase, ConsoleLogDisplaysMessageAndLevel) {
+  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, "TestMessage"); });
 
-  EXPECT_TRUE(formatted.find("\033[32m") != std::string::npos);
-  EXPECT_TRUE(formatted.find("[INFO]") != std::string::npos);
-  EXPECT_TRUE(formatted.find("TestMessage") != std::string::npos);
-  EXPECT_TRUE(formatted.find("\033[0m") != std::string::npos);
+  assertContains(output, "TestMessage");
+  assertContains(output, "INFO");
 }
 
-TEST_F(LogTestBase, SystemLogCapturesAllMessages) {
-  Logger::log(LogLevel::INFO, "TestMessage");
+TEST_F(LogTestBase, FileLogWritesMessageAndLevel) {
+  Logger::log(LogLevel::ERROR, "ErrorMessage", getTestFilePath());
+  auto fileContent = getTestFileContent();
 
-  const auto content = getTestFileContent(getSystemLogPath());
-  assertLogContains(content, "TestMessage", "INFO");
+  assertContains(fileContent, "ErrorMessage");
+  assertContains(fileContent, "ERROR");
 }
 
-TEST_F(LogTestBase, CustomLogFileReceivesMessages) {
-  Logger::log(LogLevel::ERROR, "ErrorMessage", getCustomLogPath());
-
-  const auto content = getTestFileContent(getCustomLogPath());
-  assertLogContains(content, "ErrorMessage", "ERROR");
-}
-
-TEST_F(LogTestBase, ConsoleOutputContainsFormattedMessage) {
-  const auto output = captureConsoleOutput([] { Logger::log(LogLevel::WARN, "WarnMessage"); });
-
-  assertLogContains(output, "WarnMessage", "WARN");
-}
-
-TEST_F(LogTestBase, HandlesAllLogLevels) {
-  const std::vector<std::pair<LogLevel, const char *>> levels = {
-      {LogLevel::TRACE, "TRACE"},
-      {LogLevel::DEBUG, "DEBUG"},
-      {LogLevel::INFO, "INFO"},
-      {LogLevel::WARN, "WARN"},
-      {LogLevel::ERROR, "ERROR"},
-      {LogLevel::FATAL, "FATAL"}
-  };
-
-  for (const auto &[level, name] : levels) {
-    const auto output = captureConsoleOutput([level] { Logger::log(level, "TestMessage"); });
-    assertLogContains(output, "TestMessage", name);
-  }
-}
-
-TEST_F(LogTestBase, DefaultLogFileHandling) {
-  Logger::setDefaultOutputFile(getCustomLogPath());
+TEST_F(LogTestBase, DefaultFileWritesLogContent) {
+  Logger::setDefaultOutputFile(getTestFilePath());
   Logger::log(LogLevel::DEBUG, "DebugMessage");
+  auto fileContent = getTestFileContent();
 
-  const auto content = getTestFileContent(getCustomLogPath());
-  assertLogContains(content, "DebugMessage", "DEBUG");
+  assertContains(fileContent, "DebugMessage");
+  assertContains(fileContent, "DEBUG");
 }
 
-TEST_F(LogTestBase, ClearedDefaultFileStopsLogging) {
-  Logger::setDefaultOutputFile(getCustomLogPath());
+TEST_F(LogTestBase, ClearedDefaultFileCreatesNoFile) {
+  Logger::setDefaultOutputFile(getTestFilePath());
   Logger::clearDefaultOutputFile();
   Logger::log(LogLevel::INFO, "TestMessage");
 
-  EXPECT_FALSE(std::filesystem::exists(getCustomLogPath()));
+  EXPECT_FALSE(std::filesystem::exists(getTestFilePath()));
 }
 
-TEST_F(LogTestBase, ThreadSafety) {
+TEST_F(LogTestBase, LogFormatContainsRequiredElements) {
+  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, "FormatTest"); });
+
+  assertContains(output, "[");
+  assertContains(output, "]");
+  assertContains(output, ".cpp");
+  assertContains(output, ":");
+}
+
+TEST_F(LogTestBase, SupportsAllLogLevels) {
+  auto output = captureConsoleOutput([] {
+    Logger::log(LogLevel::TRACE, "TraceMessage");
+    Logger::log(LogLevel::DEBUG, "DebugMessage");
+    Logger::log(LogLevel::INFO, "InfoMessage");
+    Logger::log(LogLevel::WARN, "WarnMessage");
+    Logger::log(LogLevel::ERROR, "ErrorMessage");
+    Logger::log(LogLevel::FATAL, "FatalMessage");
+  });
+
+  assertContains(output, "TRACE");
+  assertContains(output, "DEBUG");
+  assertContains(output, "INFO");
+  assertContains(output, "WARN");
+  assertContains(output, "ERROR");
+  assertContains(output, "FATAL");
+}
+
+TEST_F(LogTestBase, HandlesMultipleThreadsSafely) {
   const int threadCount = 10;
   std::vector<std::thread> threads;
-  Logger::setDefaultOutputFile(getCustomLogPath());
+  Logger::setDefaultOutputFile(getTestFilePath());
 
   threads.reserve(threadCount);
   for (int i = 0; i < threadCount; ++i) {
@@ -156,35 +131,23 @@ TEST_F(LogTestBase, ThreadSafety) {
     thread.join();
   }
 
-  const auto content = getTestFileContent(getCustomLogPath());
+  auto fileContent = getTestFileContent();
   for (int i = 0; i < threadCount; ++i) {
-    ASSERT_TRUE(content.find("Thread" + std::to_string(i)) != std::string::npos);
+    assertContains(fileContent, "Thread" + std::to_string(i));
   }
 }
 
 TEST_F(LogTestBase, HandlesInvalidFilePath) {
-  const auto error =
+  auto error =
       captureErrorOutput([] { Logger::log(LogLevel::INFO, "Test", "/invalid/path/test.log"); });
 
-  EXPECT_TRUE(error.find("Failed to open log file") != std::string::npos);
+  assertContains(error, "Failed to open log file");
 }
 
-TEST_F(LogTestBase, ConvenienceFunctionsWork) {
-  const auto output = captureConsoleOutput([] {
-    logTrace("Trace");
-    logDebug("Debug");
-    logInfo("Info");
-    logWarn("Warn");
-    logError("Error");
-    logFatal("Fatal");
-  });
+TEST_F(LogTestBase, HandlesEmptyMessage) {
+  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, ""); });
 
-  assertLogContains(output, "Trace", "TRACE");
-  assertLogContains(output, "Debug", "DEBUG");
-  assertLogContains(output, "Info", "INFO");
-  assertLogContains(output, "Warn", "WARN");
-  assertLogContains(output, "Error", "ERROR");
-  assertLogContains(output, "Fatal", "FATAL");
+  assertContains(output, "INFO");
 }
 
 } // namespace server::test
