@@ -41,7 +41,12 @@ include(GoogleTest)
 
 set(TEST_DIR ${PROJECT_SOURCE_DIR}/server/tests/unit)
 
+set(TEST_COMMON_FILES
+    ${TEST_DIR}/helpers/global_test_environment.cpp
+)
+
 set(TEST_FILES
+    ${TEST_DIR}/test_main.cpp
     ${TEST_DIR}/time_stamp_test.cpp
     ${TEST_DIR}/timer_test.cpp
     ${TEST_DIR}/timer_id_test.cpp
@@ -67,12 +72,11 @@ set(TEST_FILES
 
 foreach(TEST_FILE ${TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
-    add_executable(${TEST_NAME} ${TEST_FILE})
+  add_executable(${TEST_NAME} ${TEST_FILE} ${TEST_COMMON_FILES} ${TEST_DIR}/test_main.cpp)
     target_link_libraries(${TEST_NAME}
         PRIVATE
         server
         GTest::GTest
-        GTest::Main
         pthread
     )
     gtest_discover_tests(${TEST_NAME})

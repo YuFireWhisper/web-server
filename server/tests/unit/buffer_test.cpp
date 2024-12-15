@@ -1,103 +1,123 @@
 #include "include/buffer.h"
+#include "include/config_commands.h"
+#include "include/config_defaults.h"
+#include "tests/unit/helpers/global_test_environment.h"
 
+#include <array>
 #include <gtest/gtest.h>
 
-namespace server {
-namespace {
+namespace server::testing {
 
 class BufferTest : public ::testing::Test {
 protected:
-  Buffer buffer_;
+  void SetUp() override {}
+
+  static constexpr size_t kDefaultTestSize = 1024;
+  static constexpr size_t kLargeTestSize   = 2000;
+  static constexpr const char *kTestData   = "Hello World";
 };
 
-TEST_F(BufferTest, InitialState) {
-  EXPECT_EQ(buffer_.readableBytes(), 0);
-  EXPECT_EQ(buffer_.writableBytes(), Buffer::kDefaultInitSize);
-  EXPECT_EQ(buffer_.prependableBytes(), Buffer::kPrependSize);
+TEST_F(BufferTest, InvalidConfigurationShouldFailValidation) {
+  auto config = std::make_shared<BufferConfig>();
+
+  config->initialSize = 0;
+  EXPECT_THROW({ Buffer::postCheckConfig(config); }, std::invalid_argument);
+
+  config->initialSize = 1024;
+  config->prependSize = 0;
+  EXPECT_THROW({ Buffer::postCheckConfig(config); }, std::invalid_argument);
 }
 
-TEST_F(BufferTest, AppendAndRetrieve) {
-  std::string test_str = "Hello, World!";
-  buffer_.append(test_str);
-
-  EXPECT_EQ(buffer_.readableBytes(), test_str.length());
-  EXPECT_EQ(buffer_.retrieveAsString(test_str.length()), test_str);
-  EXPECT_EQ(buffer_.readableBytes(), 0);
+TEST_F(BufferTest, NewBufferShouldHaveCorrectInitialState) {
+  Buffer buffer(kDefaultTestSize);
+  EXPECT_EQ(buffer.readableBytes(), 0);
+  EXPECT_EQ(buffer.writableBytes(), kDefaultTestSize);
+  EXPECT_EQ(buffer.prependableBytes(), Buffer::getConfig().prependSize);
 }
 
-TEST_F(BufferTest, MultipleAppendAndRetrieveAll) {
-  std::string str1 = "Hello";
-  std::string str2 = " World";
-  buffer_.append(str1);
-  buffer_.append(str2);
+TEST_F(BufferTest, AppendShouldAddDataCorrectly) {
+  Buffer buffer(kDefaultTestSize);
+  std::string testData(kTestData);
 
-  EXPECT_EQ(buffer_.readableBytes(), str1.length() + str2.length());
-  EXPECT_EQ(buffer_.retrieveAllAsString(), str1 + str2);
-  EXPECT_EQ(buffer_.readableBytes(), 0);
+  buffer.append(testData);
+
+  EXPECT_EQ(buffer.readableBytes(), testData.size());
+  EXPECT_EQ(buffer.retrieveAsString(testData.size()), testData);
 }
 
-TEST_F(BufferTest, EnsureSpace) {
-  std::string large_str(Buffer::kDefaultInitSize * 2, 'x');
-  buffer_.append(large_str);
+TEST_F(BufferTest, BufferShouldExpandWhenNeeded) {
+  Buffer buffer(16);
+  std::string testData(1000, 'x');
 
-  EXPECT_EQ(buffer_.readableBytes(), large_str.length());
-  EXPECT_EQ(buffer_.retrieveAllAsString(), large_str);
+  buffer.append(testData);
+
+  EXPECT_GE(buffer.writableBytes(), 0);
+  EXPECT_EQ(buffer.readableBytes(), testData.size());
+  EXPECT_EQ(buffer.retrieveAllAsString(), testData);
 }
 
-TEST_F(BufferTest, PartialRetrieve) {
-  std::string test_str = "Hello, World!";
-  buffer_.append(test_str);
+TEST_F(BufferTest, RetrieveShouldMoveReaderIndexCorrectly) {
+  Buffer buffer(kDefaultTestSize);
+  std::string testData(kTestData);
+  buffer.append(testData);
 
-  const static int retrieveLen = 5;
-  std::string part = buffer_.retrieveAsString(retrieveLen);
-  EXPECT_EQ(part, "Hello");
-  EXPECT_EQ(buffer_.readableBytes(), test_str.length() - 5);
-  EXPECT_EQ(buffer_.retrieveAllAsString(), ", World!");
+  std::string firstPart = buffer.retrieveAsString(5);
+  EXPECT_EQ(firstPart, "Hello");
+  EXPECT_EQ(buffer.readableBytes(), 6);
+
+  std::string remainingPart = buffer.retrieveAllAsString();
+  EXPECT_EQ(remainingPart, " World");
+  EXPECT_EQ(buffer.readableBytes(), 0);
 }
 
-TEST_F(BufferTest, RetrieveAll) {
-  buffer_.append("Hello");
-  buffer_.retrieveAll();
+TEST_F(BufferTest, ReadDataShouldHandleDifferentSizes) {
+  Buffer buffer(kDefaultTestSize);
 
-  EXPECT_EQ(buffer_.readableBytes(), 0);
-  EXPECT_EQ(buffer_.prependableBytes(), Buffer::kPrependSize);
+  std::array<int, 2> pipefd{};
+  ASSERT_EQ(pipe(pipefd.data()), 0);
+
+  std::string testData(kLargeTestSize, 'x');
+  ssize_t written = write(pipefd[1], testData.data(), testData.size());
+  ASSERT_EQ(written, static_cast<ssize_t>(testData.size()));
+
+  int savedErrno = 0;
+  ssize_t result = buffer.readData(pipefd[0], &savedErrno);
+
+  EXPECT_EQ(result, static_cast<ssize_t>(testData.size()));
+  EXPECT_EQ(buffer.readableBytes(), testData.size());
+  EXPECT_EQ(buffer.retrieveAllAsString(), testData);
+
+  close(pipefd[0]);
+  close(pipefd[1]);
 }
 
-TEST_F(BufferTest, RetrieveMoreThanAvailable) {
-  buffer_.append("Hello");
-  EXPECT_THROW(buffer_.retrieveAsString(10), std::out_of_range);
+TEST_F(BufferTest, ReadDataShouldHandleErrors) {
+  Buffer buffer(kDefaultTestSize);
+  int savedErrno = 0;
+
+  ssize_t result = buffer.readData(-1, &savedErrno);
+
+  EXPECT_LT(result, 0);
+  EXPECT_NE(savedErrno, 0);
+  EXPECT_EQ(buffer.readableBytes(), 0);
 }
 
-TEST_F(BufferTest, EmptyStringOperations) {
-  buffer_.append("");
-  EXPECT_EQ(buffer_.readableBytes(), 0);
-  EXPECT_EQ(buffer_.retrieveAllAsString(), "");
+TEST_F(BufferTest, RetrieveShouldThrowOnOverflow) {
+  Buffer buffer(kDefaultTestSize);
+  buffer.append("Hello");
+
+  EXPECT_THROW(buffer.retrieveAsString(10), std::out_of_range);
 }
 
-TEST_F(BufferTest, LargeDataOperations) {
+TEST_F(BufferTest, HasWrittenShouldUpdateWritePosition) {
+  Buffer buffer(kDefaultTestSize);
+  std::string testData(kTestData);
 
-  const size_t large_size = Buffer::kDefaultInitSize * 4;
-  std::string large_data(large_size, 'A');
+  memcpy(buffer.beginWrite(), testData.data(), testData.size());
+  buffer.hasWritten(testData.size());
 
-  buffer_.append(large_data);
-  EXPECT_EQ(buffer_.readableBytes(), large_size);
-  EXPECT_EQ(buffer_.retrieveAllAsString(), large_data);
+  EXPECT_EQ(buffer.readableBytes(), testData.size());
+  EXPECT_EQ(buffer.retrieveAllAsString(), testData);
 }
 
-TEST_F(BufferTest, ContinuousWriteAndRead) {
-  const static int numOfLoop = 100;
-  for (int i = 0; i < numOfLoop; ++i) {
-    std::string data = "test" + std::to_string(i);
-    buffer_.append(data);
-    EXPECT_EQ(buffer_.retrieveAsString(data.length()), data);
-  }
-  EXPECT_EQ(buffer_.readableBytes(), 0);
-}
-
-} // namespace
-} // namespace server
-
-int main(int argc, char **argv) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+} // namespace server::testing

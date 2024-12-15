@@ -1,6 +1,8 @@
 #pragma once
 
+#include "include/config_defaults.h"
 #include "include/types.h"
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -12,11 +14,10 @@ namespace server {
 
 class Buffer {
 public:
-  static constexpr size_t kDefaultInitSize = kKib;
-  static constexpr size_t kPrependSize = 8;
-  static constexpr size_t kExtraBufferSize = kKib * 64;
+  static void *postCheckConfig(const ConfigPtr &conf);
+  static char *handleConfigSize(const ConfigPtr &conf, const std::string &value, size_t offset);
 
-  explicit Buffer(size_t initSize = kDefaultInitSize);
+  explicit Buffer(size_t initSize = config_.initialSize);
 
   [[nodiscard]] size_t readableBytes() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableBytes() const noexcept { return buffer_.size() - writerIndex_; }
@@ -39,6 +40,9 @@ public:
   void retrieve(size_t len);
   void retrieveAll() noexcept;
 
+  static BufferConfig getConfig() { return config_; }
+  static void setInitialize(bool isInitialize) { isInitialize_ = isInitialize; }
+
 private:
   char *data() noexcept { return this->buffer_.data(); };
   [[nodiscard]] const char *data() const noexcept { return this->buffer_.data(); };
@@ -46,9 +50,15 @@ private:
   void ensureSpace(size_t len);
   void makeSpace(size_t len);
 
-  std::vector<char> buffer_;
+  static void checkInitialArg(size_t size, const std::string &argName);
+  static void checkConfig(const BufferConfig &config);
+
+  static inline BufferConfig config_{};
+  static inline bool isInitialize_;
+  size_t prependSize_;
   size_t readerIndex_;
   size_t writerIndex_;
+  std::vector<char> buffer_;
 };
 
 } // namespace server
