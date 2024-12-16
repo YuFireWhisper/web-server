@@ -6,21 +6,20 @@
 #include <csignal>
 #include <future>
 #include <gtest/gtest.h>
-#include <thread>
 
 namespace server::testing {
 
 namespace {
 constexpr int DEFAULT_SERVER_PORT = 1234;
 constexpr int DEFAULT_CLIENT_PORT = 4321;
-constexpr size_t BUFFER_SIZE = 1024;
-constexpr int TIMEOUT_SECONDS = 5;
+constexpr size_t BUFFER_SIZE      = 1024;
+constexpr int TIMEOUT_SECONDS     = 5;
 } // namespace
 
 void ignoreSigPipe() {
   struct sigaction sa;
   sa.sa_handler = SIG_IGN;
-  sa.sa_flags = 0;
+  sa.sa_flags   = 0;
   sigaction(SIGPIPE, &sa, nullptr);
 }
 
@@ -57,7 +56,7 @@ protected:
 
     loopThread = std::thread([this, &loopPromise]() {
       auto localLoop = std::make_unique<EventLoop>();
-      loop = localLoop.get();
+      loop           = localLoop.get();
       loopPromise.set_value(loop);
       loop->loop();
     });
@@ -68,7 +67,7 @@ protected:
     auto initFuture = initPromise.get_future();
 
     loop->runInLoop([this, &initPromise]() {
-      sockets = std::make_unique<SocketPair>();
+      sockets  = std::make_unique<SocketPair>();
       clientFd = sockets->getClientFd();
 
       connection = std::make_shared<TcpConnection>(
@@ -254,7 +253,7 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageReceiving) {
 
 TEST_F(TcpConnectionTest, ShouldHandleHighWaterMark) {
   std::promise<size_t> waterMarkReached;
-  const size_t waterMark = 64;
+  const size_t waterMark    = 64;
   const size_t testDataSize = waterMark * 2;
 
   auto future = waterMarkReached.get_future();

@@ -7,6 +7,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <sys/socket.h>
 
 #define OFFSET_OF(type, member)                                                                    \
   (reinterpret_cast<size_t>(&reinterpret_cast<char const volatile &>(((type *)0)->member)))
@@ -14,6 +15,7 @@
 namespace server {
 
 struct ServerConfig {
+  short AddressFamily = AF_INET;
   in_port_t port   = 8080;
   std::string ip   = "0.0.0.0";
   bool reusePort   = false;

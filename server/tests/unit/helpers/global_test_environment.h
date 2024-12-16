@@ -4,7 +4,10 @@ namespace server::testing {
 
 class GlobalTestEnvironment : public ::testing::Environment {
 public:
-  void SetUp() override { initialBufferByDefault(); }
+  void SetUp() override {
+    initialBufferByDefault();
+    initialServerByDefault();
+  }
 
   void TearDown() override {}
 
@@ -13,6 +16,7 @@ public:
 private:
   GlobalTestEnvironment() = default;
   static void initialBufferByDefault();
+  static void initialServerByDefault();
 };
 
 } // namespace server::testing

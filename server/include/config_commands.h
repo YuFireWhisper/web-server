@@ -1,6 +1,7 @@
 #include "include/buffer.h"
 #include "include/config_defaults.h"
 #include "include/config_manager.h"
+#include "include/inet_address.h"
 #include "include/types.h"
 
 #include <vector>
@@ -9,8 +10,16 @@ namespace server {
 
 inline std::vector<ServerCommand> getServerCommands() {
   return {
-      {"port", CommandType::configTake1 | CommandType::server},
-      {"listen", CommandType::configTake1 | CommandType::server},
+      {"init_addr",
+       CommandType::configTake1 | CommandType::server,
+       0,
+       InetAddress::initializeAddrConfig,
+       nullptr},
+      {"listen",
+       CommandType::configTake1 | CommandType::server,
+       0,
+       InetAddress::handleConfigListen,
+       nullptr},
       {"worker_processes", CommandType::configTake1 | CommandType::server},
       {"reuse_port", CommandType::configFlag | CommandType::server},
   };
