@@ -56,6 +56,7 @@ using ThreadInitCallback = std::function<void(EventLoop *)>;
 static constexpr std::string_view kCRLF{"\r\n"};
 static constexpr std::string_view kCRLFCRLF{"\r\n\r\n"};
 
+enum class Method : int8_t { kInvalid, kGet, kPost, kHead, kPut, kDelete };
 enum class Version : int8_t { kUnknown, kHttp10, kHttp11 };
 
 enum class CommandType : uint32_t {
@@ -80,5 +81,15 @@ struct ServerCommand {
   size_t offset;
   std::function<char *(ConfigPtr, const std::string, size_t)> set;
   std::function<void *(ConfigPtr)> post;
+};
+
+using RouteHandler = std::function<void()>;
+
+struct RouterTreeNode {
+  Method method;
+  std::string name;
+  std::unordered_map<std::string, std::unique_ptr<RouterTreeNode>> children;
+  RouteHandler handler;
+  bool isEndpoint = false;
 };
 } // namespace server

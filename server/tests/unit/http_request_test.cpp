@@ -10,7 +10,7 @@ class HttpRequestTest : public ::testing::Test {
 protected:
   void SetUp() override {
     request_ = std::make_unique<HttpRequest>();
-    buffer_ = std::make_unique<Buffer>();
+    buffer_  = std::make_unique<Buffer>();
   }
 
   void TearDown() override {
@@ -23,7 +23,7 @@ protected:
 };
 
 TEST_F(HttpRequestTest, InitialStateIsValid) {
-  EXPECT_EQ(request_->method(), HttpRequest::Method::kInvalid);
+  EXPECT_EQ(request_->method(), Method::kInvalid);
   EXPECT_EQ(request_->version(), Version::kUnknown);
   EXPECT_TRUE(request_->path().empty());
   EXPECT_TRUE(request_->query().empty());
@@ -39,7 +39,7 @@ TEST_F(HttpRequestTest, ResetClearsAllFields) {
 
   request_->reset();
 
-  EXPECT_EQ(request_->method(), HttpRequest::Method::kInvalid);
+  EXPECT_EQ(request_->method(), Method::kInvalid);
   EXPECT_EQ(request_->version(), Version::kUnknown);
   EXPECT_TRUE(request_->path().empty());
   EXPECT_TRUE(request_->query().empty());
@@ -55,7 +55,7 @@ TEST_F(HttpRequestTest, ParseSimpleGetRequest) {
   EXPECT_TRUE(request_->isGotAll());
   EXPECT_FALSE(request_->hasError());
 
-  EXPECT_EQ(request_->method(), HttpRequest::Method::kGet);
+  EXPECT_EQ(request_->method(), Method::kGet);
   EXPECT_EQ(request_->version(), Version::kHttp11);
   EXPECT_EQ(request_->path(), "/api/users");
   EXPECT_TRUE(request_->query().empty());
@@ -79,7 +79,7 @@ TEST_F(HttpRequestTest, ParsePostRequestWithBody) {
 
   EXPECT_TRUE(request_->parseRequest(buffer_.get()));
 
-  EXPECT_EQ(request_->method(), HttpRequest::Method::kPost);
+  EXPECT_EQ(request_->method(), Method::kPost);
   EXPECT_EQ(request_->contentLength(), 12);
   EXPECT_EQ(request_->body(), "{\"id\":\"123\"}");
 }
@@ -102,17 +102,17 @@ TEST_F(HttpRequestTest, HeaderOperations) {
 
 TEST_F(HttpRequestTest, MethodStringConversion) {
   struct TestCase {
-    HttpRequest::Method method;
+    Method method;
     const char *expected;
   };
 
   const std::array<TestCase, 6> testCases{
-      {TestCase{.method = HttpRequest::Method::kGet, .expected = "GET"},
-       TestCase{.method = HttpRequest::Method::kPost, .expected = "POST"},
-       TestCase{.method = HttpRequest::Method::kHead, .expected = "HEAD"},
-       TestCase{.method = HttpRequest::Method::kPut, .expected = "PUT"},
-       TestCase{.method = HttpRequest::Method::kDelete, .expected = "DELETE"},
-       TestCase{.method = HttpRequest::Method::kInvalid, .expected = "INVALID"}}
+      {TestCase{.method = Method::kGet, .expected = "GET"},
+       TestCase{.method = Method::kPost, .expected = "POST"},
+       TestCase{.method = Method::kHead, .expected = "HEAD"},
+       TestCase{.method = Method::kPut, .expected = "PUT"},
+       TestCase{.method = Method::kDelete, .expected = "DELETE"},
+       TestCase{.method = Method::kInvalid, .expected = "INVALID"}}
   };
 
   for (const auto &tc : testCases) {

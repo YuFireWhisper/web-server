@@ -12,8 +12,6 @@ class Buffer;
 
 class HttpRequest {
 public:
-  enum class Method : int8_t { kInvalid, kGet, kPost, kHead, kPut, kDelete };
-
   enum class ParseState : int8_t {
     kExpectRequestLine,
     kExpectHeaders,
