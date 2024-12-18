@@ -4,7 +4,6 @@
 #include "include/http_server.h"
 #include "include/inet_address.h"
 
-#include <array>
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <memory>
@@ -14,11 +13,11 @@ namespace {
 
 class HttpServerTest : public ::testing::Test {
 protected:
-  static constexpr uint16_t kTestPort = 8080;
+  static constexpr uint16_t kTestPort      = 8080;
   static constexpr const char *kServerName = "TestServer";
 
   void SetUp() override {
-    loop_ = std::make_unique<EventLoop>();
+    loop_   = std::make_unique<EventLoop>();
     server_ = std::make_unique<HttpServer>(loop_.get(), InetAddress(kTestPort), kServerName);
   }
 
@@ -45,9 +44,9 @@ TEST_F(HttpServerTest, StartServerCompletesWithoutError) {
 
 TEST_F(HttpServerTest, SetHttpCallbackUpdatesRequestHandler) {
   bool callbackInvoked = false;
-  auto testCallback = [&callbackInvoked](const HttpRequest &, HttpResponse *resp) {
+  auto testCallback    = [&callbackInvoked](const HttpRequest &, HttpResponse *resp) {
     callbackInvoked = true;
-    resp->setStatusCode(HttpResponse::StatusCode::k200Ok);
+    resp->setStatusCode(StatusCode::k200Ok);
   };
 
   EXPECT_NO_THROW(server_->setHttpCallback(testCallback));
@@ -55,9 +54,9 @@ TEST_F(HttpServerTest, SetHttpCallbackUpdatesRequestHandler) {
 
 TEST_F(HttpServerTest, SetNotFoundCallbackUpdatesHandler) {
   bool callbackInvoked = false;
-  auto testCallback = [&callbackInvoked](const HttpRequest &, HttpResponse *resp) {
+  auto testCallback    = [&callbackInvoked](const HttpRequest &, HttpResponse *resp) {
     callbackInvoked = true;
-    resp->setStatusCode(HttpResponse::StatusCode::k404NotFound);
+    resp->setStatusCode(StatusCode::k404NotFound);
   };
 
   EXPECT_NO_THROW(server_->setNotFoundCallback(testCallback));
@@ -65,9 +64,9 @@ TEST_F(HttpServerTest, SetNotFoundCallbackUpdatesHandler) {
 
 TEST_F(HttpServerTest, SetErrorCallbackUpdatesHandler) {
   bool callbackInvoked = false;
-  auto testCallback = [&callbackInvoked](const HttpRequest &, HttpResponse *resp) {
+  auto testCallback    = [&callbackInvoked](const HttpRequest &, HttpResponse *resp) {
     callbackInvoked = true;
-    resp->setStatusCode(HttpResponse::StatusCode::k400BadRequest);
+    resp->setStatusCode(StatusCode::k400BadRequest);
   };
 
   EXPECT_NO_THROW(server_->setErrorCallback(testCallback));
@@ -76,12 +75,11 @@ TEST_F(HttpServerTest, SetErrorCallbackUpdatesHandler) {
 TEST_F(HttpServerTest, ServerAcceptsMultipleCallbackRegistrations) {
   enum class CallbackType : int8_t { HttpCallback, NotFoundCallback, ErrorCallback };
 
-  static constexpr std::array<std::pair<CallbackType, HttpResponse::StatusCode>, 3>
-      kCallbackConfigs = {
-          {{CallbackType::HttpCallback, HttpResponse::StatusCode::k200Ok},
-           {CallbackType::NotFoundCallback, HttpResponse::StatusCode::k404NotFound},
-           {CallbackType::ErrorCallback, HttpResponse::StatusCode::k400BadRequest}}
-      };
+  static constexpr std::array<std::pair<CallbackType, StatusCode>, 3> kCallbackConfigs = {
+      {{CallbackType::HttpCallback, StatusCode::k200Ok},
+       {CallbackType::NotFoundCallback, StatusCode::k404NotFound},
+       {CallbackType::ErrorCallback, StatusCode::k400BadRequest}}
+  };
 
   std::vector<bool> callbacksInvoked(kCallbackConfigs.size(), false);
 

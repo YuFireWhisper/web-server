@@ -3,10 +3,12 @@
 #include "include/types.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <netinet/in.h>
 #include <string>
 #include <thread>
 #include <vector>
+
 #include <sys/socket.h>
 
 #define OFFSET_OF(type, member)                                                                    \
@@ -16,10 +18,10 @@ namespace server {
 
 struct ServerConfig {
   short AddressFamily = AF_INET;
-  in_port_t port   = 8080;
-  std::string ip   = "0.0.0.0";
-  bool reusePort   = false;
-  size_t threadNum = std::thread::hardware_concurrency();
+  in_port_t port      = 8080;
+  std::string ip      = "0.0.0.0";
+  bool reusePort      = false;
+  size_t threadNum    = std::thread::hardware_concurrency();
 };
 
 struct HttpConfig {
@@ -58,6 +60,17 @@ struct TimerConfig {
 struct EventLoopConfig {
   int pollTimeoutMs = 10000;
   size_t maxEvents  = 4096;
+};
+
+struct RouterConfig {
+  std::string name;
+  Method method;
+  std::filesystem::path staticFile;
+  std::filesystem::path rootPath;
+  std::string proxyPath;
+  std::unordered_map<std::string, std::shared_ptr<RouterConfig>> children;
+  RouteHandler handler;
+  bool isEndpoint = false;
 };
 
 } // namespace server

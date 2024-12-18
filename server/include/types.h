@@ -59,6 +59,75 @@ static constexpr std::string_view kCRLFCRLF{"\r\n\r\n"};
 enum class Method : int8_t { kInvalid, kGet, kPost, kHead, kPut, kDelete };
 enum class Version : int8_t { kUnknown, kHttp10, kHttp11 };
 
+enum class StatusCode : int16_t {
+  k100Continue           = 100,
+  k101SwitchingProtocols = 101,
+  k102Processing         = 102,
+  k103EarlyHints         = 103,
+
+  k200Ok                          = 200,
+  k201Created                     = 201,
+  k202Accepted                    = 202,
+  k203NonAuthoritativeInformation = 203,
+  k204NoContent                   = 204,
+  k205ResetContent                = 205,
+  k206PartialContent              = 206,
+  k207MultiStatus                 = 207,
+  k208AlreadyReported             = 208,
+  k226IMUsed                      = 226,
+
+  k300MultipleChoices   = 300,
+  k301MovedPermanently  = 301,
+  k302Found             = 302,
+  k303SeeOther          = 303,
+  k304NotModified       = 304,
+  k305UseProxy          = 305,
+  k307TemporaryRedirect = 307,
+  k308PermanentRedirect = 308,
+
+  k400BadRequest                  = 400,
+  k401Unauthorized                = 401,
+  k402PaymentRequired             = 402,
+  k403Forbidden                   = 403,
+  k404NotFound                    = 404,
+  k405MethodNotAllowed            = 405,
+  k406NotAcceptable               = 406,
+  k407ProxyAuthenticationRequired = 407,
+  k408RequestTimeout              = 408,
+  k409Conflict                    = 409,
+  k410Gone                        = 410,
+  k411LengthRequired              = 411,
+  k412PreconditionFailed          = 412,
+  k413PayloadTooLarge             = 413,
+  k414URITooLong                  = 414,
+  k415UnsupportedMediaType        = 415,
+  k416RangeNotSatisfiable         = 416,
+  k417ExpectationFailed           = 417,
+  k418ImATeapot                   = 418,
+  k421MisdirectedRequest          = 421,
+  k422UnprocessableEntity         = 422,
+  k423Locked                      = 423,
+  k424FailedDependency            = 424,
+  k425TooEarly                    = 425,
+  k426UpgradeRequired             = 426,
+  k428PreconditionRequired        = 428,
+  k429TooManyRequests             = 429,
+  k431RequestHeaderFieldsTooLarge = 431,
+  k451UnavailableForLegalReasons  = 451,
+
+  k500InternalServerError           = 500,
+  k501NotImplemented                = 501,
+  k502BadGateway                    = 502,
+  k503ServiceUnavailable            = 503,
+  k504GatewayTimeout                = 504,
+  k505HTTPVersionNotSupported       = 505,
+  k506VariantAlsoNegotiates         = 506,
+  k507InsufficientStorage           = 507,
+  k508LoopDetected                  = 508,
+  k510NotExtended                   = 510,
+  k511NetworkAuthenticationRequired = 511
+};
+
 enum class CommandType : uint32_t {
   configNoArgs = 0x00000001,
   configTake1  = 0x00000002,
@@ -67,6 +136,9 @@ enum class CommandType : uint32_t {
   configFlag   = 0x00000100,
   configNumber = 0x00000200,
   configString = 0x00000400,
+  configany    = 0x00000800,
+  config1more  = 0x00001000,
+  config2more  = 0x00002000,
   global       = 0x00010000,
   server       = 0x00020000,
   http         = 0x00040000,
@@ -84,12 +156,4 @@ struct ServerCommand {
 };
 
 using RouteHandler = std::function<void()>;
-
-struct RouterTreeNode {
-  Method method;
-  std::string name;
-  std::unordered_map<std::string, std::unique_ptr<RouterTreeNode>> children;
-  RouteHandler handler;
-  bool isEndpoint = false;
-};
 } // namespace server

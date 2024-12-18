@@ -2,7 +2,6 @@
 
 #include "include/types.h"
 
-#include <cstdint>
 #include <string>
 namespace server {
 
@@ -10,19 +9,10 @@ class Buffer;
 
 class HttpResponse {
 public:
-  enum class StatusCode : int16_t {
-    k200Ok = 200,
-    k301MovedPermanently = 301,
-    k400BadRequest = 400,
-    k403Forbidden = 403,
-    k404NotFound = 404,
-    k500InternalServerError = 500
-  };
-
   explicit HttpResponse(Version version = Version::kHttp11);
 
-  void setStatusCode(StatusCode code) { 
-    statusCode_ = code; 
+  void setStatusCode(StatusCode code) {
+    statusCode_    = code;
     statusMessage_ = std::string(statusCodeToMessage(code));
   }
   void setStatusMessage(std::string message) { statusMessage_ = std::move(message); }

@@ -16,7 +16,7 @@ TEST_F(HttpResponseTest, DefaultConstructorSetsExpectedValues) {
   HttpResponse response;
 
   EXPECT_EQ(response.version(), Version::kHttp11);
-  EXPECT_EQ(response.statusCode(), HttpResponse::StatusCode::k200Ok);
+  EXPECT_EQ(response.statusCode(), StatusCode::k200Ok);
   EXPECT_EQ(response.statusMessage(), "OK");
   EXPECT_FALSE(response.closeConnection());
   EXPECT_EQ(response.headers().at("Content-Type"), "text/html");
@@ -25,12 +25,12 @@ TEST_F(HttpResponseTest, DefaultConstructorSetsExpectedValues) {
 TEST_F(HttpResponseTest, SetBasicPropertiesWorkAsExpected) {
   HttpResponse response;
 
-  response.setStatusCode(HttpResponse::StatusCode::k404NotFound);
+  response.setStatusCode(StatusCode::k404NotFound);
   response.setStatusMessage("Resource Not Found");
   response.setContentType("application/json");
   response.setBody(R"({"error": "not found"})");
 
-  EXPECT_EQ(response.statusCode(), HttpResponse::StatusCode::k404NotFound);
+  EXPECT_EQ(response.statusCode(), StatusCode::k404NotFound);
   EXPECT_EQ(response.statusMessage(), "Resource Not Found");
   EXPECT_EQ(response.headers().at("Content-Type"), "application/json");
   EXPECT_EQ(response.body(), R"({"error": "not found"})");
@@ -51,7 +51,7 @@ TEST_F(HttpResponseTest, HeaderOperationsWorkCorrectly) {
 
 TEST_F(HttpResponseTest, SerializesHTTP11ResponseCorrectly) {
   HttpResponse response(Version::kHttp11);
-  response.setStatusCode(HttpResponse::StatusCode::k200Ok);
+  response.setStatusCode(StatusCode::k200Ok);
   response.setBody("Hello World");
 
   response.appendToBuffer(&buffer_);
@@ -65,7 +65,7 @@ TEST_F(HttpResponseTest, SerializesHTTP11ResponseCorrectly) {
 
 TEST_F(HttpResponseTest, SerializesHTTP10ResponseCorrectly) {
   HttpResponse response(Version::kHttp10);
-  response.setStatusCode(HttpResponse::StatusCode::k404NotFound);
+  response.setStatusCode(StatusCode::k404NotFound);
 
   response.appendToBuffer(&buffer_);
   std::string result = buffer_.retrieveAllAsString();
@@ -85,7 +85,7 @@ TEST_F(HttpResponseTest, HandlesConnectionCloseHeaderCorrectly) {
 
 TEST_F(HttpResponseTest, HandlesCustomStatusMessage) {
   HttpResponse response;
-  response.setStatusCode(HttpResponse::StatusCode::k500InternalServerError);
+  response.setStatusCode(StatusCode::k500InternalServerError);
   response.setStatusMessage("Custom Error Message");
 
   response.appendToBuffer(&buffer_);

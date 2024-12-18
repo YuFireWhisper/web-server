@@ -58,7 +58,7 @@ void HttpServer::onRequestComplete(
     const TcpConnectionPtr &conn,
     TimeStamp receiveTime [[maybe_unused]]
 ) {
-  auto *context = std::any_cast<HttpContext>(conn->getMutableContext());
+  auto *context              = std::any_cast<HttpContext>(conn->getMutableContext());
   const HttpRequest &request = context->request;
 
   HttpResponse response;
@@ -79,12 +79,12 @@ void HttpServer::onRequestComplete(
   }
 
   context->request.reset();
-  context->expectingBody = false;
+  context->expectingBody    = false;
   context->parsingCompleted = false;
 }
 
 void HttpServer::defaultHttpCallback(const HttpRequest &req, HttpResponse *resp) {
-  resp->setStatusCode(HttpResponse::StatusCode::k404NotFound);
+  resp->setStatusCode(StatusCode::k404NotFound);
   resp->setStatusMessage("Not Found");
   resp->setCloseConnection(true);
   resp->setContentType("text/plain");
@@ -92,7 +92,7 @@ void HttpServer::defaultHttpCallback(const HttpRequest &req, HttpResponse *resp)
 }
 
 void HttpServer::defaultNotFoundCallback(const HttpRequest &req, HttpResponse *resp) {
-  resp->setStatusCode(HttpResponse::StatusCode::k404NotFound);
+  resp->setStatusCode(StatusCode::k404NotFound);
   resp->setStatusMessage("Not Found");
   resp->setCloseConnection(true);
   resp->setContentType("text/html");
@@ -107,7 +107,7 @@ void HttpServer::defaultNotFoundCallback(const HttpRequest &req, HttpResponse *r
 }
 
 void HttpServer::defaultErrorCallback(const HttpRequest &req, HttpResponse *resp) {
-  resp->setStatusCode(HttpResponse::StatusCode::k500InternalServerError);
+  resp->setStatusCode(StatusCode::k500InternalServerError);
   resp->setStatusMessage("Internal Server Error");
   resp->setCloseConnection(true);
   resp->setContentType("text/html");
