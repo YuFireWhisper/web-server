@@ -8,12 +8,12 @@ class HttpResponse;
 
 class Router {
 public:
-  Router(RouterConfig node);
+  Router(LocationConfig node);
 
   Router(const Router &)            = delete;
   Router &operator=(const Router &) = delete;
 
-  void addRoute(const RouterConfig &node);
+  void addRoute(const LocationConfig &node);
   void addErrorHandler(StatusCode errorCode, const RouteHandler &func);
   void handle(const HttpRequest &req, HttpResponse *resp);
 
@@ -31,7 +31,7 @@ private:
       HttpResponse *resp
   ) const;
 
-  RouterConfig routerNode_;
+  LocationConfig routerNode_;
   std::unordered_map<StatusCode, RouteHandler> errorHandlers_;
   static inline std::unordered_map<std::string, std::string> mimeTypes_;
 };

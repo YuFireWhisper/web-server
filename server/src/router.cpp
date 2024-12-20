@@ -20,32 +20,32 @@
 
 namespace server {
 
-Router::Router(RouterConfig node)
+Router::Router(LocationConfig node)
     : routerNode_(std::move(node)) {}
 
-void Router::addRoute(const RouterConfig &node) {
+void Router::addRoute(const LocationConfig &node) {
   std::vector<std::string> segmentVector = splitPath(node.name);
 
-  size_t index              = 0;
-  RouterConfig *currentNode = &routerNode_;
+  size_t index                = 0;
+  LocationConfig *currentNode = &routerNode_;
 
   while (index < segmentVector.size()) {
     const std::string &currentSegment = segmentVector[index];
 
     if (currentSegment == "*") {
-      currentNode->children[currentSegment]    = std::make_unique<RouterConfig>();
+      currentNode->children[currentSegment]    = std::make_unique<LocationConfig>();
       *(currentNode->children[currentSegment]) = node;
       return;
     }
 
     if (index == segmentVector.size() - 1) {
-      currentNode->children[currentSegment]    = std::make_unique<RouterConfig>();
+      currentNode->children[currentSegment]    = std::make_unique<LocationConfig>();
       *(currentNode->children[currentSegment]) = node;
       return;
     }
 
     if (currentNode->children.find(currentSegment) == currentNode->children.end()) {
-      currentNode->children[currentSegment] = std::make_unique<RouterConfig>();
+      currentNode->children[currentSegment] = std::make_unique<LocationConfig>();
     }
 
     currentNode = currentNode->children[currentSegment].get();
@@ -83,7 +83,7 @@ void Router::addErrorHandler(StatusCode errorCode, const RouteHandler &func) {
 
 void Router::handle(const HttpRequest &req, HttpResponse *resp) {
   std::vector<std::string> segmentVector = splitPath(req.path());
-  RouterConfig *currentNode              = &routerNode_;
+  LocationConfig *currentNode            = &routerNode_;
 
   for (const auto &segment : segmentVector) {
     auto it = currentNode->children.find(segment);
@@ -167,14 +167,6 @@ void Router::initializeMime() {
     logFatal(message);
     throw std::runtime_error(message);
   }
-
-  std::string firstLine;
-  if (std::getline(mimeFile, firstLine)) {
-    logInfo("First line of mime.types: " + firstLine);
-  }
-
-  mimeFile.clear();
-  mimeFile.seekg(0);
 
   std::string line;
   while (std::getline(mimeFile, line)) {

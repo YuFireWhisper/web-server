@@ -6,12 +6,14 @@
 #include <csignal>
 #include <future>
 #include <gtest/gtest.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 
 namespace server::testing {
 
 namespace {
-constexpr int DEFAULT_SERVER_PORT = 1234;
-constexpr int DEFAULT_CLIENT_PORT = 4321;
+constexpr in_port_t DEFAULT_SERVER_PORT = 1234;
+constexpr in_port_t DEFAULT_CLIENT_PORT = 4321;
 constexpr size_t BUFFER_SIZE      = 1024;
 constexpr int TIMEOUT_SECONDS     = 5;
 } // namespace
@@ -74,8 +76,8 @@ protected:
           loop,
           "test-connection",
           sockets->releaseServer(),
-          InetAddress(DEFAULT_SERVER_PORT),
-          InetAddress("127.0.0.1", DEFAULT_CLIENT_PORT)
+          InetAddress(AF_INET, "0.0.0.0", DEFAULT_SERVER_PORT),
+          InetAddress(AF_INET, "127.0.0.1", DEFAULT_CLIENT_PORT)
       );
       initPromise.set_value();
     });

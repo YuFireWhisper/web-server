@@ -7,6 +7,8 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+#include <sys/socket.h>
+
 namespace server::testing {
 
 class AcceptorTest : public ::testing::Test {
@@ -14,8 +16,8 @@ protected:
   static constexpr uint16_t kDefaultTestPort = 8080;
 
   void SetUp() override {
-    eventLoop_ = std::make_unique<EventLoop>();
-    listenAddr_ = std::make_unique<InetAddress>(kDefaultTestPort);
+    eventLoop_  = std::make_unique<EventLoop>();
+    listenAddr_ = std::make_unique<InetAddress>(AF_INET, "0.0.0.0", kDefaultTestPort);
   }
 
   std::unique_ptr<EventLoop> eventLoop_;
@@ -57,7 +59,7 @@ TEST_F(AcceptorTest, ShouldAllowSettingConnectionHandler) {
 
 TEST_F(AcceptorTest, ShouldSupportDifferentPortsInConstructor) {
   const uint16_t alternativePort = 9090;
-  InetAddress alternativeAddr(alternativePort);
+  InetAddress alternativeAddr(AF_INET, "0.0.0.0", alternativePort);
 
   EXPECT_NO_THROW({
     Acceptor acceptor(eventLoop_.get(), alternativeAddr);

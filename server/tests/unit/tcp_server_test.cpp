@@ -4,20 +4,26 @@
 
 #include <gtest/gtest.h>
 
+#include <sys/socket.h>
+
 namespace server {
 
 class TcpServerTest : public ::testing::Test {
 protected:
-  static constexpr uint16_t kServerPort = 8080;
-  static constexpr uint16_t kClientPort = 12345;
+  static constexpr uint16_t kServerPort    = 8080;
+  static constexpr uint16_t kClientPort    = 12345;
   static constexpr const char *kServerName = "TestServer";
-  static constexpr const char *kLocalhost = "127.0.0.1";
-  static constexpr const char *kAnyIp = "0.0.0.0";
-  static constexpr int kDefaultThreads = 4;
+  static constexpr const char *kLocalhost  = "127.0.0.1";
+  static constexpr const char *kAnyIp      = "0.0.0.0";
+  static constexpr int kDefaultThreads     = 4;
 
   void SetUp() override {
-    loop_ = std::make_unique<EventLoop>();
-    server_ = std::make_unique<TcpServer>(loop_.get(), InetAddress(kServerPort), kServerName);
+    loop_   = std::make_unique<EventLoop>();
+    server_ = std::make_unique<TcpServer>(
+        loop_.get(),
+        InetAddress(AF_INET, "0.0.0.0", kServerPort),
+        kServerName
+    );
   }
 
   void TearDown() override {
@@ -80,7 +86,7 @@ TEST_F(TcpServerTest, ThreadInitCallbackIsRegistered) {
 TEST_F(TcpServerTest, ReusePortOptionCreatesValidServer) {
   auto reusePortServer = std::make_unique<TcpServer>(
       loop_.get(),
-      InetAddress(kServerPort + 1),
+      InetAddress(AF_INET, "0.0.0.0", kServerPort + 1),
       kServerName,
       TcpServer::Option::kReusePort
   );

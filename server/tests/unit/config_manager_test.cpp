@@ -1,182 +1,88 @@
 #include "include/config_manager.h"
+#include "include/types.h"
 
 #include <gtest/gtest.h>
 
 namespace server {
 
-namespace {
-constexpr int kDefaultConfigValue = 42;
-}
-
 class ConfigManagerTest : public ::testing::Test {
 protected:
-  ConfigManager manager_;
-  ConfigPtr conf_{std::make_shared<int>(kDefaultConfigValue)};
+  void SetUp() override { manager_.setCurrentText(manager_.getCurrentContext()); }
+
+  ConfigManager &manager_{ ConfigManager::getInstance() };
 };
 
-TEST_F(ConfigManagerTest, HandlesSingleRegisteredCommandSuccessfully) {
-  const ServerCommand cmd{
-      .name   = "test_cmd",
-      .type   = CommandType::configNoArgs,
-      .offset = 0,
-      .set    = nullptr,
-      .post   = nullptr
+TEST_F(ConfigManagerTest, RegisterSingleCommand) {
+  ServerCommand cmd{ .name   = "test_cmd",
+                     .type   = CommandType::global | CommandType::configNoArgs,
+                     .offset = 0 };
+
+  EXPECT_NO_THROW(manager_.registerCommand(cmd));
+  EXPECT_NO_THROW(manager_.handleCommand({ "test_cmd" }));
+}
+
+TEST_F(ConfigManagerTest, RegisterMultipleCommands) {
+  std::vector<ServerCommand> cmds = {
+    { .name = "cmd1", .type = CommandType::global | CommandType::configNoArgs, .offset = 0 },
+    { .name = "cmd2", .type = CommandType::global | CommandType::configNoArgs, .offset = 0 }
   };
+
+  EXPECT_NO_THROW(manager_.registerCommands(cmds));
+  EXPECT_NO_THROW(manager_.handleCommand({ "cmd1" }));
+  EXPECT_NO_THROW(manager_.handleCommand({ "cmd2" }));
+}
+
+TEST_F(ConfigManagerTest, HandleUnregisteredCommand) {
+  EXPECT_THROW(manager_.handleCommand({ "unknown_cmd" }), std::invalid_argument);
+}
+
+TEST_F(ConfigManagerTest, HandleEmptyConfig) {
+  EXPECT_THROW(manager_.configParse(nullptr, 0), std::invalid_argument);
+}
+
+TEST_F(ConfigManagerTest, HandleContextManagement) {
+  auto originalContext = manager_.getCurrentContext();
+  originalContext.now  = kHttpOffset;
+
+  EXPECT_NO_THROW(manager_.setCurrentText(originalContext));
+  EXPECT_EQ(manager_.getCurrentContext().now, kHttpOffset);
+}
+
+TEST_F(ConfigManagerTest, GetContextByValidOffset) {
+  EXPECT_NO_THROW(manager_.getContextByOffset(kGlobalOffset));
+}
+
+TEST_F(ConfigManagerTest, GetContextByInvalidOffset) {
+  EXPECT_THROW(manager_.getContextByOffset(999), std::out_of_range);
+}
+
+TEST_F(ConfigManagerTest, ParseValidConfig) {
+  ServerCommand cmd{ .name   = "test_cmd",
+                     .type   = CommandType::global | CommandType::configNoArgs,
+                     .offset = 0 };
+  manager_.registerCommand(cmd);
+
+  const char *config = "test_cmd ;   \n";
+  const size_t len   = 15;
+  EXPECT_NO_THROW(manager_.configParse(config, len));
+}
+
+TEST_F(ConfigManagerTest, HandleCommandWithValidArguments) {
+  ServerCommand cmd{ .name   = "test_cmd",
+                     .type   = CommandType::global | CommandType::configNoArgs,
+                     .offset = 0 };
 
   manager_.registerCommand(cmd);
-  EXPECT_TRUE(manager_.handleCommand("test_cmd", "", conf_));
+  EXPECT_NO_THROW(manager_.handleCommand({ "test_cmd" }));
 }
 
-TEST_F(ConfigManagerTest, HandlesMultipleRegisteredCommandsSuccessfully) {
-  const std::vector<ServerCommand> cmds = {
-      {.name   = "cmd1",
-       .type   = CommandType::configNoArgs,
-       .offset = 0,
-       .set    = nullptr,
-       .post   = nullptr},
-      {.name   = "cmd2",
-       .type   = CommandType::configTake1,
-       .offset = 0,
-       .set    = nullptr,
-       .post   = nullptr}
-  };
-
-  manager_.registerCommands(cmds);
-  EXPECT_TRUE(manager_.handleCommand("cmd1", "", conf_));
-  EXPECT_TRUE(manager_.handleCommand("cmd2", "value", conf_));
-}
-
-TEST_F(ConfigManagerTest, ReturnsFalseForUnregisteredCommand) {
-  EXPECT_FALSE(manager_.handleCommand("nonexistent", "", conf_));
-}
-
-TEST_F(ConfigManagerTest, ReturnsFalseForArgumentCountMismatch) {
-  const std::vector<ServerCommand> cmds = {
-      {.name   = "no_args",
-       .type   = CommandType::configNoArgs,
-       .offset = 0,
-       .set    = nullptr,
-       .post   = nullptr},
-      {.name   = "one_arg",
-       .type   = CommandType::configTake1,
-       .offset = 0,
-       .set    = nullptr,
-       .post   = nullptr}
-  };
-
-  manager_.registerCommands(cmds);
-  EXPECT_FALSE(manager_.handleCommand("no_args", "value", conf_));
-  EXPECT_FALSE(manager_.handleCommand("one_arg", "", conf_));
-}
-
-TEST_F(ConfigManagerTest, ExecutesSetFunctionSuccessfully) {
-  bool setFunctionCalled = false;
-  const ServerCommand cmd{
-      .name   = "set_cmd",
-      .type   = CommandType::configTake1,
-      .offset = 0,
-      .set    = [&](const ConfigPtr &, const std::string &, size_t) -> char    *{
-        setFunctionCalled = true;
-        return nullptr;
-      },
-      .post = nullptr
-  };
+TEST_F(ConfigManagerTest, HandleCommandWithInvalidArguments) {
+  ServerCommand cmd{ .name   = "test_cmd",
+                     .type   = CommandType::global | CommandType::configNoArgs,
+                     .offset = 0 };
 
   manager_.registerCommand(cmd);
-  EXPECT_TRUE(manager_.handleCommand("set_cmd", "value", conf_));
-  EXPECT_TRUE(setFunctionCalled);
-}
-
-TEST_F(ConfigManagerTest, ReturnsFalseWhenSetFunctionFails) {
-  const ServerCommand cmd{
-      .name   = "fail_cmd",
-      .type   = CommandType::configTake1,
-      .offset = 0,
-      .set    = [](const ConfigPtr &, const std::string &, size_t) -> char    *{
-        return strdup("error");
-      },
-      .post = nullptr
-  };
-
-  manager_.registerCommand(cmd);
-  EXPECT_FALSE(manager_.handleCommand("fail_cmd", "value", conf_));
-}
-
-TEST_F(ConfigManagerTest, HandlesAllConfigTypesCorrectly) {
-  struct TestConfig {
-    bool flagValue = false;
-    int numValue   = 0;
-    std::string strValue;
-  };
-  auto config = std::make_shared<TestConfig>();
-
-  const std::vector<ServerCommand> cmds = {
-      {.name   = "flag_cmd",
-       .type   = CommandType::configFlag | CommandType::configTake1,
-       .offset = offsetof(TestConfig, flagValue),
-       .set    = nullptr,
-       .post   = nullptr},
-      {.name   = "num_cmd",
-       .type   = CommandType::configNumber | CommandType::configTake1,
-       .offset = offsetof(TestConfig, numValue),
-       .set    = nullptr,
-       .post   = nullptr},
-      {.name   = "str_cmd",
-       .type   = CommandType::configString | CommandType::configTake1,
-       .offset = offsetof(TestConfig, strValue),
-       .set    = nullptr,
-       .post   = nullptr}
-  };
-
-  manager_.registerCommands(cmds);
-
-  EXPECT_TRUE(manager_.handleCommand("flag_cmd", "on", config));
-  EXPECT_TRUE(config->flagValue);
-  EXPECT_TRUE(manager_.handleCommand("flag_cmd", "true", config));
-  EXPECT_TRUE(config->flagValue);
-  EXPECT_TRUE(manager_.handleCommand("flag_cmd", "1", config));
-  EXPECT_TRUE(config->flagValue);
-
-  EXPECT_TRUE(manager_.handleCommand("num_cmd", "42", config));
-  EXPECT_EQ(42, config->numValue);
-
-  EXPECT_TRUE(manager_.handleCommand("str_cmd", "test", config));
-  EXPECT_EQ("test", config->strValue);
-}
-
-TEST_F(ConfigManagerTest, ReturnsFalseForInvalidConfigValues) {
-  struct TestConfig {
-    int numValue = 0;
-    std::string strValue;
-  };
-  auto config = std::make_shared<TestConfig>();
-
-  const std::vector<ServerCommand> cmds = {
-      {.name   = "num_cmd",
-       .type   = CommandType::configNumber | CommandType::configTake1,
-       .offset = offsetof(TestConfig, numValue),
-       .set    = nullptr,
-       .post   = nullptr},
-      {.name   = "str_cmd",
-       .type   = CommandType::configString | CommandType::configTake1,
-       .offset = offsetof(TestConfig, strValue),
-       .set    = nullptr,
-       .post   = nullptr}
-  };
-
-  manager_.registerCommands(cmds);
-
-  EXPECT_FALSE(manager_.handleCommand("num_cmd", "not_a_number", config));
-
-  const ServerCommand invalidCmd{
-      .name   = "invalid_type",
-      .type   = static_cast<CommandType>(0xFF00),
-      .offset = 0,
-      .set    = nullptr,
-      .post   = nullptr
-  };
-  manager_.registerCommand(invalidCmd);
-  EXPECT_FALSE(manager_.handleCommand("invalid_type", "value", config));
+  EXPECT_THROW(manager_.handleCommand({ "test_cmd", "unexpected_arg" }), std::invalid_argument);
 }
 
 } // namespace server

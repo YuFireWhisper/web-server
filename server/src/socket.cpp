@@ -49,7 +49,7 @@ int Socket::createTcpSocket() {
 }
 
 void Socket::bindToPort(uint16_t port) const {
-  InetAddress address(port);
+  InetAddress address(AF_INET, "0.0.0.0", port);
   bindToAddress(address);
 }
 

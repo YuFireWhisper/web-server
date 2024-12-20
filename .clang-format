@@ -50,3 +50,11 @@ IncludeCategories:
     Priority: 2
   - Regex: '.*'
     Priority: 1
+
+DerivePointerAlignment: false
+PointerAlignment: Right
+SpaceAfterCStyleCast: false
+SpacesInSquareBrackets: false
+
+Cpp11BracedListStyle: false
+SpaceBeforeSquareBrackets: false

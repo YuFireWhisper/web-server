@@ -1,69 +1,63 @@
-#include "include/router.h"
+#include "include/buffer.h"
 #include "include/http_request.h"
 #include "include/http_response.h"
-#include "include/buffer.h"
+#include "include/router.h"
 
-#include <gtest/gtest.h>
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 
 namespace server::testing {
 
 class RouterTest : public ::testing::Test {
 protected:
-  static void SetUpTestSuite() {
-    Router::initializeMime();
-  }
+  static void SetUpTestSuite() { Router::initializeMime(); }
 
   void SetUp() override {
     routerConfig_.method = Method::kGet;
-    router_ = std::make_unique<Router>(routerConfig_);
+    router_              = std::make_unique<Router>(routerConfig_);
     setupTestFiles();
   }
 
-  void TearDown() override {
-    cleanupTestFiles();
-  }
+  void TearDown() override { cleanupTestFiles(); }
 
   void setupTestFiles() {
     std::filesystem::create_directories(testDir_);
-    
+
     std::ofstream testHtml(testDir_ / "test.html");
     testHtml << "<html><body>Test Content</body></html>";
     testHtml.close();
-    
+
     std::ofstream testCss(testDir_ / "style.css");
     testCss << "body { color: black; }";
     testCss.close();
   }
 
-  void cleanupTestFiles() {
-    std::filesystem::remove_all(testDir_);
-  }
+  void cleanupTestFiles() { std::filesystem::remove_all(testDir_); }
 
-  static HttpRequest createRequest(const std::string& path) {
-    Buffer buf;
+  static HttpRequest createRequest(const std::string &path) {
+    Buffer buf(1024);
     HttpRequest req;
-    std::string requestStr = 
-        "GET " + path + " HTTP/1.1\r\n"
-        "Host: test.com\r\n"
-        "\r\n";
+    std::string requestStr = "GET " + path
+                             + " HTTP/1.1\r\n"
+                               "Host: test.com\r\n"
+                               "\r\n";
     buf.append(requestStr);
     req.parseRequest(&buf);
     return req;
   }
 
-  RouterConfig routerConfig_;
+  LocationConfig routerConfig_;
   std::unique_ptr<Router> router_;
-  const std::filesystem::path testDir_{"test_static"};
+  const std::filesystem::path testDir_{ "test_static" };
 };
 
 TEST_F(RouterTest, HandlesValidRouteRequest) {
-  RouterConfig homeRoute;
-  homeRoute.name = "/home";
-  homeRoute.method = Method::kGet;
-  bool handlerCalled = false;
-  homeRoute.handler = [&handlerCalled]() { handlerCalled = true; };
+  LocationConfig homeRoute;
+  homeRoute.name       = "/home";
+  homeRoute.method     = Method::kGet;
+  bool handlerCalled   = false;
+  homeRoute.handler    = [&handlerCalled]() { handlerCalled = true; };
   homeRoute.isEndpoint = true;
 
   router_->addRoute(homeRoute);
@@ -78,19 +72,18 @@ TEST_F(RouterTest, HandlesValidRouteRequest) {
 }
 
 TEST_F(RouterTest, HandlesMismatchedHttpMethod) {
-  RouterConfig route;
-  route.name = "/api";
-  route.method = Method::kPost;  // 設置為 POST
+  LocationConfig route;
+  route.name       = "/api";
+  route.method     = Method::kPost; // 設置為 POST
   route.isEndpoint = true;
   router_->addRoute(route);
 
   bool errorHandlerCalled = false;
-  router_->addErrorHandler(
-    StatusCode::k405MethodNotAllowed,
-    [&errorHandlerCalled]() { errorHandlerCalled = true; }
-  );
+  router_->addErrorHandler(StatusCode::k405MethodNotAllowed, [&errorHandlerCalled]() {
+    errorHandlerCalled = true;
+  });
 
-  auto request = createRequest("/api");  // 使用 GET 請求
+  auto request = createRequest("/api"); // 使用 GET 請求
   HttpResponse response(Version::kHttp11);
 
   router_->handle(request, &response);
@@ -99,9 +92,9 @@ TEST_F(RouterTest, HandlesMismatchedHttpMethod) {
 }
 
 TEST_F(RouterTest, ServesStaticFileSuccessfully) {
-  RouterConfig staticRoute;
-  staticRoute.name = "/static";
-  staticRoute.method = Method::kGet;
+  LocationConfig staticRoute;
+  staticRoute.name       = "/static";
+  staticRoute.method     = Method::kGet;
   staticRoute.staticFile = std::filesystem::current_path() / testDir_ / "test.html";
   staticRoute.isEndpoint = true;
 
@@ -117,9 +110,9 @@ TEST_F(RouterTest, ServesStaticFileSuccessfully) {
 }
 
 TEST_F(RouterTest, HandlesCachingHeaders) {
-  RouterConfig staticRoute;
-  staticRoute.name = "/cached";
-  staticRoute.method = Method::kGet;
+  LocationConfig staticRoute;
+  staticRoute.name       = "/cached";
+  staticRoute.method     = Method::kGet;
   staticRoute.staticFile = std::filesystem::current_path() / testDir_ / "test.html";
   staticRoute.isEndpoint = true;
 
@@ -130,17 +123,17 @@ TEST_F(RouterTest, HandlesCachingHeaders) {
 
   router_->handle(request, &response);
 
-  const auto& headers = response.headers();
+  const auto &headers = response.headers();
   EXPECT_TRUE(headers.contains("Cache-Control"));
   EXPECT_TRUE(headers.contains("Last-Modified"));
 }
 
 TEST_F(RouterTest, HandlesWildcardRoutes) {
-  RouterConfig wildcardRoute;
-  wildcardRoute.name = "/api/*";
-  wildcardRoute.method = Method::kGet;
-  bool handlerCalled = false;
-  wildcardRoute.handler = [&handlerCalled]() { handlerCalled = true; };
+  LocationConfig wildcardRoute;
+  wildcardRoute.name       = "/api/*";
+  wildcardRoute.method     = Method::kGet;
+  bool handlerCalled       = false;
+  wildcardRoute.handler    = [&handlerCalled]() { handlerCalled = true; };
   wildcardRoute.isEndpoint = true;
 
   router_->addRoute(wildcardRoute);
@@ -153,4 +146,4 @@ TEST_F(RouterTest, HandlesWildcardRoutes) {
   EXPECT_TRUE(handlerCalled);
 }
 
-}  // namespace server::testing
+} // namespace server::testing

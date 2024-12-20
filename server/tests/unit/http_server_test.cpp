@@ -8,6 +8,8 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+#include <sys/socket.h>
+
 namespace server {
 namespace {
 
@@ -18,7 +20,11 @@ protected:
 
   void SetUp() override {
     loop_   = std::make_unique<EventLoop>();
-    server_ = std::make_unique<HttpServer>(loop_.get(), InetAddress(kTestPort), kServerName);
+    server_ = std::make_unique<HttpServer>(
+        loop_.get(),
+        InetAddress(AF_INET, "0.0.0.0", kTestPort),
+        kServerName
+    );
   }
 
   std::unique_ptr<EventLoop> loop_;
@@ -76,9 +82,9 @@ TEST_F(HttpServerTest, ServerAcceptsMultipleCallbackRegistrations) {
   enum class CallbackType : int8_t { HttpCallback, NotFoundCallback, ErrorCallback };
 
   static constexpr std::array<std::pair<CallbackType, StatusCode>, 3> kCallbackConfigs = {
-      {{CallbackType::HttpCallback, StatusCode::k200Ok},
-       {CallbackType::NotFoundCallback, StatusCode::k404NotFound},
-       {CallbackType::ErrorCallback, StatusCode::k400BadRequest}}
+    { { CallbackType::HttpCallback, StatusCode::k200Ok },
+      { CallbackType::NotFoundCallback, StatusCode::k404NotFound },
+      { CallbackType::ErrorCallback, StatusCode::k400BadRequest } }
   };
 
   std::vector<bool> callbacksInvoked(kCallbackConfigs.size(), false);
