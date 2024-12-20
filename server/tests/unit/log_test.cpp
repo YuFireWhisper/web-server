@@ -11,11 +11,11 @@ namespace server::test {
 class LogTestBase : public ::testing::Test {
 protected:
   void SetUp() override {
-    removeTestFile();
+    removeTestDirectory();
     Logger::clearDefaultOutputFile();
   }
 
-  void TearDown() override { removeTestFile(); }
+  void TearDown() override { removeTestDirectory(); }
 
   std::string getTestFileContent() { return readFileContent(testFilePath_); }
 
@@ -39,11 +39,12 @@ protected:
   }
 
 private:
-  const std::filesystem::path testFilePath_{ "test.log" };
+  const std::filesystem::path testDir_{ "test_logs" };
+  const std::filesystem::path testFilePath_{ testDir_ / "test.log" };
 
-  void removeTestFile() {
-    if (std::filesystem::exists(testFilePath_)) {
-      std::filesystem::remove(testFilePath_);
+  void removeTestDirectory() {
+    if (std::filesystem::exists(testDir_)) {
+      std::filesystem::remove_all(testDir_);
     }
   }
 
@@ -59,24 +60,42 @@ private:
 };
 
 TEST_F(LogTestBase, ConsoleLogDisplaysMessageAndLevel) {
-  auto output =
-      captureConsoleOutput([] { Logger::log(LogLevel::INFO, "TestMessage", __FILE__, __LINE__); });
+  auto output = captureConsoleOutput([] { LOG_INFO("TestMessage"); });
 
   assertContains(output, "TestMessage");
   assertContains(output, "INFO");
 }
 
 TEST_F(LogTestBase, FileLogWritesMessageAndLevel) {
-  Logger::log(LogLevel::ERROR, "ErrorMessage", getTestFilePath(), __FILE__, __LINE__);
+  LOG_ERROR_F("ErrorMessage", getTestFilePath());
   auto fileContent = getTestFileContent();
 
   assertContains(fileContent, "ErrorMessage");
   assertContains(fileContent, "ERROR");
 }
 
+TEST_F(LogTestBase, CreatesDirectoryStructure) {
+  const auto nestedPath = std::filesystem::path{ "test_logs/nested/deep/test.log" };
+  LOG_INFO_F("TestMessage", nestedPath);
+
+  EXPECT_TRUE(std::filesystem::exists(nestedPath));
+  EXPECT_TRUE(std::filesystem::exists(nestedPath.parent_path()));
+}
+
+TEST_F(LogTestBase, HandlesHomeDirectoryTilde) {
+  const char *home = std::getenv("HOME");
+  ASSERT_NE(home, nullptr);
+
+  const auto tildeLogPath = std::filesystem::path{ "~/test_logs/tilde_test.log" };
+  LOG_INFO_F("TestMessage", tildeLogPath);
+
+  auto expectedPath = std::filesystem::path(home) / "test_logs/tilde_test.log";
+  EXPECT_TRUE(std::filesystem::exists(expectedPath));
+}
+
 TEST_F(LogTestBase, DefaultFileWritesLogContent) {
   Logger::setDefaultOutputFile(getTestFilePath());
-  Logger::log(LogLevel::DEBUG, "DebugMessage", __FILE__, __LINE__);
+  LOG_DEBUG("DebugMessage");
   auto fileContent = getTestFileContent();
 
   assertContains(fileContent, "DebugMessage");
@@ -86,14 +105,13 @@ TEST_F(LogTestBase, DefaultFileWritesLogContent) {
 TEST_F(LogTestBase, ClearedDefaultFileCreatesNoFile) {
   Logger::setDefaultOutputFile(getTestFilePath());
   Logger::clearDefaultOutputFile();
-  Logger::log(LogLevel::INFO, "TestMessage", __FILE__, __LINE__);
+  LOG_INFO("TestMessage");
 
   EXPECT_FALSE(std::filesystem::exists(getTestFilePath()));
 }
 
 TEST_F(LogTestBase, LogFormatContainsRequiredElements) {
-  auto output =
-      captureConsoleOutput([] { Logger::log(LogLevel::INFO, "FormatTest", __FILE__, __LINE__); });
+  auto output = captureConsoleOutput([] { LOG_INFO("FormatTest"); });
 
   assertContains(output, "[");
   assertContains(output, "]");
@@ -103,12 +121,12 @@ TEST_F(LogTestBase, LogFormatContainsRequiredElements) {
 
 TEST_F(LogTestBase, SupportsAllLogLevels) {
   auto output = captureConsoleOutput([] {
-    Logger::log(LogLevel::TRACE, "TraceMessage", __FILE__, __LINE__);
-    Logger::log(LogLevel::DEBUG, "DebugMessage", __FILE__, __LINE__);
-    Logger::log(LogLevel::INFO, "InfoMessage", __FILE__, __LINE__);
-    Logger::log(LogLevel::WARN, "WarnMessage", __FILE__, __LINE__);
-    Logger::log(LogLevel::ERROR, "ErrorMessage", __FILE__, __LINE__);
-    Logger::log(LogLevel::FATAL, "FatalMessage", __FILE__, __LINE__);
+    LOG_TRACE("TraceMessage");
+    LOG_DEBUG("DebugMessage");
+    LOG_INFO("InfoMessage");
+    LOG_WARN("WarnMessage");
+    LOG_ERROR("ErrorMessage");
+    LOG_FATAL("FatalMessage");
   });
 
   assertContains(output, "TRACE");
@@ -126,9 +144,7 @@ TEST_F(LogTestBase, HandlesMultipleThreadsSafely) {
 
   threads.reserve(threadCount);
   for (int i = 0; i < threadCount; ++i) {
-    threads.emplace_back([i] {
-      Logger::log(LogLevel::INFO, "Thread" + std::to_string(i), __FILE__, __LINE__);
-    });
+    threads.emplace_back([i] { LOG_INFO("Thread" + std::to_string(i)); });
   }
 
   for (auto &thread : threads) {
@@ -141,18 +157,36 @@ TEST_F(LogTestBase, HandlesMultipleThreadsSafely) {
   }
 }
 
-TEST_F(LogTestBase, HandlesInvalidFilePath) {
-  auto error = captureErrorOutput([] {
-    Logger::log(LogLevel::INFO, "Test", "/invalid/path/test.log", __FILE__, __LINE__);
-  });
-
-  assertContains(error, "Failed to open log file");
+TEST_F(LogTestBase, HandlesNonExistentParentDirectory) {
+  const auto deepPath = std::filesystem::path{ "/tmp/non_existent_dir/deeper/test.log" };
+  LOG_INFO_F("Test", deepPath);
+  EXPECT_TRUE(std::filesystem::exists(deepPath));
 }
 
 TEST_F(LogTestBase, HandlesEmptyMessage) {
-  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, "", __FILE__, __LINE__); });
-
+  auto output = captureConsoleOutput([] { LOG_INFO(""); });
   assertContains(output, "INFO");
 }
 
+TEST_F(LogTestBase, HandlesSymlinks) {
+  const auto actualDir = std::filesystem::path{ "test_logs/actual" };
+  const auto linkDir   = std::filesystem::path{ "test_logs/link" };
+
+  if (std::filesystem::exists("test_logs")) {
+    std::filesystem::remove_all("test_logs");
+  }
+
+  std::filesystem::create_directories(actualDir);
+
+  std::filesystem::create_symlink("actual", linkDir);
+
+  ASSERT_TRUE(std::filesystem::exists(linkDir));
+  ASSERT_TRUE(std::filesystem::is_symlink(linkDir));
+
+  const auto logPath = linkDir / "test.log";
+  LOG_INFO_F("TestMessage", logPath);
+
+  EXPECT_TRUE(std::filesystem::exists(linkDir / "test.log"));
+  EXPECT_TRUE(std::filesystem::exists(actualDir / "test.log"));
+}
 } // namespace server::test

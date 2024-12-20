@@ -57,6 +57,7 @@ public:
   void writeFile(const std::string &message, const std::filesystem::path &path);
 
 private:
+  static bool ensureFileExists(const std::filesystem::path &path);
   std::mutex fileMutex_;
 };
 

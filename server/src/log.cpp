@@ -77,16 +77,63 @@ void LogWriter::writeConsole(const std::string &message) {
   std::cout << message << '\n';
 }
 
+std::filesystem::path expandTilde(const std::filesystem::path &path) {
+  if (path.empty() || path.string()[0] != '~') {
+    return path;
+  }
+
+  const char *home = std::getenv("HOME");
+  if (home == nullptr) {
+    std::cerr << "HOME environment variable not set\n";
+    return path;
+  }
+
+  return std::filesystem::path(home) / path.string().substr(2);
+}
+
 void LogWriter::writeFile(const std::string &message, const std::filesystem::path &path) {
   std::lock_guard<std::mutex> lock(fileMutex_);
 
-  std::ofstream outfile(path, std::ios::app);
+  auto expandedPath = expandTilde(path);
+  if (!ensureFileExists(expandedPath)) {
+    return;
+  }
+
+  std::ofstream outfile(expandedPath, std::ios::app);
   if (!outfile) {
-    std::cerr << "Failed to open log file: " << path << '\n';
+    std::cerr << "Failed to open log file: " << expandedPath << '\n';
     return;
   }
 
   outfile << message << '\n';
+}
+
+bool LogWriter::ensureFileExists(const std::filesystem::path &path) {
+  try {
+    const auto parent_path = path.parent_path();
+    if (!parent_path.empty()) {
+      if (!std::filesystem::is_symlink(parent_path)) {
+        std::filesystem::create_directories(parent_path);
+      }
+    }
+
+    if (!std::filesystem::exists(path)) {
+      if (!std::filesystem::exists(parent_path)) {
+        std::cerr << "Parent directory does not exist: " << parent_path << '\n';
+        return false;
+      }
+
+      std::ofstream file(path);
+      if (!file) {
+        std::cerr << "Failed to create log file: " << path << '\n';
+        return false;
+      }
+    }
+    return true;
+  } catch (const std::filesystem::filesystem_error &e) {
+    std::cerr << "Filesystem error: " << e.what() << '\n';
+    return false;
+  }
 }
 
 std::filesystem::path Logger::defaultOutputPath_;
