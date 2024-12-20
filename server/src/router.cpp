@@ -154,7 +154,7 @@ bool Router::serveStaticFile(
 
     return true;
   } catch (const std::exception &e) {
-    logError("Error serving static file: " + std::string(e.what()));
+    LOG_ERROR("Error serving static file: " + std::string(e.what()));
     handleError(StatusCode::k500InternalServerError);
     return true;
   }
@@ -164,7 +164,7 @@ void Router::initializeMime() {
   std::ifstream mimeFile = std::ifstream("/etc/mime.types");
   if (!mimeFile.is_open()) {
     std::string message = "Cannot open etc/mime.types!";
-    logFatal(message);
+    LOG_FATAL(message);
     throw std::runtime_error(message);
   }
 
@@ -202,7 +202,7 @@ std::string Router::getMimeType(const std::string &extension) {
   auto it = mimeTypes_.find(extension);
   if (it == mimeTypes_.end()) {
     std::string message = "Unknown Extension. Extension: " + extension;
-    logError(message);
+    LOG_ERROR(message);
     throw std::invalid_argument(message);
   }
 

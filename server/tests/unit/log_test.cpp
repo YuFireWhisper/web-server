@@ -39,7 +39,7 @@ protected:
   }
 
 private:
-  const std::filesystem::path testFilePath_{"test.log"};
+  const std::filesystem::path testFilePath_{ "test.log" };
 
   void removeTestFile() {
     if (std::filesystem::exists(testFilePath_)) {
@@ -59,14 +59,15 @@ private:
 };
 
 TEST_F(LogTestBase, ConsoleLogDisplaysMessageAndLevel) {
-  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, "TestMessage"); });
+  auto output =
+      captureConsoleOutput([] { Logger::log(LogLevel::INFO, "TestMessage", __FILE__, __LINE__); });
 
   assertContains(output, "TestMessage");
   assertContains(output, "INFO");
 }
 
 TEST_F(LogTestBase, FileLogWritesMessageAndLevel) {
-  Logger::log(LogLevel::ERROR, "ErrorMessage", getTestFilePath());
+  Logger::log(LogLevel::ERROR, "ErrorMessage", getTestFilePath(), __FILE__, __LINE__);
   auto fileContent = getTestFileContent();
 
   assertContains(fileContent, "ErrorMessage");
@@ -75,7 +76,7 @@ TEST_F(LogTestBase, FileLogWritesMessageAndLevel) {
 
 TEST_F(LogTestBase, DefaultFileWritesLogContent) {
   Logger::setDefaultOutputFile(getTestFilePath());
-  Logger::log(LogLevel::DEBUG, "DebugMessage");
+  Logger::log(LogLevel::DEBUG, "DebugMessage", __FILE__, __LINE__);
   auto fileContent = getTestFileContent();
 
   assertContains(fileContent, "DebugMessage");
@@ -85,13 +86,14 @@ TEST_F(LogTestBase, DefaultFileWritesLogContent) {
 TEST_F(LogTestBase, ClearedDefaultFileCreatesNoFile) {
   Logger::setDefaultOutputFile(getTestFilePath());
   Logger::clearDefaultOutputFile();
-  Logger::log(LogLevel::INFO, "TestMessage");
+  Logger::log(LogLevel::INFO, "TestMessage", __FILE__, __LINE__);
 
   EXPECT_FALSE(std::filesystem::exists(getTestFilePath()));
 }
 
 TEST_F(LogTestBase, LogFormatContainsRequiredElements) {
-  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, "FormatTest"); });
+  auto output =
+      captureConsoleOutput([] { Logger::log(LogLevel::INFO, "FormatTest", __FILE__, __LINE__); });
 
   assertContains(output, "[");
   assertContains(output, "]");
@@ -101,12 +103,12 @@ TEST_F(LogTestBase, LogFormatContainsRequiredElements) {
 
 TEST_F(LogTestBase, SupportsAllLogLevels) {
   auto output = captureConsoleOutput([] {
-    Logger::log(LogLevel::TRACE, "TraceMessage");
-    Logger::log(LogLevel::DEBUG, "DebugMessage");
-    Logger::log(LogLevel::INFO, "InfoMessage");
-    Logger::log(LogLevel::WARN, "WarnMessage");
-    Logger::log(LogLevel::ERROR, "ErrorMessage");
-    Logger::log(LogLevel::FATAL, "FatalMessage");
+    Logger::log(LogLevel::TRACE, "TraceMessage", __FILE__, __LINE__);
+    Logger::log(LogLevel::DEBUG, "DebugMessage", __FILE__, __LINE__);
+    Logger::log(LogLevel::INFO, "InfoMessage", __FILE__, __LINE__);
+    Logger::log(LogLevel::WARN, "WarnMessage", __FILE__, __LINE__);
+    Logger::log(LogLevel::ERROR, "ErrorMessage", __FILE__, __LINE__);
+    Logger::log(LogLevel::FATAL, "FatalMessage", __FILE__, __LINE__);
   });
 
   assertContains(output, "TRACE");
@@ -124,7 +126,9 @@ TEST_F(LogTestBase, HandlesMultipleThreadsSafely) {
 
   threads.reserve(threadCount);
   for (int i = 0; i < threadCount; ++i) {
-    threads.emplace_back([i] { Logger::log(LogLevel::INFO, "Thread" + std::to_string(i)); });
+    threads.emplace_back([i] {
+      Logger::log(LogLevel::INFO, "Thread" + std::to_string(i), __FILE__, __LINE__);
+    });
   }
 
   for (auto &thread : threads) {
@@ -138,14 +142,15 @@ TEST_F(LogTestBase, HandlesMultipleThreadsSafely) {
 }
 
 TEST_F(LogTestBase, HandlesInvalidFilePath) {
-  auto error =
-      captureErrorOutput([] { Logger::log(LogLevel::INFO, "Test", "/invalid/path/test.log"); });
+  auto error = captureErrorOutput([] {
+    Logger::log(LogLevel::INFO, "Test", "/invalid/path/test.log", __FILE__, __LINE__);
+  });
 
   assertContains(error, "Failed to open log file");
 }
 
 TEST_F(LogTestBase, HandlesEmptyMessage) {
-  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, ""); });
+  auto output = captureConsoleOutput([] { Logger::log(LogLevel::INFO, "", __FILE__, __LINE__); });
 
   assertContains(output, "INFO");
 }

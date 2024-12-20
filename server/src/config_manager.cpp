@@ -62,7 +62,7 @@ void ConfigManager::configParse(const char *data, const size_t len) {
   if (len <= 0) {
     std::string message =
         "Data length cannot be a non-positive! Input length: " + std::to_string(len);
-    logFatal(message);
+    LOG_FATAL(message);
     throw std::invalid_argument(message);
   }
 
@@ -112,7 +112,7 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
 
   if (it == commands_.end()) {
     std::string message = "Cannot find config name: " + field[0];
-    logFatal(message);
+    LOG_FATAL(message);
     throw std::invalid_argument(message);
   }
 
@@ -122,7 +122,7 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
 
   if (!hasFlag(contextType, it->second.type)) {
     std::string message = "Config at wrong place!";
-    logFatal(message);
+    LOG_FATAL(message);
     throw std::invalid_argument(message);
   }
 
@@ -151,7 +151,7 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
     if (!validArgs) {
       std::string message = "Args is not valid! Expected: " + std::to_string(expectedArgs)
                             + ", Actual: " + std::to_string(field.size());
-      logFatal(message);
+      LOG_FATAL(message);
       throw std::invalid_argument(message);
     }
   } else {
@@ -159,7 +159,7 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
     if (field.size() < minArgs) {
       std::string message = "Args is not valid! Expected at least: " + std::to_string(minArgs)
                             + ", Actual: " + std::to_string(field.size());
-      logFatal(message);
+      LOG_FATAL(message);
       throw std::invalid_argument(message);
     }
   }
@@ -195,12 +195,12 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
 
       default:
         std::string message = "No matching type!";
-        logFatal(message);
+        LOG_FATAL(message);
         throw std::invalid_argument(message);
     }
 
   } catch (const std::exception &e) {
-    logFatal(e.what());
+    LOG_FATAL(e.what());
     throw e;
   }
 }

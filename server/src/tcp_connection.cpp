@@ -37,11 +37,6 @@ TcpConnection::TcpConnection(
   channel_->setWriteCallback([this] { handleWrite(); });
   channel_->setCloseCallback([this] { handleClose(); });
   channel_->setErrorCallback([this] { handleError(); });
-
-  Logger::log(
-      LogLevel::INFO,
-      "TcpConnection::ctor[" + name_ + "] at fd=" + std::to_string(socket_->getSocketFd())
-  );
 }
 
 TcpConnection::~TcpConnection() {
@@ -49,7 +44,7 @@ TcpConnection::~TcpConnection() {
   channel_->remove();
 
   if (socket_->hasActiveConnection()) {
-    Logger::log(LogLevel::WARN, "Connect did not close properly!");
+    LOG_WARN("Connect did not close properly!");
   }
 }
 
@@ -67,7 +62,7 @@ void TcpConnection::send(std::string_view message) {
 
 void TcpConnection::send(Buffer *buffer) {
   if (buffer == nullptr) {
-    Logger::log(LogLevel::ERROR, "Attempting to send null buffer");
+    LOG_ERROR("Attempting to send null buffer");
     return;
   }
 
@@ -83,35 +78,25 @@ void TcpConnection::send(Buffer *buffer) {
 
 void TcpConnection::sendInLoop(const void *message, size_t len) {
   loop_->assertInLoopThread();
-
-  Logger::log(
-      LogLevel::INFO,
-      name_ + ": sendInLoop attempting to write " + std::to_string(len) + " bytes"
-  );
-
   if (len >= highWaterMark_ && highWaterMarkCallback_) {
-    Logger::log(LogLevel::INFO, name_ + ": High water mark reached before write");
     loop_->queueInLoop([this, len]() { highWaterMarkCallback_(shared_from_this(), len); });
   }
 
-  ssize_t nwrote = 0;
+  ssize_t nwrote   = 0;
   size_t remaining = len;
-  bool faultError = false;
+  bool faultError  = false;
 
   if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0) {
     nwrote = ::write(channel_->fd(), message, len);
-    Logger::log(LogLevel::INFO, name_ + ": Write result: " + std::to_string(nwrote) + " bytes");
 
     if (nwrote >= 0) {
       remaining = len - nwrote;
-      Logger::log(LogLevel::INFO, name_ + ": Remaining bytes: " + std::to_string(remaining));
 
       if (remaining == 0 && writeCompleteCallback_) {
         loop_->queueInLoop([this]() { writeCompleteCallback_(shared_from_this()); });
       }
     } else {
       if (errno != EWOULDBLOCK) {
-        Logger::log(LogLevel::ERROR, name_ + ": Write error: " + std::string(strerror(errno)));
         if (errno == EPIPE || errno == ECONNRESET) {
           faultError = true;
         }
@@ -146,7 +131,6 @@ void TcpConnection::shutdownInLoop() {
     setState(State::kDisconnected);
 
     if (closeCallback_) {
-      Logger::log(LogLevel::INFO, name_ + ": Triggering close callback after shutdown");
       closeCallback_(shared_from_this());
     }
 
@@ -229,7 +213,7 @@ void TcpConnection::handleClose() {
 }
 
 void TcpConnection::handleError() {
-  int err = 0;
+  int err          = 0;
   socklen_t errlen = sizeof(err);
 
   if (::getsockopt(channel_->fd(), SOL_SOCKET, SO_ERROR, &err, &errlen) == 0) {
@@ -237,26 +221,24 @@ void TcpConnection::handleError() {
 
     switch (err) {
       case ECONNRESET:
-        Logger::log(LogLevel::ERROR, name_ + ": Conection reset by peer: " + errMsg);
+        LOG_ERROR(name_ + ": Conection reset by peer: " + errMsg);
         handleClose();
         break;
 
       case ETIMEDOUT:
-        Logger::log(LogLevel::ERROR, name_ + ": Connection timed out: " + errMsg);
+        LOG_ERROR(name_ + ": Connection timed out: " + errMsg);
         handleClose();
         break;
 
       case EPIPE:
-        Logger::log(LogLevel::ERROR, name_ + ": Broken pipe: " + errMsg);
+        LOG_ERROR(name_ + ": Broken pipe: " + errMsg);
         handleClose();
         break;
 
       default:
-        Logger::log(
-            LogLevel::ERROR,
+        LOG_ERROR(
             name_ + ": Socket error: " + errMsg + " (error code: " + std::to_string(err) + ")"
         );
-
         if (!socket_->hasActiveConnection()) {
           handleClose();
         }
@@ -267,7 +249,7 @@ void TcpConnection::handleError() {
       errorCallback_(shared_from_this());
     }
   } else {
-    Logger::log(LogLevel::ERROR, name_ + ": Failed to get socket error");
+    LOG_ERROR(name_ + ": Failed to get socket error");
   }
 }
 
@@ -281,7 +263,7 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
     handleClose();
   } else {
     errno = savedErrno;
-    Logger::log(LogLevel::ERROR, "Read Error" + std::string(strerror(errno)));
+    LOG_ERROR("Read Error" + std::string(strerror(errno)));
     handleError();
   }
 }

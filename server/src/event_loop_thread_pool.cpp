@@ -24,7 +24,7 @@ EventLoopThreadPool::EventLoopThreadPool(EventLoop *baseLoop, std::string nameAr
 void checkBaseLoop(EventLoop *baseLoop) {
   if (baseLoop == nullptr) {
     std::string message = "BaseLoop cannot be null";
-    Logger::log(LogLevel::FATAL, message);
+    LOG_FATAL(message);
     throw std::invalid_argument(message);
   }
 }
@@ -78,7 +78,7 @@ std::vector<EventLoop *> EventLoopThreadPool::getAllLoops() {
   }
 
   if (loops_.empty()) {
-    return std::vector<EventLoop *>{baseLoop_};
+    return std::vector<EventLoop *>{ baseLoop_ };
   }
 
   return loops_;

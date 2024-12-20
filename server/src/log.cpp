@@ -6,22 +6,23 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+
 namespace server {
 
 namespace {
-constexpr std::array<const char *, 6> LEVEL_NAMES =
-    {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
+constexpr std::array<const char *, 6> LEVEL_NAMES = { "TRACE", "DEBUG", "INFO",
+                                                      "WARN",  "ERROR", "FATAL" };
 
-constexpr std::array<const char *, 6> LEVEL_COLORS =
-    {"\033[36m", "\033[34m", "\033[32m", "\033[33m", "\033[31m", "\033[1;31m"};
+constexpr std::array<const char *, 6> LEVEL_COLORS = { "\033[36m", "\033[34m", "\033[32m",
+                                                       "\033[33m", "\033[31m", "\033[1;31m" };
 } // namespace
 
-LogEntry::LogEntry(LogLevel level, std::string_view message)
+LogEntry::LogEntry(LogLevel level, std::string_view message, std::string_view file, int line)
     : level_(level)
     , message_(message)
     , timestamp_(std::chrono::system_clock::now())
-    , file_(__FILE__)
-    , line_(__LINE__) {}
+    , file_(file)
+    , line_(line) {}
 
 LogLevel LogEntry::getLevel() const {
   return level_;
@@ -91,8 +92,8 @@ void LogWriter::writeFile(const std::string &message, const std::filesystem::pat
 std::filesystem::path Logger::defaultOutputPath_;
 LogWriter Logger::writer_;
 
-void Logger::log(LogLevel level, std::string_view message) {
-  LogEntry entry(level, message);
+void Logger::log(LogLevel level, std::string_view message, std::string_view file, int line) {
+  LogEntry entry(level, message, file, line);
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
@@ -106,9 +107,11 @@ void Logger::log(LogLevel level, std::string_view message) {
 void Logger::log(
     LogLevel level,
     std::string_view message,
-    const std::filesystem::path &outputPath
+    const std::filesystem::path &outputPath,
+    std::string_view file,
+    int line
 ) {
-  LogEntry entry(level, message);
+  LogEntry entry(level, message, file, line);
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);

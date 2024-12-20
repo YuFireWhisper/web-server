@@ -6,13 +6,27 @@
 #include <string>
 #include <string_view>
 
+#define LOG_TRACE(message) Logger::log(LogLevel::TRACE, message, __FILE__, __LINE__)
+#define LOG_DEBUG(message) Logger::log(LogLevel::DEBUG, message, __FILE__, __LINE__)
+#define LOG_INFO(message) Logger::log(LogLevel::INFO, message, __FILE__, __LINE__)
+#define LOG_WARN(message) Logger::log(LogLevel::WARN, message, __FILE__, __LINE__)
+#define LOG_ERROR(message) Logger::log(LogLevel::ERROR, message, __FILE__, __LINE__)
+#define LOG_FATAL(message) Logger::log(LogLevel::FATAL, message, __FILE__, __LINE__)
+
+#define LOG_TRACE_F(message, path) Logger::log(LogLevel::TRACE, message, path, __FILE__, __LINE__)
+#define LOG_DEBUG_F(message, path) Logger::log(LogLevel::DEBUG, message, path, __FILE__, __LINE__)
+#define LOG_INFO_F(message, path) Logger::log(LogLevel::INFO, message, path, __FILE__, __LINE__)
+#define LOG_WARN_F(message, path) Logger::log(LogLevel::WARN, message, path, __FILE__, __LINE__)
+#define LOG_ERROR_F(message, path) Logger::log(LogLevel::ERROR, message, path, __FILE__, __LINE__)
+#define LOG_FATAL_F(message, path) Logger::log(LogLevel::FATAL, message, path, __FILE__, __LINE__)
+
 namespace server {
 
 enum class LogLevel : int8_t { TRACE, DEBUG, INFO, WARN, ERROR, FATAL };
 
 class LogEntry {
 public:
-  LogEntry(LogLevel level, std::string_view message);
+  LogEntry(LogLevel level, std::string_view message, std::string_view file, int line);
 
   [[nodiscard]] LogLevel getLevel() const;
   [[nodiscard]] std::string_view getMessage() const;
@@ -48,9 +62,13 @@ private:
 
 class Logger {
 public:
-  static void log(LogLevel level, std::string_view message);
+  static void log(LogLevel level, std::string_view message, std::string_view file, int line);
   static void
-  log(LogLevel level, std::string_view message, const std::filesystem::path &outputPath);
+  log(LogLevel level,
+      std::string_view message,
+      const std::filesystem::path &outputPath,
+      std::string_view file,
+      int line);
   static void setDefaultOutputFile(const std::filesystem::path &path);
   static void clearDefaultOutputFile();
 
@@ -58,53 +76,5 @@ private:
   static std::filesystem::path defaultOutputPath_;
   static LogWriter writer_;
 };
-
-inline void logTrace(std::string_view message) {
-  Logger::log(LogLevel::TRACE, message);
-}
-
-inline void logDebug(std::string_view message) {
-  Logger::log(LogLevel::DEBUG, message);
-}
-
-inline void logInfo(std::string_view message) {
-  Logger::log(LogLevel::INFO, message);
-}
-
-inline void logWarn(std::string_view message) {
-  Logger::log(LogLevel::WARN, message);
-}
-
-inline void logError(std::string_view message) {
-  Logger::log(LogLevel::ERROR, message);
-}
-
-inline void logFatal(std::string_view message) {
-  Logger::log(LogLevel::FATAL, message);
-}
-
-inline void logTrace(std::string_view message, const std::filesystem::path &path) {
-  Logger::log(LogLevel::TRACE, message, path);
-}
-
-inline void logDebug(std::string_view message, const std::filesystem::path &path) {
-  Logger::log(LogLevel::DEBUG, message, path);
-}
-
-inline void logInfo(std::string_view message, const std::filesystem::path &path) {
-  Logger::log(LogLevel::INFO, message, path);
-}
-
-inline void logWarn(std::string_view message, const std::filesystem::path &path) {
-  Logger::log(LogLevel::WARN, message, path);
-}
-
-inline void logError(std::string_view message, const std::filesystem::path &path) {
-  Logger::log(LogLevel::ERROR, message, path);
-}
-
-inline void logFatal(std::string_view message, const std::filesystem::path &path) {
-  Logger::log(LogLevel::FATAL, message, path);
-}
 
 } // namespace server

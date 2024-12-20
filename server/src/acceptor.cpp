@@ -17,7 +17,6 @@ Acceptor::Acceptor(EventLoop *eventLoop, const InetAddress &listenAddress)
     , serverSocket_(std::make_unique<Socket>())
     , serverChannel_(std::make_unique<Channel>(eventLoop, serverSocket_->getSocketFd()))
     , isListening_(false) {
-
   serverSocket_->enableAddressReuse();
   serverSocket_->enablePortReuse();
   serverSocket_->bindToAddress(listenAddress);
@@ -37,14 +36,14 @@ void Acceptor::startListen() {
 
 void Acceptor::handleConnection() {
   try {
-    Socket newConnection = serverSocket_->acceptNewConnection();
+    Socket newConnection    = serverSocket_->acceptNewConnection();
     InetAddress peerAddress = newConnection.getRemoteAddress();
     processConnection(std::move(newConnection), peerAddress);
   } catch (const SocketException &error) {
     if (errno == EMFILE || errno == ENFILE) {
       handleResourceLimit(error.what());
     }
-    Logger::log(LogLevel::ERROR, "Accept failed: " + std::string(error.what()), "acceptor.log");
+    LOG_ERROR("Accept failed: " + std::string(error.what()));
   }
 }
 
@@ -55,7 +54,7 @@ void Acceptor::processConnection(Socket &&connection, const InetAddress &peerAdd
 }
 
 void Acceptor::handleResourceLimit(const std::string &errorMessage) {
-  Logger::log(LogLevel::FATAL, "Resource limit reached: " + errorMessage, "acceptor.log");
+  LOG_FATAL("Resource limit reached: " + errorMessage);
   abort();
 }
 

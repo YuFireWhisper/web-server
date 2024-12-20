@@ -19,11 +19,9 @@
 namespace server {
 
 Buffer::Buffer(size_t len) {
-  Logger::setDefaultOutputFile("buffer.log");
-
   if (len < 0) {
     std::string message = "Buffer length cannot be negative";
-    logError(message);
+    LOG_ERROR(message);
     throw std::invalid_argument(message);
   }
 
@@ -37,7 +35,7 @@ Buffer::Buffer(size_t len) {
 
   if (len > config_.maxBufferSize) {
     std::string message = "Requested size exceeds maximum buffer size";
-    logError(message);
+    LOG_ERROR(message);
     throw std::invalid_argument(message);
   }
 
@@ -50,7 +48,7 @@ Buffer::Buffer(size_t len) {
     buffer_             = nullptr;
     capacity_           = 0;
     std::string message = "Failed to allocate buffer memory";
-    logError(message);
+    LOG_ERROR(message);
     throw std::runtime_error(message);
   }
 }
@@ -67,7 +65,7 @@ void Buffer::append(std::string_view str) {
 void Buffer::append(const char *data, size_t len) {
   if (data == nullptr && len > 0) {
     std::string message = "Cannot append null data";
-    logError(message);
+    LOG_ERROR(message);
     throw std::invalid_argument(message);
   }
   ensureSpace(len);
@@ -80,8 +78,9 @@ void Buffer::ensureSpace(size_t len) {
     makeSpace(len);
   }
   if (writableBytes() < len) {
-    Logger::log(LogLevel::ERROR, "Failed to ensure space in buffer");
-    throw std::runtime_error("Failed to ensure space in buffer");
+    std::string message = "Failed to ensure space in buffer";
+    LOG_ERROR(message);
+    throw std::runtime_error(message);
   }
 }
 
@@ -106,8 +105,9 @@ void Buffer::hasWritten(size_t len) noexcept {
 
 std::string Buffer::retrieveAsString(size_t len) {
   if (len > readableBytes()) {
-    Logger::log(LogLevel::ERROR, "Not enough data in buffer", "buffer.log");
-    throw std::out_of_range("Not enough data in buffer");
+    std::string message = "Not enough data in buffer";
+    LOG_ERROR(message);
+    throw std::out_of_range(message);
   }
   std::string result(peek(), len);
   retrieve(len);
@@ -161,13 +161,13 @@ ssize_t Buffer::readData(int fd, int *savedErrno) {
 void Buffer::resize(size_t newSize) {
   if (newSize > config_.maxBufferSize) {
     std::string message = "Requested size exceeds maximum buffer size";
-    logError(message);
+    LOG_ERROR(message);
     throw std::invalid_argument(message);
   }
 
   if (newSize < (readableBytes() + config_.prependSize)) {
     std::string message = "Cannot resize: would lose data";
-    logError(message);
+    LOG_ERROR(message);
     throw std::invalid_argument(message);
   }
 

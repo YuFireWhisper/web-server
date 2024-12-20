@@ -6,8 +6,7 @@
 #include <gtest/gtest.h>
 #include <thread>
 
-namespace server {
-namespace testing {
+namespace server::testing {
 
 class EventLoopTest : public ::testing::Test {
 protected:
@@ -105,5 +104,4 @@ TEST_F(EventLoopTest, ensureChannelOperationsWork) {
   });
 }
 
-} // namespace testing
-} // namespace server
+} // namespace server::testing

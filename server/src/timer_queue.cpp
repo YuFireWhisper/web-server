@@ -25,8 +25,10 @@ TimerQueue::TimerQueue(EventLoop *loop)
     : timerfd_(::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC))
     , loop_(loop)
     , sequence_(0) {
+  Logger::setDefaultOutputFile("time_queue.log");
+
   if (timerfd_ < 0) {
-    Logger::log(LogLevel::FATAL, "TimerQueue::TimerQueue timerfd create error");
+    LOG_FATAL("Timerfd create error");
     abort();
   }
   timerfdChannel_ = std::make_unique<Channel>(loop, timerfd_);
@@ -59,8 +61,8 @@ void TimerQueue::addTimerInLoop(Timer *timer) {
 
 bool TimerQueue::insert(Timer *timer) {
   bool earliestChanged = false;
-  TimeStamp when = timer->expiration();
-  auto it = timers_.begin();
+  TimeStamp when       = timer->expiration();
+  auto it              = timers_.begin();
 
   if (it == timers_.end() || when < it->first) {
     earliestChanged = true;
@@ -79,25 +81,26 @@ void TimerQueue::resetTimerfd() {
     memset(&newValue, 0, sizeof(newValue));
     int ret = ::timerfd_settime(timerfd_, 0, &newValue, nullptr);
     if (ret < 0) {
-      Logger::log(LogLevel::ERROR, "timerfd_settime() failed");
+      LOG_ERROR("timerfd_settime() failed");
     }
     return;
   }
 
   TimeStamp earliestTime = timers_.begin()->first;
-  TimeStamp now = TimeStamp::now();
+  TimeStamp now          = TimeStamp::now();
 
   int64_t microsendconds = earliestTime.microSecondsSinceEpoch() - now.microSecondsSinceEpoch();
-  microsendconds = std::max<int64_t>(microsendconds, microsendconds);
+  microsendconds         = std::max<int64_t>(microsendconds, microsendconds);
 
   struct itimerspec newValue;
   memset(&newValue, 0, sizeof(newValue));
   newValue.it_value.tv_sec = static_cast<time_t>(microsendconds / kMicroSecondsPerSecond);
-  newValue.it_value.tv_nsec = static_cast<long>((microsendconds % kMicroSecondsPerSecond) * kTimeScaleFactor);
+  newValue.it_value.tv_nsec =
+      static_cast<long>((microsendconds % kMicroSecondsPerSecond) * kTimeScaleFactor);
 
   int ret = ::timerfd_settime(timerfd_, 0, &newValue, nullptr);
   if (ret < 0) {
-    Logger::log(LogLevel::ERROR, "timerfd_settime() failed");
+    LOG_ERROR("timerfd_settime() failed");
   }
 }
 
@@ -135,8 +138,8 @@ void TimerQueue::readTimerfd() const {
   ssize_t result = ::read(timerfd_, &howmany, sizeof howmany);
 
   if (result != sizeof(howmany)) {
-    std::string errorMessage = std::format("Reads {} bytes instead of 8", result);
-    Logger::log(LogLevel::ERROR, errorMessage);
+    std::string message = std::format("Reads {} bytes instead of 8", result);
+    LOG_ERROR(message);
   }
 }
 
@@ -153,7 +156,7 @@ int TimerQueue::getTimeout() const {
     return -1;
   }
 
-  TimeStamp now = TimeStamp::now();
+  TimeStamp now  = TimeStamp::now();
   TimeStamp next = nextExpiredTime();
 
   if (!next.valid()) {

@@ -7,6 +7,7 @@
 #include <future>
 #include <gtest/gtest.h>
 #include <netinet/in.h>
+
 #include <sys/socket.h>
 
 namespace server::testing {
@@ -14,8 +15,8 @@ namespace server::testing {
 namespace {
 constexpr in_port_t DEFAULT_SERVER_PORT = 1234;
 constexpr in_port_t DEFAULT_CLIENT_PORT = 4321;
-constexpr size_t BUFFER_SIZE      = 1024;
-constexpr int TIMEOUT_SECONDS     = 5;
+constexpr size_t BUFFER_SIZE            = 1024;
+constexpr int TIMEOUT_SECONDS           = 5;
 } // namespace
 
 void ignoreSigPipe() {
@@ -117,27 +118,27 @@ protected:
     std::promise<void> promise;
     auto future = promise.get_future();
 
-    Logger::log(LogLevel::INFO, "Queuing task in event loop");
+    LOG_INFO("Queuing task in event loop");
 
     loop->queueInLoop([fn = std::forward<F>(fn), &promise]() mutable {
-      Logger::log(LogLevel::INFO, "Executing task in event loop");
+      LOG_INFO("Executing task in event loop");
       fn();
-      Logger::log(LogLevel::INFO, "Task completed, setting promise");
+      LOG_INFO("Task completed, setting promise");
       promise.set_value();
     });
 
-    Logger::log(LogLevel::INFO, "Waiting for task completion");
+    LOG_INFO("Waiting for task completion");
     auto status = future.wait_for(std::chrono::seconds(TIMEOUT_SECONDS));
     ASSERT_EQ(std::future_status::ready, status)
         << "Task in event loop did not complete within " << TIMEOUT_SECONDS << " seconds";
-    Logger::log(LogLevel::INFO, "Task completed successfully");
+    LOG_INFO("Task completed successfully");
   }
 
   std::thread loopThread;
-  EventLoop *loop{nullptr};
+  EventLoop *loop{ nullptr };
   std::shared_ptr<TcpConnection> connection;
   std::unique_ptr<SocketPair> sockets;
-  int clientFd{-1};
+  int clientFd{ -1 };
 };
 
 TEST_F(TcpConnectionTest, ShouldProvideConnectionInfo) {
@@ -260,15 +261,12 @@ TEST_F(TcpConnectionTest, ShouldHandleHighWaterMark) {
 
   auto future = waterMarkReached.get_future();
 
-  Logger::log(LogLevel::INFO, "Starting high water mark test");
+  LOG_INFO("Starting high water mark test");
 
   runInLoop([&]() {
     connection->setHighWaterMarkCallback(
         [&](const TcpConnectionPtr &, size_t size) {
-          Logger::log(
-              LogLevel::INFO,
-              "High water mark callback triggered with size: " + std::to_string(size)
-          );
+          LOG_INFO("High water mark callback triggered with size: " + std::to_string(size));
           waterMarkReached.set_value(size);
         },
         waterMark
@@ -292,7 +290,7 @@ TEST_F(TcpConnectionTest, ShouldHandleGracefulShutdown) {
 
   runInLoop([&]() {
     connection->setCloseCallback([&](const TcpConnectionPtr &) {
-      Logger::log(LogLevel::INFO, "Shutdown complete callback triggered");
+      LOG_INFO("Shutdown complete callback triggered");
       shutdownComplete.set_value();
     });
     connection->connectEstablished();
