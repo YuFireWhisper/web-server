@@ -1,5 +1,6 @@
 #pragma once
 
+#include "auto/auto_config.h"
 #include "include/types.h"
 
 #include <cstddef>
@@ -17,7 +18,7 @@
 namespace server {
 
 struct GlobalConfig {
-  std::string systemLogPath = "logs/system.log";
+  std::string systemLogPath = std::string(kPorjectRoot) + "logs/system.log";
   int timerCheckInterval    = 100;
   size_t maxTimers          = 10000;
   int pollTimeoutMs         = 10000;

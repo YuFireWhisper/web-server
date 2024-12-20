@@ -1,6 +1,7 @@
 #include "include/log.h"
 
-#include "auto/auto_config.h"
+#include "include/config_defaults.h"
+#include "include/config_manager.h"
 
 #include <array>
 #include <format>
@@ -136,6 +137,7 @@ bool LogWriter::ensureFileExists(const std::filesystem::path &path) {
   }
 }
 
+std::string Logger::systemLogPath_;
 std::filesystem::path Logger::defaultOutputPath_;
 LogWriter Logger::writer_;
 
@@ -144,7 +146,7 @@ void Logger::log(LogLevel level, std::string_view message, std::string_view file
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
-  writer_.writeFile(formattedMessage, kSystemLog);
+  writer_.writeFile(formattedMessage, systemLogPath_);
 
   if (!defaultOutputPath_.empty()) {
     writer_.writeFile(formattedMessage, defaultOutputPath_);
@@ -158,11 +160,17 @@ void Logger::log(
     std::string_view file,
     int line
 ) {
+  if (!systemLogPath_.empty()) {
+    ConfigManager &configManager = ConfigManager::getInstance();
+    auto *ctx = static_cast<GlobalContext *>(configManager.getContextByOffset(kHttpOffset));
+    systemLogPath_ = ctx->conf->systemLogPath; 
+  }
+
   LogEntry entry(level, message, file, line);
   auto formattedMessage = LogFormatter::format(entry);
 
   LogWriter::writeConsole(formattedMessage);
-  writer_.writeFile(formattedMessage, kSystemLog);
+  writer_.writeFile(formattedMessage, systemLogPath_);
   writer_.writeFile(formattedMessage, outputPath);
 }
 

@@ -74,6 +74,7 @@ public:
   static void clearDefaultOutputFile();
 
 private:
+  static std::string systemLogPath_;
   static std::filesystem::path defaultOutputPath_;
   static LogWriter writer_;
 };
