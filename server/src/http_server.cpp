@@ -5,6 +5,7 @@
 #include "include/http_request.h"
 #include "include/http_response.h"
 #include "include/inet_address.h"
+#include "include/router.h"
 #include "include/tcp_connection.h"
 #include "include/tcp_server.h"
 #include "include/time_stamp.h"
@@ -20,6 +21,7 @@ HttpServer::HttpServer(
     TcpServer::Option option
 )
     : server_(loop, listenAddr, name, option)
+    , router_(Router::getInstance())
     , httpCallback_([](const HttpRequest &req, HttpResponse *resp) {
       defaultHttpCallback(req, resp);
     })
@@ -35,6 +37,7 @@ HttpServer::HttpServer(
   server_.setMessageCallback([this](const TcpConnectionPtr &conn, Buffer *buf, TimeStamp time) {
     onMessage(conn, buf, time);
   });
+  Router::initializeMime();
 }
 
 void HttpServer::onConnection(const TcpConnectionPtr &conn) {
@@ -66,7 +69,7 @@ void HttpServer::onRequestComplete(
   if (request.hasError()) {
     errorCallback_(request, &response);
   } else {
-    httpCallback_(request, &response);
+    Router::getInstance().handle(request, &response);
   }
 
   Buffer buf;

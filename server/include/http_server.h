@@ -1,6 +1,7 @@
 #pragma once
 
 #include "include/http_request.h"
+#include "include/router.h"
 #include "include/tcp_connection.h"
 #include "include/tcp_server.h"
 
@@ -25,7 +26,7 @@ public:
 
   ~HttpServer() = default;
 
-  HttpServer(const HttpServer &) = delete;
+  HttpServer(const HttpServer &)            = delete;
   HttpServer &operator=(const HttpServer &) = delete;
 
   void start() { server_.start(); }
@@ -40,7 +41,7 @@ public:
 private:
   struct HttpContext {
     HttpRequest request;
-    bool expectingBody = false;
+    bool expectingBody    = false;
     bool parsingCompleted = false;
   };
 
@@ -53,6 +54,7 @@ private:
   static void defaultErrorCallback(const HttpRequest &req, HttpResponse *resp);
 
   TcpServer server_;
+  Router &router_;
   HttpRequestCallback httpCallback_;
   HttpRequestCallback notFoundCallback_;
   HttpRequestCallback errorCallback_;

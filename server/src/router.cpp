@@ -86,7 +86,7 @@ void Router::handle(const HttpRequest &req, HttpResponse *resp) {
     if (it == currentNode->children.end()) {
       it = currentNode->children.find("*");
       if (it == currentNode->children.end()) {
-        handleError(StatusCode::k404NotFound);
+        handleError(StatusCode::k404NotFound, resp);
         return;
       }
     }
@@ -94,7 +94,7 @@ void Router::handle(const HttpRequest &req, HttpResponse *resp) {
   }
 
   if (req.method() != currentNode->method) {
-    handleError(StatusCode::k405MethodNotAllowed);
+    handleError(StatusCode::k405MethodNotAllowed, resp);
     return;
   }
 
@@ -184,6 +184,14 @@ void Router::initializeMime() {
   }
 
   mimeFile.close();
+}
+
+void Router::handleError(StatusCode errorCode, HttpResponse* resp) const {
+    auto it = errorHandlers_.find(errorCode);
+    if (it != errorHandlers_.end()) {
+        it->second();
+    }
+    resp->setStatusCode(errorCode);
 }
 
 void Router::handleError(StatusCode errorCode) const {

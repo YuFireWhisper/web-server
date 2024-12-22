@@ -1,3 +1,5 @@
+#pragma once
+
 #include "include/config_defaults.h"
 #include "include/types.h"
 
@@ -8,7 +10,7 @@ class HttpResponse;
 
 class Router {
 public:
-  static Router& getInstance() {
+  static Router &getInstance() {
     static Router instance;
     return instance;
   }
@@ -23,10 +25,9 @@ public:
   static void initializeMime();
 
 private:
-  Router() {
-    routerNode_ = LocationConfig();
-  }
+  Router() { routerNode_ = LocationConfig(); }
   void handleError(StatusCode errorCode) const;
+  void handleError(StatusCode errorCode, HttpResponse *resp) const;
   static std::string getMimeType(const std::string &extension);
   static void
   handleCaching(const std::filesystem::path &filePath, const HttpRequest &req, HttpResponse *resp);
