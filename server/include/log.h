@@ -44,7 +44,8 @@ private:
 
 class LogFormatter {
 public:
-  [[nodiscard]] static std::string format(const LogEntry &entry);
+  [[nodiscard]] static std::string formatForConsole(const LogEntry &entry);
+  [[nodiscard]] static std::string formatForFile(const LogEntry &entry);
 
 private:
   static const char *getLevelName(LogLevel level);
@@ -72,6 +73,8 @@ public:
       int line);
   static void setDefaultOutputFile(const std::filesystem::path &path);
   static void clearDefaultOutputFile();
+
+  static void setSystemLogPath(const std::string &path) { systemLogPath_ = path; }
 
 private:
   static std::string systemLogPath_;
