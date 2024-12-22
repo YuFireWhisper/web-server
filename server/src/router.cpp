@@ -19,10 +19,6 @@
 #include <utility>
 
 namespace server {
-
-Router::Router(LocationConfig node)
-    : routerNode_(std::move(node)) {}
-
 void Router::addRoute(const LocationConfig &node) {
   std::vector<std::string> segmentVector = splitPath(node.name);
 
@@ -33,19 +29,19 @@ void Router::addRoute(const LocationConfig &node) {
     const std::string &currentSegment = segmentVector[index];
 
     if (currentSegment == "*") {
-      currentNode->children[currentSegment]    = std::make_unique<LocationConfig>();
+      currentNode->children[currentSegment]    = std::make_shared<LocationConfig>();
       *(currentNode->children[currentSegment]) = node;
       return;
     }
 
     if (index == segmentVector.size() - 1) {
-      currentNode->children[currentSegment]    = std::make_unique<LocationConfig>();
+      currentNode->children[currentSegment]    = std::make_shared<LocationConfig>();
       *(currentNode->children[currentSegment]) = node;
       return;
     }
 
     if (currentNode->children.find(currentSegment) == currentNode->children.end()) {
-      currentNode->children[currentSegment] = std::make_unique<LocationConfig>();
+      currentNode->children[currentSegment] = std::make_shared<LocationConfig>();
     }
 
     currentNode = currentNode->children[currentSegment].get();

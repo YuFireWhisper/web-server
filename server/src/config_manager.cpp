@@ -3,6 +3,7 @@
 #include "include/config_defaults.h"
 #include "include/log.h"
 #include "include/types.h"
+#include "include/router.h"
 
 #include <cctype>
 #include <cstdint>
@@ -233,6 +234,7 @@ bool ConfigManager::hasFlag(CommandType input, CommandType flag) {
 
 bool ConfigManager::setParentContext(ConfigContext &context) {
   if (context.now == kLocationOffset) {
+    handleLocationEnd(context.locationContext);
     context.now = kServerOffset;
     return true;
   }
@@ -261,5 +263,10 @@ void ConfigManager::setCurrentText(const ConfigContext &context) {
 void* ConfigManager::getConfigByOffset(size_t offset) {
   auto* ctx = static_cast<ContextBase*>(getContextByOffset(offset));
   return ctx->confB;
+}
+
+void ConfigManager::handleLocationEnd(LocationContext* ctx) {
+  auto& router = Router::getInstance();
+  router.addRoute(*ctx->conf);
 }
 } // namespace server

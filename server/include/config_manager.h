@@ -32,6 +32,9 @@ private:
   static bool hasFlag(CommandType input, CommandType flag);
   static bool setParentContext(ConfigContext &context);
   CommandType getContextType(ConfigContext *context);
+  static void setLocationValue(const std::vector<std::string> &value, void *locationC, size_t);
+  static void setLocationName(const std::vector<std::string> &value, void *locationC, size_t);
+  static void handleLocationEnd(LocationContext* ctx);
 
   ConfigContext context_;
   std::unordered_map<std::string, ServerCommand> commands_;

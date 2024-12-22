@@ -150,7 +150,7 @@ struct ServerCommand {
   CommandType type;
   size_t confOffset;
   size_t offset;
-  std::function<void *(const std::vector<std::string>&, void *, size_t)> set;
+  std::function<void (const std::vector<std::string>&, void *, size_t)> set;
   std::function<void *(size_t, size_t)> post;
 };
 

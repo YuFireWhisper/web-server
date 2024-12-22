@@ -8,7 +8,10 @@ class HttpResponse;
 
 class Router {
 public:
-  Router(LocationConfig node);
+  static Router& getInstance() {
+    static Router instance;
+    return instance;
+  }
 
   Router(const Router &)            = delete;
   Router &operator=(const Router &) = delete;
@@ -20,6 +23,9 @@ public:
   static void initializeMime();
 
 private:
+  Router() {
+    routerNode_ = LocationConfig();
+  }
   void handleError(StatusCode errorCode) const;
   static std::string getMimeType(const std::string &extension);
   static void

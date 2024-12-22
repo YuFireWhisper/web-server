@@ -52,14 +52,13 @@ struct ServerConfig {
 };
 
 struct LocationConfig {
-  std::string name;
+  std::string name = "/";
   Method method;
   std::filesystem::path staticFile;
   std::filesystem::path rootPath;
   std::string proxyPath;
   std::unordered_map<std::string, std::shared_ptr<LocationConfig>> children;
   RouteHandler handler;
-  bool isEndpoint = false;
 };
 
 struct ContextBase {

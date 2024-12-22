@@ -14,8 +14,7 @@ protected:
   static void SetUpTestSuite() { Router::initializeMime(); }
 
   void SetUp() override {
-    routerConfig_.method = Method::kGet;
-    router_              = std::make_unique<Router>(routerConfig_);
+    router_ = &Router::getInstance();
     setupTestFiles();
   }
 
@@ -38,29 +37,24 @@ protected:
   static HttpRequest createRequest(const std::string &path) {
     Buffer buf(1024);
     HttpRequest req;
-    std::string requestStr = "GET " + path
-                             + " HTTP/1.1\r\n"
-                               "Host: test.com\r\n"
-                               "\r\n";
+    std::string requestStr = "GET " + path + " HTTP/1.1\r\nHost: test.com\r\n\r\n";
     buf.append(requestStr);
     req.parseRequest(&buf);
     return req;
   }
 
-  LocationConfig routerConfig_;
-  std::unique_ptr<Router> router_;
+  Router *router_;
   const std::filesystem::path testDir_{ "test_static" };
 };
 
-TEST_F(RouterTest, HandlesValidRouteRequest) {
-  LocationConfig homeRoute;
-  homeRoute.name       = "/home";
-  homeRoute.method     = Method::kGet;
-  bool handlerCalled   = false;
-  homeRoute.handler    = [&handlerCalled]() { handlerCalled = true; };
-  homeRoute.isEndpoint = true;
+TEST_F(RouterTest, ShouldHandleBasicRouteRequest) {
+  LocationConfig route;
+  route.name         = "/home";
+  route.method       = Method::kGet;
+  bool handlerCalled = false;
+  route.handler      = [&handlerCalled]() { handlerCalled = true; };
 
-  router_->addRoute(homeRoute);
+  router_->addRoute(route);
 
   auto request = createRequest("/home");
   HttpResponse response(Version::kHttp11);
@@ -71,11 +65,10 @@ TEST_F(RouterTest, HandlesValidRouteRequest) {
   EXPECT_EQ(response.statusCode(), StatusCode::k200Ok);
 }
 
-TEST_F(RouterTest, HandlesMismatchedHttpMethod) {
+TEST_F(RouterTest, ShouldHandleMethodMismatch) {
   LocationConfig route;
-  route.name       = "/api";
-  route.method     = Method::kPost; // 設置為 POST
-  route.isEndpoint = true;
+  route.name   = "/api";
+  route.method = Method::kPost;
   router_->addRoute(route);
 
   bool errorHandlerCalled = false;
@@ -83,7 +76,7 @@ TEST_F(RouterTest, HandlesMismatchedHttpMethod) {
     errorHandlerCalled = true;
   });
 
-  auto request = createRequest("/api"); // 使用 GET 請求
+  auto request = createRequest("/api");
   HttpResponse response(Version::kHttp11);
 
   router_->handle(request, &response);
@@ -91,12 +84,11 @@ TEST_F(RouterTest, HandlesMismatchedHttpMethod) {
   EXPECT_TRUE(errorHandlerCalled);
 }
 
-TEST_F(RouterTest, ServesStaticFileSuccessfully) {
+TEST_F(RouterTest, ShouldServeStaticFile) {
   LocationConfig staticRoute;
   staticRoute.name       = "/static";
   staticRoute.method     = Method::kGet;
   staticRoute.staticFile = std::filesystem::current_path() / testDir_ / "test.html";
-  staticRoute.isEndpoint = true;
 
   router_->addRoute(staticRoute);
 
@@ -109,12 +101,11 @@ TEST_F(RouterTest, ServesStaticFileSuccessfully) {
   EXPECT_FALSE(response.body().empty());
 }
 
-TEST_F(RouterTest, HandlesCachingHeaders) {
+TEST_F(RouterTest, ShouldHandleCachingHeaders) {
   LocationConfig staticRoute;
   staticRoute.name       = "/cached";
   staticRoute.method     = Method::kGet;
   staticRoute.staticFile = std::filesystem::current_path() / testDir_ / "test.html";
-  staticRoute.isEndpoint = true;
 
   router_->addRoute(staticRoute);
 
@@ -128,13 +119,35 @@ TEST_F(RouterTest, HandlesCachingHeaders) {
   EXPECT_TRUE(headers.contains("Last-Modified"));
 }
 
-TEST_F(RouterTest, HandlesWildcardRoutes) {
+TEST_F(RouterTest, ShouldHandleNestedRoutes) {
+  LocationConfig parentRoute;
+  parentRoute.name   = "/api";
+  parentRoute.method = Method::kGet;
+
+  LocationConfig childRoute;
+  childRoute.name    = "/api/users";
+  childRoute.method  = Method::kGet;
+  bool handlerCalled = false;
+  childRoute.handler = [&handlerCalled]() { handlerCalled = true; };
+
+  router_->addRoute(parentRoute);
+  router_->addRoute(childRoute);
+
+  auto request = createRequest("/api/users");
+  HttpResponse response(Version::kHttp11);
+
+  router_->handle(request, &response);
+
+  EXPECT_TRUE(handlerCalled);
+  EXPECT_EQ(response.statusCode(), StatusCode::k200Ok);
+}
+
+TEST_F(RouterTest, ShouldHandleWildcardRoutes) {
   LocationConfig wildcardRoute;
-  wildcardRoute.name       = "/api/*";
-  wildcardRoute.method     = Method::kGet;
-  bool handlerCalled       = false;
-  wildcardRoute.handler    = [&handlerCalled]() { handlerCalled = true; };
-  wildcardRoute.isEndpoint = true;
+  wildcardRoute.name    = "/api/*";
+  wildcardRoute.method  = Method::kGet;
+  bool handlerCalled    = false;
+  wildcardRoute.handler = [&handlerCalled]() { handlerCalled = true; };
 
   router_->addRoute(wildcardRoute);
 
@@ -144,6 +157,21 @@ TEST_F(RouterTest, HandlesWildcardRoutes) {
   router_->handle(request, &response);
 
   EXPECT_TRUE(handlerCalled);
+  EXPECT_EQ(response.statusCode(), StatusCode::k200Ok);
+}
+
+TEST_F(RouterTest, ShouldHandle404ForUnknownRoute) {
+  bool errorHandlerCalled = false;
+  router_->addErrorHandler(StatusCode::k404NotFound, [&errorHandlerCalled]() {
+    errorHandlerCalled = true;
+  });
+
+  auto request = createRequest("/unknown");
+  HttpResponse response(Version::kHttp11);
+
+  router_->handle(request, &response);
+
+  EXPECT_TRUE(errorHandlerCalled);
 }
 
 } // namespace server::testing
