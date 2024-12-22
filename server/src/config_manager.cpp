@@ -128,10 +128,6 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
 
   const auto &cmd = it->second;
 
-  if (cmd.confOffset != 0U) {
-    context_.now = cmd.confOffset;
-    return;
-  }
 
   auto cmdType       = static_cast<uint32_t>(cmd.type);
   uint32_t argsType  = cmdType & argsMask;
@@ -173,7 +169,7 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
   }
 
   try {
-    auto *ctx  = getContextByOffset(context_.now);
+    auto *ctx  = getConfigByOffset(cmd.offset);
     char *base = reinterpret_cast<char *>(&ctx);
 
     switch (valueType) {
@@ -225,7 +221,7 @@ CommandType ConfigManager::getContextType(ConfigContext *context) {
   if (ctx == nullptr) {
     throw std::runtime_error("Invalid context");
   }
-  return static_cast<ContextBase *>(ctx)->type;
+  return static_cast<ContextBase *>(ctx)->typeB;
 }
 
 bool ConfigManager::hasFlag(CommandType input, CommandType flag) {
@@ -257,5 +253,10 @@ ConfigContext &ConfigManager::getCurrentContext() {
 
 void ConfigManager::setCurrentText(const ConfigContext &context) {
   context_ = context;
+}
+
+void* ConfigManager::getConfigByOffset(size_t offset) {
+  auto* ctx = static_cast<ContextBase*>(getContextByOffset(offset));
+  return ctx->confB;
 }
 } // namespace server

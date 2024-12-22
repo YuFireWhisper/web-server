@@ -23,6 +23,7 @@ public:
   ConfigContext &getCurrentContext();
   void setCurrentText(const ConfigContext &context);
   void *getContextByOffset(size_t offset);
+  void *getConfigByOffset(size_t offset);
 
 private:
   ConfigManager();

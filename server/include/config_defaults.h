@@ -63,30 +63,43 @@ struct LocationConfig {
 };
 
 struct ContextBase {
-  CommandType type;
+  CommandType typeB;
+  void *confB;
 };
 
 struct GlobalContext : public ContextBase {
   GlobalConfig *conf;
-  GlobalContext() { type = CommandType::global; }
+  GlobalContext() {
+    typeB = CommandType::global;
+    confB = conf;
+  }
 };
 
 struct HttpContext : public ContextBase {
   HttpConfig *conf;
   GlobalContext *parent;
-  HttpContext() { type = CommandType::http; }
+  HttpContext() {
+    typeB = CommandType::http;
+    confB = conf;
+  }
 };
 
 struct ServerContext : public ContextBase {
   ServerConfig *conf;
   HttpContext *parent;
-  ServerContext() { type = CommandType::server; }
+  ServerContext() {
+    typeB = CommandType::server;
+    confB = conf;
+  }
 };
 
 struct LocationContext : public ContextBase {
   LocationConfig *conf;
   ServerContext *parent;
-  LocationContext() { type = CommandType::location; }
+  LocationContext() {
+    typeB = CommandType::location;
+    confB = conf;
+  }
 };
 
 struct ConfigContext {
