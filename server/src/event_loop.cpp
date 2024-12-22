@@ -27,7 +27,7 @@ EventLoop::~EventLoop() {
 
 void EventLoop::loop() {
   looping_ = true;
-  quit_ = false;
+  quit_    = false;
 
   while (!quit_) {
     activeChannels_.clear();

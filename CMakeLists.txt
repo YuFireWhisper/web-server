@@ -36,6 +36,13 @@ add_library(server
     server/src/router.cpp
 )
 
+add_executable(web_server main.cpp)
+target_link_libraries(web_server
+    PRIVATE
+    server
+    pthread
+)
+
 enable_testing()
 find_package(GTest REQUIRED)
 include(GoogleTest)

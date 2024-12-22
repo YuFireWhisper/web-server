@@ -1,6 +1,7 @@
 #include "include/channel.h"
 
 #include "include/event_loop.h"
+#include "include/log.h"
 #include "include/time_stamp.h"
 #include "include/types.h"
 
@@ -24,10 +25,6 @@ Channel::~Channel() {
   cleanupResources();
 }
 
-void Channel::setReadCallback(const Functor &cb) {
-  readCallback_ = [cb](TimeStamp) { cb(); };
-}
-
 void Channel::cleanupResources() {
   if (addedToLoop_) {
     disableAll();
@@ -42,6 +39,7 @@ void Channel::cleanupResources() {
 }
 
 void Channel::handleEvent(TimeStamp receiveTime) {
+  LOG_DEBUG("Channel fd=" + std::to_string(fd_) + " handleEvent with revents=" + std::to_string(revents_));
   if (!eventHandling_) {
     eventHandling_ = true;
     processEvents(receiveTime);
@@ -54,30 +52,34 @@ void Channel::handleEventWithGuard(TimeStamp receiveTime) {
 }
 
 void Channel::processEvents(TimeStamp receiveTime) {
-  if (fd_ == loop_->getWakeupFd() && (revents_ & EPOLLIN) != 0) {
-    loop_->handleWakeup();
+  LOG_DEBUG("Channel fd=" + std::to_string(fd_) + " 處理事件");
+
+  if (((revents_ & EPOLLHUP) != 0u) && !(revents_ & EPOLLIN)) {
+    if (closeCallback_)
+      closeCallback_();
     return;
   }
 
-  if (((revents_ & EPOLLHUP) != 0) && ((revents_ & EPOLLIN) == 0)) {
-    if (closeCallback_) {
-      closeCallback_();
-    }
-  }
-  if ((revents_ & EPOLLERR) != 0) {
-    if (errorCallback_) {
+  if (revents_ & EPOLLERR) {
+    if (errorCallback_)
       errorCallback_();
-    }
+    return;
   }
-  if ((revents_ & (EPOLLIN | EPOLLPRI)) != 0) {
-    if (readCallback_) {
-      readCallback_(receiveTime);
+
+  // 再處理讀寫事件
+  if (revents_ & EPOLLIN) {
+        if (fd_ == loop_->getWakeupFd()) {
+            LOG_DEBUG("處理喚醒事件");
+            loop_->handleWakeup();
+        } else if (readCallback_) {
+            LOG_DEBUG("Channel fd=" + std::to_string(fd_) + " 執行讀取回調");
+            readCallback_(receiveTime);
+        }
     }
-  }
-  if ((revents_ & EPOLLOUT) != 0) {
-    if (writeCallback_) {
+
+  if (revents_ & EPOLLOUT) {
+    if (writeCallback_)
       writeCallback_();
-    }
   }
 }
 

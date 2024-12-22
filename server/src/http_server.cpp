@@ -5,6 +5,7 @@
 #include "include/http_request.h"
 #include "include/http_response.h"
 #include "include/inet_address.h"
+#include "include/log.h"
 #include "include/router.h"
 #include "include/tcp_connection.h"
 #include "include/tcp_server.h"
@@ -41,12 +42,15 @@ HttpServer::HttpServer(
 }
 
 void HttpServer::onConnection(const TcpConnectionPtr &conn) {
+  LOG_DEBUG("GOOD on Connection");
   if (conn->connected()) {
+    LOG_DEBUG("is connected");
     conn->setContext(HttpContext());
   }
 }
 
 void HttpServer::onMessage(const TcpConnectionPtr &conn, Buffer *buf, TimeStamp receiveTime) {
+  LOG_DEBUG("GOOD on message");
   auto *context = std::any_cast<HttpContext>(conn->getMutableContext());
 
   if (!context->parsingCompleted) {
@@ -61,14 +65,17 @@ void HttpServer::onRequestComplete(
     const TcpConnectionPtr &conn,
     TimeStamp receiveTime [[maybe_unused]]
 ) {
+  LOG_DEBUG("GOOD on request");
   auto *context              = std::any_cast<HttpContext>(conn->getMutableContext());
   const HttpRequest &request = context->request;
 
   HttpResponse response;
 
   if (request.hasError()) {
+    LOG_DEBUG("ERROR");
     errorCallback_(request, &response);
   } else {
+    LOG_DEBUG("go handle");
     Router::getInstance().handle(request, &response);
   }
 

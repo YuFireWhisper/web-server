@@ -2,6 +2,7 @@
 
 #include "include/buffer.h"
 #include "include/inet_address.h"
+#include "include/log.h"
 
 #include <asm-generic/socket.h>
 #include <cstring>
@@ -31,12 +32,14 @@ Socket::Socket()
 
 Socket::Socket(int socketFd)
     : socketFd_(socketFd) {
+  LOG_DEBUG("創建新的 Socket，fd=" + std::to_string(socketFd_));
   if (socketFd_ < 0) {
     throw SocketException("Socket creation");
   }
 }
 
 Socket::~Socket() {
+  LOG_DEBUG("關閉 Socket，fd=" + std::to_string(socketFd_));
   ::close(socketFd_);
 }
 
@@ -85,7 +88,7 @@ Socket Socket::acceptNewConnection() const {
 }
 
 void Socket::setSocketFlag(int level, int flag, bool enabled) const {
-  int value = enabled ? 1 : 0;
+  int value  = enabled ? 1 : 0;
   int result = ::setsockopt(socketFd_, level, flag, &value, sizeof(value));
   if (result < 0) {
     throw SocketException("Socket flag configuration", errno);
@@ -142,14 +145,12 @@ Socket::ConnectionInfo Socket::getConnectionInfo() const {
     throw SocketException("Get connection info", errno);
   }
 
-  return ConnectionInfo{
-      .stateCode = rawInfo.tcpi_state,
-      .rtt = rawInfo.tcpi_rtt,
-      .rttVar = rawInfo.tcpi_rttvar,
-      .congestionWindow = rawInfo.tcpi_snd_cwnd,
-      .retransmits = rawInfo.tcpi_retransmits,
-      .totalRetransmits = rawInfo.tcpi_total_retrans
-  };
+  return ConnectionInfo{ .stateCode        = rawInfo.tcpi_state,
+                         .rtt              = rawInfo.tcpi_rtt,
+                         .rttVar           = rawInfo.tcpi_rttvar,
+                         .congestionWindow = rawInfo.tcpi_snd_cwnd,
+                         .retransmits      = rawInfo.tcpi_retransmits,
+                         .totalRetransmits = rawInfo.tcpi_total_retrans };
 }
 
 InetAddress Socket::getLocalAddress() const {
@@ -185,7 +186,7 @@ bool Socket::hasActiveConnection() const {
 }
 
 int Socket::getLastError() const {
-  int error = 0;
+  int error     = 0;
   socklen_t len = sizeof(error);
   ::getsockopt(socketFd_, SOL_SOCKET, SO_ERROR, &error, &len);
   return error;
@@ -196,7 +197,7 @@ bool Socket::hasError() const {
 }
 
 size_t Socket::readData(Buffer &targetBuffer) const {
-  int savedErrno = 0;
+  int savedErrno    = 0;
   ssize_t bytesRead = targetBuffer.readData(socketFd_, &savedErrno);
 
   if (bytesRead < 0) {
@@ -214,7 +215,7 @@ size_t Socket::writeData(const Buffer &sourceBuffer) const {
 }
 
 size_t Socket::writeData(const void *dataPtr, size_t dataLength) const {
-  size_t bytesSent = 0;
+  size_t bytesSent       = 0;
   const char *currentPtr = static_cast<const char *>(dataPtr);
 
   while (bytesSent < dataLength) {
@@ -234,6 +235,20 @@ size_t Socket::writeData(const void *dataPtr, size_t dataLength) const {
   }
 
   return bytesSent;
+}
+
+void Socket::attachFd(int fd) {
+  if (socketFd_ >= 0) {
+    ::close(socketFd_);
+  }
+  socketFd_ = fd;
+  LOG_DEBUG("Socket 附加到 fd=" + std::to_string(fd));
+}
+
+int Socket::detachFd() {
+    int fd    = socketFd_;
+    socketFd_ = -1;
+    return fd;
 }
 
 } // namespace server

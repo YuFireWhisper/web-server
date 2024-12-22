@@ -3,6 +3,7 @@
 #include "include/acceptor.h"
 #include "include/event_loop.h"
 #include "include/event_loop_thread_pool.h"
+#include "include/log.h"
 #include "include/tcp_connection.h"
 
 #include <array>
@@ -55,6 +56,7 @@ void TcpServer::start() {
 }
 
 void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
+  LOG_DEBUG("處理新連接，sockfd=" + std::to_string(sockfd));
   loop_->assertInLoopThread();
 
   EventLoop *ioLoop = threadPool_->getNextLoop();
@@ -64,13 +66,15 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
   std::array<char, kBufferSize> buf;
   snprintf(buf.data(), buf.size(), "-%s#%d", ipPort_.c_str(), nextConnId_);
   ++nextConnId_;
-
   std::string connName = name_ + buf.data();
+
+  auto socket = std::make_unique<Socket>();
+  socket->attachFd(sockfd);
 
   TcpConnectionPtr conn = std::make_shared<TcpConnection>(
       ioLoop,
       connName,
-      std::make_unique<Socket>(sockfd),
+      std::move(socket),
       acceptor_->getLocalAddress(),
       peerAddr
   );

@@ -17,6 +17,8 @@ class Timer;
 class Channel;
 class Poller;
 class EventLoop;
+class HttpResponse;
+class HttpRequest;
 
 using EventCallback     = std::function<void()>;
 using ReadEventCallback = std::function<void(TimeStamp)>;
@@ -53,8 +55,8 @@ static constexpr size_t kDefaultHighWaterMark = kMib * 64;
 
 using ThreadInitCallback = std::function<void(EventLoop *)>;
 
-static constexpr std::string_view kCRLF{"\r\n"};
-static constexpr std::string_view kCRLFCRLF{"\r\n\r\n"};
+static constexpr std::string_view kCRLF{ "\r\n" };
+static constexpr std::string_view kCRLFCRLF{ "\r\n\r\n" };
 
 enum class Method : int8_t { kInvalid, kGet, kPost, kHead, kPut, kDelete };
 enum class Version : int8_t { kUnknown, kHttp10, kHttp11 };
@@ -150,11 +152,11 @@ struct ServerCommand {
   CommandType type;
   size_t confOffset;
   size_t offset;
-  std::function<void (const std::vector<std::string>&, void *, size_t)> set;
+  std::function<void(const std::vector<std::string> &, void *, size_t)> set;
   std::function<void *(size_t, size_t)> post;
 };
 
-using RouteHandler = std::function<void()>;
+using RouteHandler = std::function<void(const HttpRequest &req, HttpResponse *resp)>;
 
 inline CommandType operator|(CommandType first, CommandType second) {
   return static_cast<CommandType>(

@@ -1,6 +1,7 @@
 #include "include/epoll_poller.h"
 
 #include "include/channel.h"
+#include "include/log.h"
 
 #include <climits>
 #include <cstring>
@@ -117,7 +118,7 @@ TimeStamp EPollPoller::doPoll(int timeoutMs) {
 void EPollPoller::handleActiveChannels(int numEvents) {
   for (int i = 0; i < numEvents; ++i) {
     auto *channel = static_cast<Channel *>(events_[i].data.ptr);
-    int events = static_cast<int>(events_[i].events & INT_MAX);
+    int events    = static_cast<int>(events_[i].events & INT_MAX);
     channel->setRevents(events);
     activeChannels_->push_back(channel);
   }
@@ -129,6 +130,11 @@ void EPollPoller::handleActiveChannels(int numEvents) {
 
 void EPollPoller::updateChannel(Channel *channel) {
   assertInLoopThread();
+
+  LOG_DEBUG(
+      "Updating channel fd=" + std::to_string(channel->fd())
+      + " events=" + std::to_string(channel->events())
+  );
 
   if (channel->fd() < 0) {
     return;
@@ -172,6 +178,7 @@ void EPollPoller::processExistingChannel(EPollChannel &epollChannel) const {
 }
 
 void EPollPoller::removeChannel(Channel *channel) {
+  LOG_DEBUG("移除 Channel，fd=" + std::to_string(channel->fd()));
   assertInLoopThread();
 
   if (!hasChannel(channel)) {
@@ -189,6 +196,7 @@ void EPollPoller::removeChannel(Channel *channel) {
 
   channels_.erase(channel->fd());
   epollChannel.setNew();
+  LOG_DEBUG("Channel 移除完成");
 }
 
 void EPollPoller::cleanupChannels() {

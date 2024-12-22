@@ -21,37 +21,67 @@
 namespace server {
 void Router::addRoute(const LocationConfig &node) {
   std::vector<std::string> segmentVector = splitPath(node.name);
+  LocationConfig *currentNode            = &routerNode_;
 
-  size_t index                = 0;
-  LocationConfig *currentNode = &routerNode_;
+  LOG_DEBUG("開始處理路由: " + node.name);
+  LOG_DEBUG("路徑片段數量: " + std::to_string(segmentVector.size()));
 
-  while (index < segmentVector.size()) {
+  for (size_t index = 0; index < segmentVector.size(); ++index) {
     const std::string &currentSegment = segmentVector[index];
-
-    if (currentSegment == "*") {
-      currentNode->children[currentSegment]    = std::make_shared<LocationConfig>();
-      *(currentNode->children[currentSegment]) = node;
-      return;
-    }
+    LOG_DEBUG("處理第 " + std::to_string(index + 1) + " 個片段: " + currentSegment);
 
     if (index == segmentVector.size() - 1) {
-      currentNode->children[currentSegment]    = std::make_shared<LocationConfig>();
-      *(currentNode->children[currentSegment]) = node;
+      // 最後一個片段的處理
+      if (currentNode->children.find(currentSegment) != currentNode->children.end()) {
+        // 更新已存在的路由，保留子節點
+        LOG_DEBUG("檢測到重複的route: " + node.name);
+        LOG_DEBUG("開始更新現有路由配置...");
+
+        auto existingChildren = currentNode->children[currentSegment]->children;
+        auto childrenCount    = existingChildren.size();
+        LOG_DEBUG("保存現有子節點數量: " + std::to_string(childrenCount));
+
+        *(currentNode->children[currentSegment])        = node;
+        currentNode->children[currentSegment]->children = existingChildren;
+
+        LOG_DEBUG("路由更新完成: " + node.name);
+        LOG_DEBUG(
+            "保留原有子節點數量: "
+            + std::to_string(currentNode->children[currentSegment]->children.size())
+        );
+      } else {
+        // 新增路由
+        LOG_DEBUG("新增路由節點: " + currentSegment);
+        currentNode->children[currentSegment]    = std::make_shared<LocationConfig>();
+        *(currentNode->children[currentSegment]) = node;
+        LOG_DEBUG("新路由節點創建完成");
+      }
+
+      LOG_DEBUG("路由處理完成: " + node.name);
       return;
     }
 
+    // 非最後片段的處理
     if (currentNode->children.find(currentSegment) == currentNode->children.end()) {
+      LOG_DEBUG("創建中間節點: " + currentSegment);
       currentNode->children[currentSegment] = std::make_shared<LocationConfig>();
+    } else {
+      LOG_DEBUG("使用已存在的中間節點: " + currentSegment);
     }
 
     currentNode = currentNode->children[currentSegment].get();
-    ++index;
+    LOG_DEBUG("移動到下一個節點: " + currentSegment);
   }
 }
 
 std::vector<std::string> Router::splitPath(const std::string &path) {
   std::vector<std::string> segmentVector;
   std::string segment;
+
+  if (path == "/") {
+    segmentVector.emplace_back("/");
+    return segmentVector;
+  }
 
   size_t start = (path[0] == '/') ? 1 : 0;
 
@@ -78,6 +108,7 @@ void Router::addErrorHandler(StatusCode errorCode, const RouteHandler &func) {
 }
 
 void Router::handle(const HttpRequest &req, HttpResponse *resp) {
+  LOG_DEBUG("處理請求: " + req.path());
   std::vector<std::string> segmentVector = splitPath(req.path());
   LocationConfig *currentNode            = &routerNode_;
 
@@ -93,9 +124,16 @@ void Router::handle(const HttpRequest &req, HttpResponse *resp) {
     currentNode = it->second.get();
   }
 
-  if (req.method() != currentNode->method) {
+  if (currentNode->method != Method::kInvalid && req.method() != currentNode->method) {
+    LOG_DEBUG("Method is not match");
     handleError(StatusCode::k405MethodNotAllowed, resp);
     return;
+  }
+
+  LOG_DEBUG("currentNode的靜態文件的路徑為: " + currentNode->staticFile.string());
+
+  if (!currentNode->staticFile.empty()) {
+    LOG_DEBUG("嘗試提供靜態文件: " + currentNode->staticFile.string());
   }
 
   if (!currentNode->staticFile.empty() && serveStaticFile(currentNode->staticFile, req, resp)) {
@@ -103,8 +141,10 @@ void Router::handle(const HttpRequest &req, HttpResponse *resp) {
   }
 
   if (currentNode->handler) {
-    currentNode->handler();
-    resp->setStatusCode(StatusCode::k200Ok);
+    LOG_DEBUG("執行路由處理器");
+    currentNode->handler(req, resp);
+  } else {
+    handleError(StatusCode::k500InternalServerError, resp);
   }
 }
 
@@ -113,6 +153,7 @@ bool Router::serveStaticFile(
     const HttpRequest &req,
     HttpResponse *resp
 ) const {
+  LOG_DEBUG("開始處理靜態文件");
   if (!std::filesystem::exists(staticFilePath)) {
     return false;
   }
@@ -186,20 +227,18 @@ void Router::initializeMime() {
   mimeFile.close();
 }
 
-void Router::handleError(StatusCode errorCode, HttpResponse* resp) const {
-    auto it = errorHandlers_.find(errorCode);
-    if (it != errorHandlers_.end()) {
-        it->second();
-    }
-    resp->setStatusCode(errorCode);
+void Router::handleError(StatusCode errorCode, HttpResponse *resp) const {
+  auto it = errorHandlers_.find(errorCode);
+  if (it != errorHandlers_.end()) {
+    HttpRequest emptyReq;
+    it->second(emptyReq, resp);
+  }
+  resp->setStatusCode(errorCode);
 }
 
 void Router::handleError(StatusCode errorCode) const {
-  auto it = errorHandlers_.find(errorCode);
-
-  if (it != errorHandlers_.end()) {
-    it->second();
-  }
+  HttpResponse resp(Version::kHttp11);
+  handleError(errorCode, &resp);
 }
 
 std::string Router::getMimeType(const std::string &extension) {
@@ -218,29 +257,36 @@ void Router::handleCaching(
     const HttpRequest &req,
     HttpResponse *resp
 ) {
-  auto lastModTime  = std::filesystem::last_write_time(filePath);
-  auto lastModTimeT = std::chrono::system_clock::to_time_t(
-      std::chrono::clock_cast<std::chrono::system_clock>(lastModTime)
-  );
+    auto lastModTime = std::filesystem::last_write_time(filePath);
+    auto lastModTimeT = std::chrono::system_clock::to_time_t(
+        std::chrono::clock_cast<std::chrono::system_clock>(lastModTime)
+    );
 
-  std::string timeStr(100, '\0');
-  std::strftime(
-      timeStr.data(),
-      timeStr.size(),
-      "%a, %d %b %Y %H:%M:%S GMT",
-      std::gmtime(&lastModTimeT)
-  );
+    char timeBuffer[100];
+    size_t timeLength = std::strftime(
+        timeBuffer,
+        sizeof(timeBuffer),
+        "%a, %d %b %Y %H:%M:%S GMT",
+        std::gmtime(&lastModTimeT)
+    );
 
-  resp->addHeader("Last-Modified", timeStr);
-  resp->addHeader("Cache-Control", "public, max-age=3600");
+    // 添加調試日誌
+    LOG_DEBUG("Time buffer length: " + std::to_string(timeLength));
+    LOG_DEBUG("Formatted time: " + std::string(timeBuffer));
 
-  if (req.hasHeader("If-Modified-Since")) {
-    auto ifModifiedSince = req.getHeader("If-Modified-Since");
-    if (ifModifiedSince == timeStr) {
-      resp->setStatusCode(StatusCode::k304NotModified);
-      resp->setBody("");
-      return;
+    std::string timeStr(timeBuffer);
+    resp->addHeader("Last-Modified", timeStr);
+    resp->addHeader("Cache-Control", "public, max-age=3600");
+
+    if (req.hasHeader("If-Modified-Since")) {
+        auto ifModifiedSince = req.getHeader("If-Modified-Since");
+        LOG_DEBUG("If-Modified-Since: " + ifModifiedSince);
+        LOG_DEBUG("Current time string: " + timeStr);
+        if (ifModifiedSince == timeStr) {
+            resp->setStatusCode(StatusCode::k304NotModified);
+            resp->setBody("");
+            return;
+        }
     }
-  }
 }
 } // namespace server

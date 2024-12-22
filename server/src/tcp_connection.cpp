@@ -30,13 +30,21 @@ TcpConnection::TcpConnection(
     , channel_(std::make_unique<Channel>(loop, socket_->getSocketFd()))
     , localAddr_(localAddr)
     , peerAddr_(peerAddr) {
+
+  LOG_DEBUG("Creating TcpConnection " + name_);
   socket_->enableNonBlocking();
   socket_->enableKeepAlive();
 
-  channel_->setReadCallback([this](auto &&PH1) { handleRead(std::forward<decltype(PH1)>(PH1)); });
+  LOG_DEBUG("Setting up callbacks for " + name_);
+  channel_->setReadCallback([this](TimeStamp ts) {
+    LOG_DEBUG("準備執行 TcpConnection " + name_ + " 的 handleRead");
+    handleRead(ts);
+    LOG_DEBUG("完成執行 TcpConnection " + name_ + " 的 handleRead");
+  });
   channel_->setWriteCallback([this] { handleWrite(); });
   channel_->setCloseCallback([this] { handleClose(); });
   channel_->setErrorCallback([this] { handleError(); });
+  LOG_DEBUG("Callbacks setup completed for " + name_);
 }
 
 TcpConnection::~TcpConnection() {
@@ -191,6 +199,8 @@ void TcpConnection::handleWrite() {
 }
 
 void TcpConnection::handleClose() {
+  LOG_DEBUG("開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd()));
+
   loop_->assertInLoopThread();
 
   if (state_ != State::kDisconnected) {
@@ -210,6 +220,8 @@ void TcpConnection::handleClose() {
       closeCallback_(shared_from_this());
     }
   }
+
+  LOG_DEBUG("完成關閉連接：" + name_);
 }
 
 void TcpConnection::handleError() {
@@ -254,10 +266,14 @@ void TcpConnection::handleError() {
 }
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
+  LOG_DEBUG(
+      "handleRead called with timestamp: " + std::to_string(receiveTime.microSecondsSinceEpoch())
+  );
   int savedErrno = 0;
   ssize_t result = inputBuffer_.readData(socket_->getSocketFd(), &savedErrno);
 
   if (result > 0) {
+    LOG_DEBUG("need to call messageCallback");
     messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
   } else if (result == 0) {
     handleClose();
@@ -270,16 +286,12 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
 
 void TcpConnection::connectEstablished() {
   loop_->assertInLoopThread();
-
   assert(state_ == State::kConnecting);
   setState(State::kConnected);
 
+  LOG_DEBUG("TcpConnection " + name_ + " 設置為已連接狀態");
   channel_->enableReading();
-
-  channel_->setReadCallback([this](auto &&PH1) { handleRead(std::forward<decltype(PH1)>(PH1)); });
-  channel_->setWriteCallback([this] { handleWrite(); });
-  channel_->setCloseCallback([this] { handleClose(); });
-  channel_->setErrorCallback([this] { handleError(); });
+  LOG_DEBUG("TcpConnection " + name_ + " 啟用讀取");
 
   if (connectionCallback_) {
     connectionCallback_(shared_from_this());

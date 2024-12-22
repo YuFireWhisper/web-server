@@ -22,7 +22,7 @@ public:
   explicit Socket(int socketFd);
   ~Socket();
 
-  Socket(const Socket &) = delete;
+  Socket(const Socket &)            = delete;
   Socket &operator=(const Socket &) = delete;
 
   void bindToPort(uint16_t port) const;
@@ -60,8 +60,11 @@ public:
   [[nodiscard]] size_t writeData(const Buffer &sourceBuffer) const;
   size_t writeData(const void *dataPtr, size_t dataLength) const;
 
+  void attachFd(int fd);
+  int detachFd();
+
 private:
-  const int socketFd_;
+  int socketFd_;
 
   static int createTcpSocket();
   void setSocketFlag(int level, int flag, bool enabled) const;

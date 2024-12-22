@@ -52,7 +52,10 @@ TEST_F(RouterTest, ShouldHandleBasicRouteRequest) {
   route.name         = "/home";
   route.method       = Method::kGet;
   bool handlerCalled = false;
-  route.handler      = [&handlerCalled]() { handlerCalled = true; };
+  route.handler = [&handlerCalled](const HttpRequest &req [[maybe_unused]], HttpResponse *resp) {
+    handlerCalled = true;
+    resp->setStatusCode(StatusCode::k200Ok);
+  };
 
   router_->addRoute(route);
 
@@ -72,9 +75,13 @@ TEST_F(RouterTest, ShouldHandleMethodMismatch) {
   router_->addRoute(route);
 
   bool errorHandlerCalled = false;
-  router_->addErrorHandler(StatusCode::k405MethodNotAllowed, [&errorHandlerCalled]() {
-    errorHandlerCalled = true;
-  });
+  router_->addErrorHandler(
+      StatusCode::k405MethodNotAllowed,
+      [&errorHandlerCalled](
+          const HttpRequest &req [[maybe_unused]],
+          HttpResponse *resp [[maybe_unused]]
+      ) { errorHandlerCalled = true; }
+  );
 
   auto request = createRequest("/api");
   HttpResponse response(Version::kHttp11);
@@ -128,7 +135,10 @@ TEST_F(RouterTest, ShouldHandleNestedRoutes) {
   childRoute.name    = "/api/users";
   childRoute.method  = Method::kGet;
   bool handlerCalled = false;
-  childRoute.handler = [&handlerCalled]() { handlerCalled = true; };
+  childRoute.handler = [&handlerCalled](
+                           const HttpRequest &req [[maybe_unused]],
+                           HttpResponse *resp [[maybe_unused]]
+                       ) { handlerCalled = true; };
 
   router_->addRoute(parentRoute);
   router_->addRoute(childRoute);
@@ -147,7 +157,10 @@ TEST_F(RouterTest, ShouldHandleWildcardRoutes) {
   wildcardRoute.name    = "/api/*";
   wildcardRoute.method  = Method::kGet;
   bool handlerCalled    = false;
-  wildcardRoute.handler = [&handlerCalled]() { handlerCalled = true; };
+  wildcardRoute.handler = [&handlerCalled](
+                              const HttpRequest &req [[maybe_unused]],
+                              HttpResponse *resp [[maybe_unused]]
+                          ) { handlerCalled = true; };
 
   router_->addRoute(wildcardRoute);
 
@@ -162,9 +175,13 @@ TEST_F(RouterTest, ShouldHandleWildcardRoutes) {
 
 TEST_F(RouterTest, ShouldHandle404ForUnknownRoute) {
   bool errorHandlerCalled = false;
-  router_->addErrorHandler(StatusCode::k404NotFound, [&errorHandlerCalled]() {
-    errorHandlerCalled = true;
-  });
+  router_->addErrorHandler(
+      StatusCode::k404NotFound,
+      [&errorHandlerCalled](
+          const HttpRequest &req [[maybe_unused]],
+          HttpResponse *resp [[maybe_unused]]
+      ) { errorHandlerCalled = true; }
+  );
 
   auto request = createRequest("/unknown");
   HttpResponse response(Version::kHttp11);

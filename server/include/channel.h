@@ -16,12 +16,12 @@ public:
   void handleEventWithGuard(TimeStamp receiveTime);
 
   void setReadCallback(const ReadEventCallback &cb) { readCallback_ = cb; }
-  void setReadCallback(const Functor &cb);
   void setWriteCallback(const EventCallback &cb) { writeCallback_ = cb; }
   void setErrorCallback(const EventCallback &cb) { errorCallback_ = cb; }
   void setCloseCallback(const EventCallback &cb) { closeCallback_ = cb; }
 
-  void enableReading() { updateEventStatus(events_ | EventType::kReadEvent); }
+  void enableReading() { updateEventStatus(events_ | EPOLLIN); }
+
   void disableReading() { updateEventStatus(events_ & ~EventType::kReadEvent); }
   void enableWriting() { updateEventStatus(events_ | EventType::kWriteEvent); }
   void disableWriting() { updateEventStatus(events_ & ~EventType::kWriteEvent); }

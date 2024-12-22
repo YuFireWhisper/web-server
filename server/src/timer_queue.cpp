@@ -32,7 +32,7 @@ TimerQueue::TimerQueue(EventLoop *loop)
     abort();
   }
   timerfdChannel_ = std::make_unique<Channel>(loop, timerfd_);
-  timerfdChannel_->setReadCallback([this] { handleRead(); });
+  timerfdChannel_->setReadCallback([this](TimeStamp) { handleRead(); });
   timerfdChannel_->enableReading();
 }
 
