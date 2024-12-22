@@ -128,7 +128,6 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
 
   const auto &cmd = it->second;
 
-
   auto cmdType       = static_cast<uint32_t>(cmd.type);
   uint32_t argsType  = cmdType & argsMask;
   uint32_t valueType = cmdType & typeMask;
@@ -158,6 +157,10 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
       LOG_FATAL(message);
       throw std::invalid_argument(message);
     }
+  }
+
+  if (cmd.confOffset != 0U) {
+    context_.now = cmd.confOffset;
   }
 
   if (cmd.set) {
