@@ -88,7 +88,7 @@ void Buffer::write(const char *data, size_t len) {
 
 void Buffer::ensureSpace(size_t len) {
   if (writableSize() < len) {
-    moveReadableDataToFront(len);
+    moveReadableDataToFront();
   }
   if (writableSize() < len) {
     std::string message = "Failed to ensure space in buffer";
@@ -97,7 +97,7 @@ void Buffer::ensureSpace(size_t len) {
   }
 }
 
-void Buffer::moveReadableDataToFront(size_t len) {
+void Buffer::moveReadableDataToFront() {
   size_t readable = readableSize();
   std::copy(buffer_ + readerIndex_, buffer_ + writerIndex_, buffer_ + PREPEND_SIZE);
   readerIndex_ = PREPEND_SIZE;

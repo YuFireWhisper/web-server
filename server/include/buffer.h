@@ -48,7 +48,7 @@ private:
   static constexpr size_t PREPEND_SIZE = 8;
 
   void ensureSpace(size_t len);
-  void moveReadableDataToFront(size_t len);
+  void moveReadableDataToFront();
 
   HttpConfig config_;
   char *buffer_       = nullptr;
