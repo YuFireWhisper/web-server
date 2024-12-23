@@ -44,6 +44,8 @@ public:
   HttpConfig getConfig() { return config_; }
 
 private:
+  static constexpr size_t PREPEND_SIZE = 8;
+
   void ensureSpace(size_t len);
   void makeSpace(size_t len);
 

@@ -120,7 +120,13 @@ std::string_view Buffer::read(size_t length) {
   }
 
   std::string_view result(buffer_ + readerIndex_, length);
-  hasRead(length);
+  readerIndex_ += length;
+
+  if (readerIndex_ >= writerIndex_) {
+    readerIndex_ = PREPEND_SIZE;
+    writerIndex_ = PREPEND_SIZE;
+  }
+
   return result;
 }
 
