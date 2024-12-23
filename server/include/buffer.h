@@ -30,10 +30,8 @@ public:
   ssize_t readFromFd(int fd, int *errorCode);
 
   void resize(size_t newSize);
-
   [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableSize() const noexcept { return capacity_ - writerIndex_; }
-  [[nodiscard]] size_t prependableBytes() const noexcept { return readerIndex_; }
 
   [[nodiscard]] char *begin() const { return buffer_; }
 

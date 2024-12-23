@@ -98,18 +98,10 @@ void Buffer::ensureSpace(size_t len) {
 }
 
 void Buffer::makeSpace(size_t len) {
-  if (writableSize() + prependableBytes() < len + config_.prependSize) {
-    size_t newSize = capacity_;
-    while (newSize - prependableBytes() < len + readableSize()) {
-      newSize = newSize * 3 / 2;
-    }
-    resize(newSize);
-  } else {
-    size_t readable = readableSize();
-    std::copy(begin() + readerIndex_, begin() + writerIndex_, begin() + config_.prependSize);
-    readerIndex_ = config_.prependSize;
-    writerIndex_ = readerIndex_ + readable;
-  }
+  size_t readable = readableSize();
+  std::copy(buffer_ + readerIndex_, buffer_ + writerIndex_, buffer_ + PREPEND_SIZE);
+  readerIndex_ = PREPEND_SIZE;
+  writerIndex_ = readerIndex_ + readable;
 }
 
 void Buffer::hasWritten(size_t len) noexcept {
