@@ -6,6 +6,7 @@
 #include "include/router.h"
 
 #include <cstdint>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <memory>
 
@@ -21,6 +22,11 @@ protected:
   static constexpr const char *kTestPath   = "/test";
 
   void SetUp() override {
+    // 創建測試文件
+    std::ofstream test_file("/tmp/test.html");
+    test_file << "<html><body>Test Content</body></html>";
+    test_file.close();
+
     loop_   = std::make_unique<EventLoop>();
     server_ = std::make_unique<HttpServer>(
         loop_.get(),
@@ -29,6 +35,8 @@ protected:
     );
     setupTestRoutes();
   }
+
+  void TearDown() override { std::remove("/tmp/test.html"); }
 
   static void setupTestRoutes() {
     LocationConfig config;
