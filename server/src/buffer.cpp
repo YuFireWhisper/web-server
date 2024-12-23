@@ -144,28 +144,28 @@ void Buffer::hasReadAll() noexcept {
   writerIndex_ = config_.prependSize;
 }
 
-ssize_t Buffer::readFromFd(int fd, int *errorCode) {
-  std::vector<char> extraBuffer(config_.extraBufferSize);
-  std::array<iovec, 2> vec;
-
-  const size_t writable = writableSize();
-
-  vec[0].iov_base = beginWrite();
-  vec[0].iov_len  = writable;
-  vec[1].iov_base = extraBuffer.data();
-  vec[1].iov_len  = extraBuffer.size();
-
-  const ssize_t result = ::readv(fd, vec.data(), 2);
-
+ssize_t Buffer::readFromFd(int fd, int* errorCode) {
+  char extraBuffer[65536];
+  struct iovec vec[2];
+  
+  vec[0].iov_base = buffer_ + writerIndex_;
+  vec[0].iov_len = writableSize();
+  vec[1].iov_base = extraBuffer;
+  vec[1].iov_len = sizeof(extraBuffer);
+  
+  ssize_t result = ::readv(fd, vec, 2);
   if (result < 0) {
     *errorCode = errno;
-  } else if (static_cast<size_t>(result) <= writable) {
+    return result;
+  }
+  
+  if (static_cast<size_t>(result) <= writableSize()) {
     writerIndex_ += result;
   } else {
     writerIndex_ = capacity_;
-    write(extraBuffer.data(), result - writable);
+    write(extraBuffer, result - writableSize());
   }
-
+  
   return result;
 }
 
