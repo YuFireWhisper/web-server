@@ -16,7 +16,7 @@ protected:
 TEST_F(BufferTest, InitializeWithValidSize) {
   Buffer buf(1024);
   EXPECT_EQ(buf.readableSize(), 0);
-  EXPECT_GT(buf.writableBytes(), 0);
+  EXPECT_GT(buf.writableSize(), 0);
 }
 
 TEST_F(BufferTest, InitializeWithInvalidSizeThrows) {
@@ -54,9 +54,9 @@ TEST_F(BufferTest, RetrieveAllAsStringClearsBuffer) {
 }
 
 TEST_F(BufferTest, ResizeIncreasesCapacity) {
-  size_t originalWritable = buffer->writableBytes();
+  size_t originalWritable = buffer->writableSize();
   buffer->resize(2048);
-  EXPECT_GT(buffer->writableBytes(), originalWritable);
+  EXPECT_GT(buffer->writableSize(), originalWritable);
 }
 
 TEST_F(BufferTest, ResizePreservesData) {

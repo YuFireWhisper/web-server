@@ -85,10 +85,10 @@ void Buffer::write(const char *data, size_t len) {
 }
 
 void Buffer::ensureSpace(size_t len) {
-  if (writableBytes() < len) {
+  if (writableSize() < len) {
     makeSpace(len);
   }
-  if (writableBytes() < len) {
+  if (writableSize() < len) {
     std::string message = "Failed to ensure space in buffer";
     LOG_ERROR(message);
     throw std::runtime_error(message);
@@ -96,7 +96,7 @@ void Buffer::ensureSpace(size_t len) {
 }
 
 void Buffer::makeSpace(size_t len) {
-  if (writableBytes() + prependableBytes() < len + config_.prependSize) {
+  if (writableSize() + prependableBytes() < len + config_.prependSize) {
     size_t newSize = capacity_;
     while (newSize - prependableBytes() < len + readableSize()) {
       newSize = newSize * 3 / 2;
@@ -148,7 +148,7 @@ ssize_t Buffer::readData(int fd, int *savedErrno) {
   std::vector<char> extraBuffer(config_.extraBufferSize);
   std::array<iovec, 2> vec;
 
-  const size_t writable = writableBytes();
+  const size_t writable = writableSize();
 
   vec[0].iov_base = beginWrite();
   vec[0].iov_len  = writable;
