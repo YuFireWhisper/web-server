@@ -72,7 +72,7 @@ bool HttpRequest::processRequestLine(Buffer *buf, const std::string_view &conten
   }
 
   setRequestLine(result);
-  buf->hasRead(position + kCRLF.size());
+  buf->read(position + kCRLF.size());
   state_ = ParseState::kExpectHeaders;
   return true;
 }
@@ -154,7 +154,7 @@ bool HttpRequest::processHeaders(Buffer *buf, const std::string_view &content) {
   }
 
   setHeaders(result);
-  buf->hasRead(position + kCRLFCRLF.size());
+  buf->read(position + kCRLFCRLF.size());
   state_ = (contentLength_ > 0) ? ParseState::kExpectBody : ParseState::kGotAll;
   return true;
 }
@@ -237,7 +237,7 @@ bool HttpRequest::processBody(Buffer *buf, const std::string_view &content) {
   }
 
   setBody(result);
-  buf->hasRead(contentLength_);
+  buf->read(contentLength_);
   state_ = ParseState::kGotAll;
   return true;
 }

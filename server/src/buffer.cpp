@@ -1,111 +1,79 @@
 #include "include/buffer.h"
 
-#include "include/config_defaults.h"
 #include "include/config_manager.h"
-#include "include/log.h"
 
-#include <bits/types/struct_iovec.h>
-#include <cassert>
-#include <csignal>
-#include <cstring>
 #include <stdexcept>
-#include <string_view>
 
-#include <sys/types.h>
 #include <sys/uio.h>
-
-#ifndef PROJECT_ROOT
-#define PROJECT_ROOT "."
-#endif
 
 namespace server {
 
-Buffer::Buffer(size_t len) {
-  if (len < 0) {
-    std::string message = "Buffer length cannot be negative";
-    LOG_ERROR(message);
-    throw std::invalid_argument(message);
+Buffer::Buffer(size_t initialSize)
+    : buffer_(nullptr)
+    , writePos_(PREPEND_SIZE)
+    , readPos_(PREPEND_SIZE)
+    , capacity_(0) {
+
+  auto &configManager = ConfigManager::getInstance();
+  auto *ctx           = static_cast<HttpContext *>(configManager.getContextByOffset(kHttpOffset));
+  config_             = *ctx->conf;
+
+  size_t size = (initialSize != 0U) ? initialSize : config_.initialBufferSize;
+  if (size > config_.maxBufferSize) {
+    throw std::invalid_argument("Initial size exceeds maximum limit");
   }
 
-  ConfigManager &configManager = ConfigManager::getInstance();
-  auto *ctx = static_cast<HttpContext *>(configManager.getContextByOffset(kHttpOffset));
-  config_   = *ctx->conf;
-
-  if (len == 0) {
-    len = config_.initialBufferSize;
-  }
-
-  if (len > config_.maxBufferSize) {
-    std::string message = "Requested size exceeds maximum buffer size";
-    LOG_ERROR(message);
-    throw std::invalid_argument(message);
-  }
-
-  try {
-    buffer_   = new char[len];
-    capacity_ = len;
-    readPos_  = config_.prependSize;
-    writePos_ = config_.prependSize;
-  } catch (const std::bad_alloc &e) {
-    buffer_             = nullptr;
-    capacity_           = 0;
-    std::string message = "Failed to allocate buffer memory";
-    LOG_ERROR(message);
-    throw std::runtime_error(message);
-  }
+  buffer_   = new char[size];
+  capacity_ = size;
 }
 
 Buffer::~Buffer() {
   delete[] buffer_;
-  buffer_ = nullptr;
 }
 
 Buffer::Buffer(Buffer &&other) noexcept
-    : config_(std::move(other.config_))
-    , buffer_(other.buffer_)
+    : buffer_(other.buffer_)
     , writePos_(other.writePos_)
     , readPos_(other.readPos_)
-    , capacity_(other.capacity_) {
-  other.writePos_ = 0;
-  other.readPos_  = 0;
+    , capacity_(other.capacity_)
+    , config_(std::move(other.config_)) {
+
+  other.buffer_   = nullptr;
   other.capacity_ = 0;
+  other.readPos_  = 0;
+  other.writePos_ = 0;
 }
 
-void Buffer::write(std::string_view str) {
-  Buffer::write(str.data(), str.size());
-}
+Buffer &Buffer::operator=(Buffer &&other) noexcept {
+  if (this != &other) {
+    delete[] buffer_;
 
-void Buffer::write(const char *data, size_t len) {
-  if (data == nullptr && len > 0) {
-    std::string message = "Cannot append null data";
-    LOG_ERROR(message);
-    throw std::invalid_argument(message);
+    buffer_   = other.buffer_;
+    capacity_ = other.capacity_;
+    readPos_  = other.readPos_;
+    writePos_ = other.writePos_;
+    config_   = std::move(other.config_);
+
+    other.buffer_   = nullptr;
+    other.capacity_ = 0;
+    other.readPos_  = 0;
+    other.writePos_ = 0;
   }
-  ensureSpace(len);
-  std::copy_n(data, len, beginWrite());
-  hasWritten(len);
+  return *this;
 }
 
-void Buffer::ensureSpace(size_t len) {
-  if (writableSize() < len) {
-    moveReadableDataToFront();
+void Buffer::write(const char *data, size_t length) {
+  if ((data == nullptr) && length > 0) {
+    throw std::invalid_argument("Invalid data pointer");
   }
-  if (writableSize() < len) {
-    std::string message = "Failed to ensure space in buffer";
-    LOG_ERROR(message);
-    throw std::runtime_error(message);
-  }
+
+  ensureWritableSpace(length);
+  std::copy_n(data, length, buffer_ + writePos_);
+  writePos_ += length;
 }
 
-void Buffer::moveReadableDataToFront() {
-  size_t readable = readableSize();
-  std::copy(buffer_ + readPos_, buffer_ + writePos_, buffer_ + PREPEND_SIZE);
-  readPos_  = PREPEND_SIZE;
-  writePos_ = readPos_ + readable;
-}
-
-void Buffer::hasWritten(size_t len) noexcept {
-  writePos_ += len;
+void Buffer::write(std::string_view data) {
+  write(data.data(), data.size());
 }
 
 std::string_view Buffer::read(size_t length) {
@@ -131,17 +99,58 @@ std::string_view Buffer::readAll() noexcept {
   return result;
 }
 
-void Buffer::hasRead(size_t len) {
-  if (len > readableSize()) {
-    hasReadAll();
-  } else {
-    readPos_ += len;
+std::string_view Buffer::preview(size_t length) const {
+  if (length > readableSize()) {
+    throw std::out_of_range("Preview length exceeds available data");
   }
+  return { buffer_ + readPos_, length };
 }
 
-void Buffer::hasReadAll() noexcept {
-  readPos_  = config_.prependSize;
-  writePos_ = config_.prependSize;
+void Buffer::ensureWritableSpace(size_t length) {
+  if (writableSize() >= length) {
+    return;
+  }
+
+  if (writableSize() + readPos_ - PREPEND_SIZE >= length) {
+    moveReadableDataToFront();
+    return;
+  }
+
+  size_t newSize = capacity_;
+  while (newSize - readPos_ < length + readableSize()) {
+    newSize = newSize * GROWTH_NUMERATOR / GROWTH_DENOMINATOR;
+  }
+  resize(newSize);
+}
+
+void Buffer::moveReadableDataToFront() noexcept {
+  size_t readable = readableSize();
+  std::copy(buffer_ + readPos_, buffer_ + writePos_, buffer_ + PREPEND_SIZE);
+  readPos_  = PREPEND_SIZE;
+  writePos_ = readPos_ + readable;
+}
+
+void Buffer::resize(size_t newSize) {
+  if (newSize > config_.maxBufferSize) {
+    throw std::invalid_argument("Requested size exceeds maximum limit");
+  }
+
+  if (newSize < capacity_) {
+    throw std::invalid_argument("Cannot resize: would lose data");
+  }
+
+  char *newBuffer = new char[newSize];
+  size_t readable = readableSize();
+
+  if (readable > 0) {
+    std::copy_n(buffer_ + readPos_, readable, newBuffer + PREPEND_SIZE);
+  }
+
+  delete[] buffer_;
+  buffer_   = newBuffer;
+  capacity_ = newSize;
+  readPos_  = PREPEND_SIZE;
+  writePos_ = readPos_ + readable;
 }
 
 ssize_t Buffer::readFromFd(int fd, int *errorCode) {
@@ -169,33 +178,12 @@ ssize_t Buffer::readFromFd(int fd, int *errorCode) {
   return result;
 }
 
-void Buffer::resize(size_t newSize) {
-  if (newSize > config_.maxBufferSize) {
-    throw std::invalid_argument("Requested size exceeds maximum limit");
-  }
-
-  if (newSize < (readableSize() + config_.prependSize)) {
-    throw std::invalid_argument("Cannot resize: would lose data");
-  }
-
-  char *newBuffer = new char[newSize];
-  size_t readable = readableSize();
-
-  if (readable > 0) {
-    std::copy_n(buffer_ + readPos_, readable, newBuffer + PREPEND_SIZE);
-  }
-
-  delete[] buffer_;
-  buffer_   = newBuffer;
-  capacity_ = newSize;
-  readPos_  = PREPEND_SIZE;
-  writePos_ = readPos_ + readable;
+size_t Buffer::readableSize() const noexcept {
+  return writePos_ - readPos_;
 }
 
-std::string_view Buffer::preview(size_t length) const {
-  if (length > readableSize()) {
-    throw std::out_of_range("Preview length exceeds available data");
-  }
-  return { buffer_ + readPos_, length };
+size_t Buffer::writableSize() const noexcept {
+  return capacity_ - writePos_;
 }
+
 } // namespace server

@@ -179,11 +179,11 @@ void TcpConnection::handleWrite() {
   loop_->assertInLoopThread();
 
   if (channel_->isWriting()) {
-    auto context = outputBuffer_.preview(outputBuffer_.readableSize());
+    auto context   = outputBuffer_.preview(outputBuffer_.readableSize());
     ssize_t result = ::write(channel_->fd(), context.data(), outputBuffer_.readableSize());
 
     if (result > 0) {
-      outputBuffer_.hasRead(result);
+      outputBuffer_.read(result);
       if (outputBuffer_.readableSize() == 0) {
         channel_->disableWriting();
 
