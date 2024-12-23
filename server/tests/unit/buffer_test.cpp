@@ -121,10 +121,11 @@ TEST_F(BufferTest, MultipleAppends) {
 }
 
 TEST_F(BufferTest, WriteAndPeekOperations) {
-  std::string testData = "Test";
+  std::string_view testData = "Test";
   buffer->write(testData);
+  auto context = buffer->preview(buffer->readableSize());
 
-  EXPECT_EQ(std::string(buffer->preview(), testData.length()), testData);
+  EXPECT_EQ(context, testData);
   EXPECT_EQ(buffer->readableSize(), testData.length());
 }
 

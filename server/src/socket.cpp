@@ -211,7 +211,8 @@ size_t Socket::readData(Buffer &targetBuffer) const {
 }
 
 size_t Socket::writeData(const Buffer &sourceBuffer) const {
-  return writeData(sourceBuffer.preview(), sourceBuffer.readableSize());
+  size_t readable = sourceBuffer.readableSize();
+  return writeData(sourceBuffer.preview(readable).data(), readable);
 }
 
 size_t Socket::writeData(const void *dataPtr, size_t dataLength) const {

@@ -179,30 +179,31 @@ ssize_t Buffer::readData(int fd, int *savedErrno) {
 
 void Buffer::resize(size_t newSize) {
   if (newSize > config_.maxBufferSize) {
-    std::string message = "Requested size exceeds maximum buffer size";
-    LOG_ERROR(message);
-    throw std::invalid_argument(message);
+    throw std::invalid_argument("Requested size exceeds maximum limit");
   }
 
   if (newSize < (readableSize() + config_.prependSize)) {
-    std::string message = "Cannot resize: would lose data";
-    LOG_ERROR(message);
-    throw std::invalid_argument(message);
+    throw std::invalid_argument("Cannot resize: would lose data");
   }
 
   char *newBuffer = new char[newSize];
+  size_t readable = readableSize();
 
-  if (readableSize() > 0) {
-    std::memcpy(newBuffer + config_.prependSize, preview(), readableSize());
+  if (readable > 0) {
+    std::copy_n(buffer_ + readerIndex_, readable, newBuffer + PREPEND_SIZE);
   }
 
-  capacity_    = newSize;
-  readerIndex_ = config_.prependSize;
-  writerIndex_ = readerIndex_ + readableSize();
+  delete[] buffer_;
   buffer_      = newBuffer;
+  capacity_    = newSize;
+  readerIndex_ = PREPEND_SIZE;
+  writerIndex_ = readerIndex_ + readable;
 }
 
-const char *Buffer::preview() const {
-  return begin() + readerIndex_;
+std::string_view Buffer::preview(size_t length) const {
+  if (length > readableSize()) {
+    throw std::out_of_range("Preview length exceeds available data");
+  }
+  return { buffer_ + readerIndex_, length };
 }
 } // namespace server

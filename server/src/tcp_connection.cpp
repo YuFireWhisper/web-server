@@ -74,13 +74,13 @@ void TcpConnection::send(Buffer *buffer) {
     return;
   }
 
+  auto context = buffer->readAll();
+
   if (loop_->isInLoopThread()) {
-    sendInLoop(buffer->preview(), buffer->readableSize());
-    buffer->hasReadAll();
+    sendInLoop(context.data(), context.size());
   } else {
-    std::string message(buffer->preview(), buffer->readableSize());
+    std::string message(context);
     loop_->runInLoop([this, message]() { sendInLoop(message.data(), message.size()); });
-    buffer->hasReadAll();
   }
 }
 
@@ -179,7 +179,8 @@ void TcpConnection::handleWrite() {
   loop_->assertInLoopThread();
 
   if (channel_->isWriting()) {
-    ssize_t result = ::write(channel_->fd(), outputBuffer_.preview(), outputBuffer_.readableSize());
+    auto context = outputBuffer_.preview(outputBuffer_.readableSize());
+    ssize_t result = ::write(channel_->fd(), context.data(), outputBuffer_.readableSize());
 
     if (result > 0) {
       outputBuffer_.hasRead(result);

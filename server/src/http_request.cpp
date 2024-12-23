@@ -42,9 +42,7 @@ bool HttpRequest::parseRequestInternal(Buffer *buf) {
 }
 
 bool HttpRequest::parseNextState(Buffer *buf) {
-  const char *begin = buf->preview();
-  const char *end   = begin + buf->readableSize();
-  std::string_view content{ begin, static_cast<size_t>(end - begin) };
+  std::string_view content = buf->preview(buf->readableSize());
 
   switch (state_) {
     case ParseState::kExpectRequestLine:
