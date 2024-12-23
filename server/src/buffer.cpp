@@ -114,7 +114,7 @@ void Buffer::hasWritten(size_t len) noexcept {
   writerIndex_ += len;
 }
 
-std::string Buffer::retrieveAsString(size_t len) {
+std::string Buffer::read(size_t len) {
   if (len > readableBytes()) {
     std::string message = "Not enough data in buffer";
     LOG_ERROR(message);
@@ -138,7 +138,7 @@ void Buffer::hasReadAll() noexcept {
   writerIndex_ = config_.prependSize;
 }
 
-std::string Buffer::retrieveAllAsString() {
+std::string Buffer::readAll() {
   std::string result(peek(), readableBytes());
   hasReadAll();
   return result;

@@ -36,20 +36,20 @@ TEST_F(BufferTest, AppendNullDataThrows) {
 TEST_F(BufferTest, RetrieveAsStringReturnsAppendedData) {
   std::string testData = "Test Data";
   buffer->write(testData);
-  EXPECT_EQ(buffer->retrieveAsString(testData.length()), testData);
+  EXPECT_EQ(buffer->read(testData.length()), testData);
   EXPECT_EQ(buffer->readableBytes(), 0);
 }
 
 TEST_F(BufferTest, RetrieveAsStringWithInvalidLengthThrows) {
   std::string testData = "Test";
   buffer->write(testData);
-  EXPECT_THROW(buffer->retrieveAsString(testData.length() + 1), std::out_of_range);
+  EXPECT_THROW(buffer->read(testData.length() + 1), std::out_of_range);
 }
 
 TEST_F(BufferTest, RetrieveAllAsStringClearsBuffer) {
   std::string testData = "Test Data";
   buffer->write(testData);
-  EXPECT_EQ(buffer->retrieveAllAsString(), testData);
+  EXPECT_EQ(buffer->readAll(), testData);
   EXPECT_EQ(buffer->readableBytes(), 0);
 }
 
@@ -63,7 +63,7 @@ TEST_F(BufferTest, ResizePreservesData) {
   std::string testData = "Test Data";
   buffer->write(testData);
   buffer->resize(2048);
-  EXPECT_EQ(buffer->retrieveAsString(testData.length()), testData);
+  EXPECT_EQ(buffer->read(testData.length()), testData);
 }
 
 TEST_F(BufferTest, ResizeToSmallerSizeThrows) {
@@ -75,7 +75,7 @@ TEST_F(BufferTest, ResizeToSmallerSizeThrows) {
 TEST_F(BufferTest, AppendStringView) {
   std::string_view testView = "Test Data";
   buffer->write(testView);
-  EXPECT_EQ(buffer->retrieveAllAsString(), std::string(testView));
+  EXPECT_EQ(buffer->readAll(), std::string(testView));
 }
 
 TEST_F(BufferTest, ReadDataFromFd) {
@@ -90,7 +90,7 @@ TEST_F(BufferTest, ReadDataFromFd) {
   ssize_t readBytes = buffer->readData(pipefd[0], &savedErrno);
 
   EXPECT_GT(readBytes, 0);
-  EXPECT_EQ(buffer->retrieveAllAsString(), std::string(testData));
+  EXPECT_EQ(buffer->readAll(), std::string(testData));
 
   close(pipefd[0]);
 }
@@ -107,8 +107,8 @@ TEST_F(BufferTest, RetrievePartialData) {
   std::string testData = "Hello World";
   buffer->write(testData);
 
-  EXPECT_EQ(buffer->retrieveAsString(5), "Hello");
-  EXPECT_EQ(buffer->retrieveAsString(6), " World");
+  EXPECT_EQ(buffer->read(5), "Hello");
+  EXPECT_EQ(buffer->read(6), " World");
   EXPECT_EQ(buffer->readableBytes(), 0);
 }
 
@@ -117,7 +117,7 @@ TEST_F(BufferTest, MultipleAppends) {
   buffer->write(" ");
   buffer->write("World");
 
-  EXPECT_EQ(buffer->retrieveAllAsString(), "Hello World");
+  EXPECT_EQ(buffer->readAll(), "Hello World");
 }
 
 TEST_F(BufferTest, WriteAndPeekOperations) {

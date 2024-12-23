@@ -55,7 +55,7 @@ TEST_F(HttpResponseTest, SerializesHTTP11ResponseCorrectly) {
   response.setBody("Hello World");
 
   response.appendToBuffer(&buffer_);
-  std::string result = buffer_.retrieveAllAsString();
+  std::string result = buffer_.readAll();
 
   EXPECT_TRUE(result.find("HTTP/1.1 200 OK\r\n") != std::string::npos);
   EXPECT_TRUE(result.find("Content-Length: 11\r\n") != std::string::npos);
@@ -68,7 +68,7 @@ TEST_F(HttpResponseTest, SerializesHTTP10ResponseCorrectly) {
   response.setStatusCode(StatusCode::k404NotFound);
 
   response.appendToBuffer(&buffer_);
-  std::string result = buffer_.retrieveAllAsString();
+  std::string result = buffer_.readAll();
 
   EXPECT_TRUE(result.find("HTTP/1.0 404 Not Found\r\n") != std::string::npos);
 }
@@ -78,7 +78,7 @@ TEST_F(HttpResponseTest, HandlesConnectionCloseHeaderCorrectly) {
   response.setCloseConnection(true);
 
   response.appendToBuffer(&buffer_);
-  std::string result = buffer_.retrieveAllAsString();
+  std::string result = buffer_.readAll();
 
   EXPECT_TRUE(result.find("Connection: close\r\n") != std::string::npos);
 }
@@ -89,7 +89,7 @@ TEST_F(HttpResponseTest, HandlesCustomStatusMessage) {
   response.setStatusMessage("Custom Error Message");
 
   response.appendToBuffer(&buffer_);
-  std::string result = buffer_.retrieveAllAsString();
+  std::string result = buffer_.readAll();
 
   EXPECT_TRUE(result.find("HTTP/1.1 500 Custom Error Message\r\n") != std::string::npos);
 }
@@ -98,7 +98,7 @@ TEST_F(HttpResponseTest, HandlesEmptyResponse) {
   HttpResponse response;
 
   response.appendToBuffer(&buffer_);
-  std::string result = buffer_.retrieveAllAsString();
+  std::string result = buffer_.readAll();
 
   EXPECT_FALSE(result.find("Content-Length") != std::string::npos);
   EXPECT_TRUE(result.find("\r\n\r\n") != std::string::npos);
@@ -110,7 +110,7 @@ TEST_F(HttpResponseTest, SerializesMultipleHeadersCorrectly) {
   response.addHeader("X-XSS-Protection", "1; mode=block");
 
   response.appendToBuffer(&buffer_);
-  std::string result = buffer_.retrieveAllAsString();
+  std::string result = buffer_.readAll();
 
   EXPECT_TRUE(result.find("X-Frame-Options: DENY\r\n") != std::string::npos);
   EXPECT_TRUE(result.find("X-XSS-Protection: 1; mode=block\r\n") != std::string::npos);

@@ -24,8 +24,8 @@ public:
   void resize(size_t newSize);
   ssize_t readData(int fd, int *savedErrno);
 
-  std::string retrieveAsString(size_t len);
-  std::string retrieveAllAsString();
+  std::string read(size_t len);
+  std::string readAll();
 
   [[nodiscard]] size_t readableBytes() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableBytes() const noexcept { return capacity_ - writerIndex_; }
