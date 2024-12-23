@@ -75,10 +75,10 @@ void TcpConnection::send(Buffer *buffer) {
   }
 
   if (loop_->isInLoopThread()) {
-    sendInLoop(buffer->peek(), buffer->readableBytes());
+    sendInLoop(buffer->peek(), buffer->readableSize());
     buffer->hasReadAll();
   } else {
-    std::string message(buffer->peek(), buffer->readableBytes());
+    std::string message(buffer->peek(), buffer->readableSize());
     loop_->runInLoop([this, message]() { sendInLoop(message.data(), message.size()); });
     buffer->hasReadAll();
   }
@@ -94,7 +94,7 @@ void TcpConnection::sendInLoop(const void *message, size_t len) {
   size_t remaining = len;
   bool faultError  = false;
 
-  if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0) {
+  if (!channel_->isWriting() && outputBuffer_.readableSize() == 0) {
     nwrote = ::write(channel_->fd(), message, len);
 
     if (nwrote >= 0) {
@@ -179,11 +179,11 @@ void TcpConnection::handleWrite() {
   loop_->assertInLoopThread();
 
   if (channel_->isWriting()) {
-    ssize_t result = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableBytes());
+    ssize_t result = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableSize());
 
     if (result > 0) {
       outputBuffer_.hasRead(result);
-      if (outputBuffer_.readableBytes() == 0) {
+      if (outputBuffer_.readableSize() == 0) {
         channel_->disableWriting();
 
         if (writeCompleteCallback_) {

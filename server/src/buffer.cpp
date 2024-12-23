@@ -98,12 +98,12 @@ void Buffer::ensureSpace(size_t len) {
 void Buffer::makeSpace(size_t len) {
   if (writableBytes() + prependableBytes() < len + config_.prependSize) {
     size_t newSize = capacity_;
-    while (newSize - prependableBytes() < len + readableBytes()) {
+    while (newSize - prependableBytes() < len + readableSize()) {
       newSize = newSize * 3 / 2;
     }
     resize(newSize);
   } else {
-    size_t readable = readableBytes();
+    size_t readable = readableSize();
     std::copy(begin() + readerIndex_, begin() + writerIndex_, begin() + config_.prependSize);
     readerIndex_ = config_.prependSize;
     writerIndex_ = readerIndex_ + readable;
@@ -115,7 +115,7 @@ void Buffer::hasWritten(size_t len) noexcept {
 }
 
 std::string Buffer::read(size_t len) {
-  if (len > readableBytes()) {
+  if (len > readableSize()) {
     std::string message = "Not enough data in buffer";
     LOG_ERROR(message);
     throw std::out_of_range(message);
@@ -126,7 +126,7 @@ std::string Buffer::read(size_t len) {
 }
 
 void Buffer::hasRead(size_t len) {
-  if (len > readableBytes()) {
+  if (len > readableSize()) {
     hasReadAll();
   } else {
     readerIndex_ += len;
@@ -139,7 +139,7 @@ void Buffer::hasReadAll() noexcept {
 }
 
 std::string Buffer::readAll() {
-  std::string result(peek(), readableBytes());
+  std::string result(peek(), readableSize());
   hasReadAll();
   return result;
 }
@@ -176,7 +176,7 @@ void Buffer::resize(size_t newSize) {
     throw std::invalid_argument(message);
   }
 
-  if (newSize < (readableBytes() + config_.prependSize)) {
+  if (newSize < (readableSize() + config_.prependSize)) {
     std::string message = "Cannot resize: would lose data";
     LOG_ERROR(message);
     throw std::invalid_argument(message);
@@ -184,13 +184,13 @@ void Buffer::resize(size_t newSize) {
 
   char *newBuffer = new char[newSize];
 
-  if (readableBytes() > 0) {
-    std::memcpy(newBuffer + config_.prependSize, peek(), readableBytes());
+  if (readableSize() > 0) {
+    std::memcpy(newBuffer + config_.prependSize, peek(), readableSize());
   }
 
   capacity_    = newSize;
   readerIndex_ = config_.prependSize;
-  writerIndex_ = readerIndex_ + readableBytes();
+  writerIndex_ = readerIndex_ + readableSize();
   buffer_      = newBuffer;
 }
 } // namespace server

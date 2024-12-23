@@ -106,7 +106,7 @@ TEST_F(SocketTestFixture, handleBufferDataOperations) {
   Buffer testBuffer;
   const std::string testMessage = "Test Message";
   testBuffer.write(testMessage);
-  EXPECT_EQ(testBuffer.readableBytes(), testMessage.length());
+  EXPECT_EQ(testBuffer.readableSize(), testMessage.length());
 }
 
 TEST_F(SocketTestFixture, handleNonBlockingSocketOperations) {

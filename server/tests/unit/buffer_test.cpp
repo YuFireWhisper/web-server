@@ -15,7 +15,7 @@ protected:
 
 TEST_F(BufferTest, InitializeWithValidSize) {
   Buffer buf(1024);
-  EXPECT_EQ(buf.readableBytes(), 0);
+  EXPECT_EQ(buf.readableSize(), 0);
   EXPECT_GT(buf.writableBytes(), 0);
 }
 
@@ -26,7 +26,7 @@ TEST_F(BufferTest, InitializeWithInvalidSizeThrows) {
 TEST_F(BufferTest, AppendDataIncreasesReadableBytes) {
   std::string testData = "Hello, World!";
   buffer->write(testData);
-  EXPECT_EQ(buffer->readableBytes(), testData.length());
+  EXPECT_EQ(buffer->readableSize(), testData.length());
 }
 
 TEST_F(BufferTest, AppendNullDataThrows) {
@@ -37,7 +37,7 @@ TEST_F(BufferTest, RetrieveAsStringReturnsAppendedData) {
   std::string testData = "Test Data";
   buffer->write(testData);
   EXPECT_EQ(buffer->read(testData.length()), testData);
-  EXPECT_EQ(buffer->readableBytes(), 0);
+  EXPECT_EQ(buffer->readableSize(), 0);
 }
 
 TEST_F(BufferTest, RetrieveAsStringWithInvalidLengthThrows) {
@@ -50,7 +50,7 @@ TEST_F(BufferTest, RetrieveAllAsStringClearsBuffer) {
   std::string testData = "Test Data";
   buffer->write(testData);
   EXPECT_EQ(buffer->readAll(), testData);
-  EXPECT_EQ(buffer->readableBytes(), 0);
+  EXPECT_EQ(buffer->readableSize(), 0);
 }
 
 TEST_F(BufferTest, ResizeIncreasesCapacity) {
@@ -109,7 +109,7 @@ TEST_F(BufferTest, RetrievePartialData) {
 
   EXPECT_EQ(buffer->read(5), "Hello");
   EXPECT_EQ(buffer->read(6), " World");
-  EXPECT_EQ(buffer->readableBytes(), 0);
+  EXPECT_EQ(buffer->readableSize(), 0);
 }
 
 TEST_F(BufferTest, MultipleAppends) {
@@ -125,7 +125,7 @@ TEST_F(BufferTest, WriteAndPeekOperations) {
   buffer->write(testData);
 
   EXPECT_EQ(std::string(buffer->peek(), testData.length()), testData);
-  EXPECT_EQ(buffer->readableBytes(), testData.length());
+  EXPECT_EQ(buffer->readableSize(), testData.length());
 }
 
 } // namespace server

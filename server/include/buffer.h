@@ -27,7 +27,7 @@ public:
   std::string read(size_t len);
   std::string readAll();
 
-  [[nodiscard]] size_t readableBytes() const noexcept { return writerIndex_ - readerIndex_; }
+  [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableBytes() const noexcept { return capacity_ - writerIndex_; }
   [[nodiscard]] size_t prependableBytes() const noexcept { return readerIndex_; }
 

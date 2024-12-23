@@ -43,7 +43,7 @@ bool HttpRequest::parseRequestInternal(Buffer *buf) {
 
 bool HttpRequest::parseNextState(Buffer *buf) {
   const char *begin = buf->peek();
-  const char *end   = begin + buf->readableBytes();
+  const char *end   = begin + buf->readableSize();
   std::string_view content{ begin, static_cast<size_t>(end - begin) };
 
   switch (state_) {
@@ -224,7 +224,7 @@ bool HttpRequest::processBody(Buffer *buf, const std::string_view &content) {
     return true;
   }
 
-  if (buf->readableBytes() < contentLength_) {
+  if (buf->readableSize() < contentLength_) {
     state_ = ParseState::kExpectBody;
     return false;
   }
