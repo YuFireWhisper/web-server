@@ -33,7 +33,7 @@ TEST_F(HttpRequestTest, InitialStateIsValid) {
 }
 
 TEST_F(HttpRequestTest, ResetClearsAllFields) {
-  buffer_->append("GET /path HTTP/1.1\r\n"
+  buffer_->write("GET /path HTTP/1.1\r\n"
                   "Host: example.com\r\n\r\n");
   request_->parseRequest(buffer_.get());
 
@@ -48,7 +48,7 @@ TEST_F(HttpRequestTest, ResetClearsAllFields) {
 }
 
 TEST_F(HttpRequestTest, ParseSimpleGetRequest) {
-  buffer_->append("GET /api/users HTTP/1.1\r\n"
+  buffer_->write("GET /api/users HTTP/1.1\r\n"
                   "Host: example.com\r\n\r\n");
 
   EXPECT_TRUE(request_->parseRequest(buffer_.get()));
@@ -62,7 +62,7 @@ TEST_F(HttpRequestTest, ParseSimpleGetRequest) {
 }
 
 TEST_F(HttpRequestTest, ParseRequestWithQueryParams) {
-  buffer_->append("GET /api/users?id=123&name=test HTTP/1.1\r\n"
+  buffer_->write("GET /api/users?id=123&name=test HTTP/1.1\r\n"
                   "Host: example.com\r\n\r\n");
 
   EXPECT_TRUE(request_->parseRequest(buffer_.get()));
@@ -72,7 +72,7 @@ TEST_F(HttpRequestTest, ParseRequestWithQueryParams) {
 }
 
 TEST_F(HttpRequestTest, ParsePostRequestWithBody) {
-  buffer_->append("POST /api/users HTTP/1.1\r\n"
+  buffer_->write("POST /api/users HTTP/1.1\r\n"
                   "Content-Length: 12\r\n"
                   "Content-Type: application/json\r\n\r\n"
                   "{\"id\":\"123\"}");
@@ -85,7 +85,7 @@ TEST_F(HttpRequestTest, ParsePostRequestWithBody) {
 }
 
 TEST_F(HttpRequestTest, HeaderOperations) {
-  buffer_->append("GET /api/users HTTP/1.1\r\n"
+  buffer_->write("GET /api/users HTTP/1.1\r\n"
                   "Host: example.com\r\n"
                   "User-Agent: test-agent\r\n\r\n");
 
@@ -138,7 +138,7 @@ TEST_F(HttpRequestTest, VersionStringConversion) {
 }
 
 TEST_F(HttpRequestTest, InvalidRequestLine) {
-  buffer_->append("INVALID /api HTTP/1.1\r\n"
+  buffer_->write("INVALID /api HTTP/1.1\r\n"
                   "Host: example.com\r\n\r\n");
 
   EXPECT_FALSE(request_->parseRequest(buffer_.get()));
@@ -146,14 +146,14 @@ TEST_F(HttpRequestTest, InvalidRequestLine) {
 }
 
 TEST_F(HttpRequestTest, MissingHeaders) {
-  buffer_->append("GET /api HTTP/1.1\r\n");
+  buffer_->write("GET /api HTTP/1.1\r\n");
 
   EXPECT_FALSE(request_->parseRequest(buffer_.get()));
   EXPECT_FALSE(request_->isGotAll());
 }
 
 TEST_F(HttpRequestTest, IncompleteBody) {
-  buffer_->append("POST /api HTTP/1.1\r\n"
+  buffer_->write("POST /api HTTP/1.1\r\n"
                   "Content-Length: 10\r\n\r\n"
                   "12345");
 

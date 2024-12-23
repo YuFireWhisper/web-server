@@ -123,7 +123,7 @@ TEST_F(HttpServerTest, RouterIntegration) {
                            "\r\n";
 
   Buffer buf;
-  buf.append(requestStr);
+  buf.write(requestStr);
 
   ASSERT_TRUE(request.parseRequest(&buf)) << "Failed to parse HTTP request";
 
@@ -148,7 +148,7 @@ TEST_F(HttpServerTest, RouterHandleValidPath) {
                              "\r\n";
 
   Buffer buf;
-  buf.append(requestStr);
+  buf.write(requestStr);
 
   ASSERT_TRUE(request.parseRequest(&buf)) << "Failed to parse HTTP request";
 

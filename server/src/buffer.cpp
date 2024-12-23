@@ -69,11 +69,11 @@ Buffer::Buffer(Buffer &&other) noexcept
   other.capacity_    = 0;
 }
 
-void Buffer::append(std::string_view str) {
-  Buffer::append(str.data(), str.size());
+void Buffer::write(std::string_view str) {
+  Buffer::write(str.data(), str.size());
 }
 
-void Buffer::append(const char *data, size_t len) {
+void Buffer::write(const char *data, size_t len) {
   if (data == nullptr && len > 0) {
     std::string message = "Cannot append null data";
     LOG_ERROR(message);
@@ -163,7 +163,7 @@ ssize_t Buffer::readData(int fd, int *savedErrno) {
     writerIndex_ += result;
   } else {
     writerIndex_ = capacity_;
-    append(extraBuffer.data(), result - writable);
+    write(extraBuffer.data(), result - writable);
   }
 
   return result;

@@ -18,8 +18,8 @@ public:
   Buffer(Buffer &&other) noexcept;
   Buffer &operator=(Buffer &&other) noexcept;
 
-  void append(const char *data, size_t len);
-  void append(std::string_view str);
+  void write(const char *data, size_t len);
+  void write(std::string_view str);
 
   void resize(size_t newSize);
   ssize_t readData(int fd, int *savedErrno);

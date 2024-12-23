@@ -14,42 +14,42 @@ HttpResponse::HttpResponse(Version version)
 }
 
 void HttpResponse::appendToBuffer(Buffer *output) const {
-  output->append(versionToString(version_));
-  output->append(" ");
-  output->append(std::to_string(static_cast<int>(statusCode_)));
-  output->append(" ");
+  output->write(versionToString(version_));
+  output->write(" ");
+  output->write(std::to_string(static_cast<int>(statusCode_)));
+  output->write(" ");
   if (!statusMessage_.empty()) {
-    output->append(statusMessage_);
+    output->write(statusMessage_);
   } else {
-    output->append(statusCodeToMessage(statusCode_));
+    output->write(statusCodeToMessage(statusCode_));
   }
-  output->append(kCRLF);
+  output->write(kCRLF);
 
   if (closeConnection_) {
-    output->append("Connection: close\r\n");
+    output->write("Connection: close\r\n");
   } else {
-    output->append("Connection: Keep-Alive\r\n");
+    output->write("Connection: Keep-Alive\r\n");
   }
 
   if (!body_.empty()) {
-    output->append("Content-Length: ");
-    output->append(std::to_string(body_.size()));
-    output->append(kCRLF);
+    output->write("Content-Length: ");
+    output->write(std::to_string(body_.size()));
+    output->write(kCRLF);
   }
 
   for (const auto &header : headers_) {
     if (!header.first.empty() && !header.second.empty()) {
-      output->append(header.first);
-      output->append(": ");
-      output->append(header.second);
-      output->append(kCRLF);
+      output->write(header.first);
+      output->write(": ");
+      output->write(header.second);
+      output->write(kCRLF);
     }
   }
 
-  output->append(kCRLF);
+  output->write(kCRLF);
 
   if (!body_.empty()) {
-    output->append(body_);
+    output->write(body_);
   }
 }
 

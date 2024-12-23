@@ -12,9 +12,9 @@ namespace {
 
 class NetworkTestConfig {
 public:
-  static constexpr uint16_t BASE_PORT = 50000;
-  static constexpr int LISTEN_BACKLOG = 5;
-  static constexpr auto RETRY_DELAY = std::chrono::milliseconds(100);
+  static constexpr uint16_t BASE_PORT    = 50000;
+  static constexpr int LISTEN_BACKLOG    = 5;
+  static constexpr auto RETRY_DELAY      = std::chrono::milliseconds(100);
   static constexpr int MAX_BIND_ATTEMPTS = 3;
 };
 
@@ -105,7 +105,7 @@ TEST_F(SocketTestFixture, handleBufferDataOperations) {
 
   Buffer testBuffer;
   const std::string testMessage = "Test Message";
-  testBuffer.append(testMessage);
+  testBuffer.write(testMessage);
   EXPECT_EQ(testBuffer.readableBytes(), testMessage.length());
 }
 

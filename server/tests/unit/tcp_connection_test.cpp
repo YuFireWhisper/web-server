@@ -217,7 +217,7 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageSendingWithBuffer) {
   std::promise<void> writeComplete;
   Buffer sendBuffer;
   const std::string testMessage = "Test Buffer Message";
-  sendBuffer.append(testMessage);
+  sendBuffer.write(testMessage);
 
   runInLoop([&]() {
     connection->setWriteCompleteCallback([&](const TcpConnectionPtr &) {

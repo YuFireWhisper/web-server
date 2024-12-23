@@ -38,7 +38,7 @@ protected:
     Buffer buf(1024);
     HttpRequest req;
     std::string requestStr = "GET " + path + " HTTP/1.1\r\nHost: test.com\r\n\r\n";
-    buf.append(requestStr);
+    buf.write(requestStr);
     req.parseRequest(&buf);
     return req;
   }
