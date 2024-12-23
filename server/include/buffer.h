@@ -47,9 +47,6 @@ private:
   void ensureSpace(size_t len);
   void makeSpace(size_t len);
 
-  static void checkInitialArg(size_t size, const std::string &argName);
-  static void checkConfig(const ServerConfig &config);
-
   HttpConfig config_;
   char *buffer_       = nullptr;
   size_t writerIndex_ = 0;
