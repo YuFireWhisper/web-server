@@ -6,8 +6,10 @@
 
 #include <bits/types/struct_iovec.h>
 #include <cassert>
+#include <csignal>
 #include <cstring>
 #include <stdexcept>
+#include <string_view>
 
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -130,6 +132,13 @@ std::string_view Buffer::read(size_t length) {
   return result;
 }
 
+std::string_view Buffer::readAll() noexcept {
+  std::string_view result(buffer_ + readerIndex_, readableSize());
+  readerIndex_ = PREPEND_SIZE;
+  writerIndex_ = PREPEND_SIZE;
+  return result;
+}
+
 void Buffer::hasRead(size_t len) {
   if (len > readableSize()) {
     hasReadAll();
@@ -141,12 +150,6 @@ void Buffer::hasRead(size_t len) {
 void Buffer::hasReadAll() noexcept {
   readerIndex_ = config_.prependSize;
   writerIndex_ = config_.prependSize;
-}
-
-std::string Buffer::readAll() {
-  std::string result(peek(), readableSize());
-  hasReadAll();
-  return result;
 }
 
 ssize_t Buffer::readData(int fd, int *savedErrno) {

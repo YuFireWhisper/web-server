@@ -3,7 +3,6 @@
 #include "include/config_defaults.h"
 
 #include <cstddef>
-#include <string>
 #include <string_view>
 
 #include <sys/types.h>
@@ -25,7 +24,7 @@ public:
   ssize_t readData(int fd, int *savedErrno);
 
   std::string_view read(size_t length);
-  std::string readAll();
+  std::string_view readAll() noexcept;
 
   [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableSize() const noexcept { return capacity_ - writerIndex_; }

@@ -241,7 +241,7 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageReceiving) {
   runInLoop([&]() {
     connection->setMessageCallback(
         [&messageReceived](const TcpConnectionPtr &, Buffer *buffer, TimeStamp) {
-          messageReceived.set_value(buffer->readAll());
+          messageReceived.set_value(static_cast<std::string>(buffer->readAll()));
         }
     );
     connection->connectEstablished();
