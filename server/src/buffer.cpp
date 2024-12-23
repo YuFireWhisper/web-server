@@ -152,7 +152,7 @@ void Buffer::hasReadAll() noexcept {
   writerIndex_ = config_.prependSize;
 }
 
-ssize_t Buffer::readData(int fd, int *savedErrno) {
+ssize_t Buffer::readFromFd(int fd, int *errorCode) {
   std::vector<char> extraBuffer(config_.extraBufferSize);
   std::array<iovec, 2> vec;
 
@@ -166,7 +166,7 @@ ssize_t Buffer::readData(int fd, int *savedErrno) {
   const ssize_t result = ::readv(fd, vec.data(), 2);
 
   if (result < 0) {
-    *savedErrno = errno;
+    *errorCode = errno;
   } else if (static_cast<size_t>(result) <= writable) {
     writerIndex_ += result;
   } else {

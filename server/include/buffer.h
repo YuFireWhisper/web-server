@@ -23,12 +23,14 @@ public:
   void write(const char *data, size_t len);
   void write(std::string_view str);
 
-  void resize(size_t newSize);
-  ssize_t readData(int fd, int *savedErrno);
-
   std::string_view read(size_t length);
   std::string_view readAll() noexcept;
   [[nodiscard]] std::string_view preview(size_t length) const;
+
+  ssize_t readFromFd(int fd, int *errorCode);
+
+  void resize(size_t newSize);
+
   [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableSize() const noexcept { return capacity_ - writerIndex_; }
   [[nodiscard]] size_t prependableBytes() const noexcept { return readerIndex_; }

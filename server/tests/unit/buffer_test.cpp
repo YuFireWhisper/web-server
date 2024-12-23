@@ -87,7 +87,7 @@ TEST_F(BufferTest, ReadDataFromFd) {
   close(pipefd[1]);
 
   int savedErrno    = 0;
-  ssize_t readBytes = buffer->readData(pipefd[0], &savedErrno);
+  ssize_t readBytes = buffer->readFromFd(pipefd[0], &savedErrno);
 
   EXPECT_GT(readBytes, 0);
   EXPECT_EQ(buffer->readAll(), std::string(testData));
@@ -97,7 +97,7 @@ TEST_F(BufferTest, ReadDataFromFd) {
 
 TEST_F(BufferTest, ReadDataFromInvalidFd) {
   int savedErrno    = 0;
-  ssize_t readBytes = buffer->readData(-1, &savedErrno);
+  ssize_t readBytes = buffer->readFromFd(-1, &savedErrno);
 
   EXPECT_LT(readBytes, 0);
   EXPECT_NE(savedErrno, 0);

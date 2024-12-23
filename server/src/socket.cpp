@@ -198,7 +198,7 @@ bool Socket::hasError() const {
 
 size_t Socket::readData(Buffer &targetBuffer) const {
   int savedErrno    = 0;
-  ssize_t bytesRead = targetBuffer.readData(socketFd_, &savedErrno);
+  ssize_t bytesRead = targetBuffer.readFromFd(socketFd_, &savedErrno);
 
   if (bytesRead < 0) {
     if (savedErrno == EAGAIN || savedErrno == EWOULDBLOCK || savedErrno == EINTR) {

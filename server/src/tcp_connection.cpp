@@ -271,7 +271,7 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
       "handleRead called with timestamp: " + std::to_string(receiveTime.microSecondsSinceEpoch())
   );
   int savedErrno = 0;
-  ssize_t result = inputBuffer_.readData(socket_->getSocketFd(), &savedErrno);
+  ssize_t result = inputBuffer_.readFromFd(socket_->getSocketFd(), &savedErrno);
 
   if (result > 0) {
     LOG_DEBUG("need to call messageCallback");
