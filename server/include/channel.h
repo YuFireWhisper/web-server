@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.h"
+#include "include/types.h"
 
 namespace server {
 
@@ -12,25 +12,29 @@ public:
   Channel(EventLoop *loop, int fd);
   ~Channel();
 
+  Channel(const Channel &)            = delete;
+  Channel &operator=(const Channel &) = delete;
+  Channel(Channel &&)                 = delete;
+  Channel &operator=(Channel &&)      = delete;
+
   void handleEvent(TimeStamp receiveTime);
   void handleEventWithGuard(TimeStamp receiveTime);
 
-  void setReadCallback(const ReadEventCallback &cb) { readCallback_ = cb; }
-  void setWriteCallback(const EventCallback &cb) { writeCallback_ = cb; }
-  void setErrorCallback(const EventCallback &cb) { errorCallback_ = cb; }
-  void setCloseCallback(const EventCallback &cb) { closeCallback_ = cb; }
+  void setReadCallback(ReadEventCallback &&cb) { readCallback_ = std::move(cb); }
+  void setWriteCallback(EventCallback &&cb) { writeCallback_ = std::move(cb); }
+  void setErrorCallback(EventCallback &&cb) { errorCallback_ = std::move(cb); }
+  void setCloseCallback(EventCallback &&cb) { closeCallback_ = std::move(cb); }
 
-  void enableReading() { updateEventStatus(events_ | EPOLLIN); }
-
-  void disableReading() { updateEventStatus(events_ & ~EventType::kReadEvent); }
-  void enableWriting() { updateEventStatus(events_ | EventType::kWriteEvent); }
-  void disableWriting() { updateEventStatus(events_ & ~EventType::kWriteEvent); }
-  void disableAll() { updateEventStatus(EventType::kNoneEvent); }
+  void enableReading() { updateEventStatus(static_cast<int>(events_ | kReadEvent)); }
+  void disableReading() { updateEventStatus(static_cast<int>(events_ & ~kReadEvent)); }
+  void enableWriting() { updateEventStatus(static_cast<int>(events_ | kWriteEvent)); }
+  void disableWriting() { updateEventStatus(static_cast<int>(events_ & ~kWriteEvent)); }
+  void disableAll() { updateEventStatus(kNoneEvent); }
   void remove();
 
-  [[nodiscard]] bool isWriting() const { return (events_ & EventType::kWriteEvent) != 0; }
-  [[nodiscard]] bool isReading() const { return (events_ & EventType::kReadEvent) != 0; }
-  [[nodiscard]] bool isNoneEvent() const { return events_ == EventType::kNoneEvent; }
+  [[nodiscard]] bool isWriting() const { return (events_ & kWriteEvent) != 0; }
+  [[nodiscard]] bool isReading() const { return (events_ & kReadEvent) != 0; }
+  [[nodiscard]] bool isNoneEvent() const { return events_ == kNoneEvent; }
   [[nodiscard]] bool isInLoop() const;
 
   [[nodiscard]] int fd() const { return fd_; }
@@ -43,6 +47,10 @@ public:
   void assertInLoop();
 
 private:
+  static constexpr int kNoneEvent           = 0;
+  static constexpr unsigned int kReadEvent  = EPOLLIN | EPOLLPRI;
+  static constexpr unsigned int kWriteEvent = EPOLLOUT;
+
   void processEvents(TimeStamp time);
   void updateEventStatus(int events);
   void notifyLoopOfUpdate();

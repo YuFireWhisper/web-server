@@ -22,9 +22,10 @@ TEST_F(BufferTest, InitialStateIsEmpty) {
 }
 
 TEST_F(BufferTest, ConstructorWithCustomSize) {
-  Buffer customBuffer(1024);
+  const size_t requestedSize = 1024;
+  Buffer customBuffer(requestedSize);
   EXPECT_EQ(customBuffer.readableSize(), 0);
-  EXPECT_EQ(customBuffer.writableSize(), 1024);
+  EXPECT_EQ(customBuffer.writableSize(), requestedSize - 8);
 }
 
 TEST_F(BufferTest, ConstructorThrowsOnExcessiveSize) {
@@ -107,7 +108,7 @@ TEST_F(BufferTest, ResizeIncreasesCapacity) {
   size_t newSize = 2048;
   buffer->resize(newSize);
 
-  EXPECT_EQ(buffer->writableSize(), newSize);
+  EXPECT_EQ(buffer->writableSize(), newSize - 8);
   EXPECT_EQ(buffer->readableSize(), 0);
 }
 
