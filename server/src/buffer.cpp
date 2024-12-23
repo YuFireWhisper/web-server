@@ -42,10 +42,10 @@ Buffer::Buffer(size_t len) {
   }
 
   try {
-    buffer_      = new char[len];
-    capacity_    = len;
-    readerIndex_ = config_.prependSize;
-    writerIndex_ = config_.prependSize;
+    buffer_   = new char[len];
+    capacity_ = len;
+    readPos_  = config_.prependSize;
+    writePos_ = config_.prependSize;
   } catch (const std::bad_alloc &e) {
     buffer_             = nullptr;
     capacity_           = 0;
@@ -63,12 +63,12 @@ Buffer::~Buffer() {
 Buffer::Buffer(Buffer &&other) noexcept
     : config_(std::move(other.config_))
     , buffer_(other.buffer_)
-    , writerIndex_(other.writerIndex_)
-    , readerIndex_(other.readerIndex_)
+    , writePos_(other.writePos_)
+    , readPos_(other.readPos_)
     , capacity_(other.capacity_) {
-  other.writerIndex_ = 0;
-  other.readerIndex_ = 0;
-  other.capacity_    = 0;
+  other.writePos_ = 0;
+  other.readPos_  = 0;
+  other.capacity_ = 0;
 }
 
 void Buffer::write(std::string_view str) {
@@ -99,13 +99,13 @@ void Buffer::ensureSpace(size_t len) {
 
 void Buffer::moveReadableDataToFront() {
   size_t readable = readableSize();
-  std::copy(buffer_ + readerIndex_, buffer_ + writerIndex_, buffer_ + PREPEND_SIZE);
-  readerIndex_ = PREPEND_SIZE;
-  writerIndex_ = readerIndex_ + readable;
+  std::copy(buffer_ + readPos_, buffer_ + writePos_, buffer_ + PREPEND_SIZE);
+  readPos_  = PREPEND_SIZE;
+  writePos_ = readPos_ + readable;
 }
 
 void Buffer::hasWritten(size_t len) noexcept {
-  writerIndex_ += len;
+  writePos_ += len;
 }
 
 std::string_view Buffer::read(size_t length) {
@@ -113,21 +113,21 @@ std::string_view Buffer::read(size_t length) {
     throw std::out_of_range("Read length exceeds available data");
   }
 
-  std::string_view result(buffer_ + readerIndex_, length);
-  readerIndex_ += length;
+  std::string_view result(buffer_ + readPos_, length);
+  readPos_ += length;
 
-  if (readerIndex_ >= writerIndex_) {
-    readerIndex_ = PREPEND_SIZE;
-    writerIndex_ = PREPEND_SIZE;
+  if (readPos_ >= writePos_) {
+    readPos_  = PREPEND_SIZE;
+    writePos_ = PREPEND_SIZE;
   }
 
   return result;
 }
 
 std::string_view Buffer::readAll() noexcept {
-  std::string_view result(buffer_ + readerIndex_, readableSize());
-  readerIndex_ = PREPEND_SIZE;
-  writerIndex_ = PREPEND_SIZE;
+  std::string_view result(buffer_ + readPos_, readableSize());
+  readPos_  = PREPEND_SIZE;
+  writePos_ = PREPEND_SIZE;
   return result;
 }
 
@@ -135,37 +135,37 @@ void Buffer::hasRead(size_t len) {
   if (len > readableSize()) {
     hasReadAll();
   } else {
-    readerIndex_ += len;
+    readPos_ += len;
   }
 }
 
 void Buffer::hasReadAll() noexcept {
-  readerIndex_ = config_.prependSize;
-  writerIndex_ = config_.prependSize;
+  readPos_  = config_.prependSize;
+  writePos_ = config_.prependSize;
 }
 
-ssize_t Buffer::readFromFd(int fd, int* errorCode) {
+ssize_t Buffer::readFromFd(int fd, int *errorCode) {
   char extraBuffer[65536];
   struct iovec vec[2];
-  
-  vec[0].iov_base = buffer_ + writerIndex_;
-  vec[0].iov_len = writableSize();
+
+  vec[0].iov_base = buffer_ + writePos_;
+  vec[0].iov_len  = writableSize();
   vec[1].iov_base = extraBuffer;
-  vec[1].iov_len = sizeof(extraBuffer);
-  
+  vec[1].iov_len  = sizeof(extraBuffer);
+
   ssize_t result = ::readv(fd, vec, 2);
   if (result < 0) {
     *errorCode = errno;
     return result;
   }
-  
+
   if (static_cast<size_t>(result) <= writableSize()) {
-    writerIndex_ += result;
+    writePos_ += result;
   } else {
-    writerIndex_ = capacity_;
+    writePos_ = capacity_;
     write(extraBuffer, result - writableSize());
   }
-  
+
   return result;
 }
 
@@ -182,20 +182,20 @@ void Buffer::resize(size_t newSize) {
   size_t readable = readableSize();
 
   if (readable > 0) {
-    std::copy_n(buffer_ + readerIndex_, readable, newBuffer + PREPEND_SIZE);
+    std::copy_n(buffer_ + readPos_, readable, newBuffer + PREPEND_SIZE);
   }
 
   delete[] buffer_;
-  buffer_      = newBuffer;
-  capacity_    = newSize;
-  readerIndex_ = PREPEND_SIZE;
-  writerIndex_ = readerIndex_ + readable;
+  buffer_   = newBuffer;
+  capacity_ = newSize;
+  readPos_  = PREPEND_SIZE;
+  writePos_ = readPos_ + readable;
 }
 
 std::string_view Buffer::preview(size_t length) const {
   if (length > readableSize()) {
     throw std::out_of_range("Preview length exceeds available data");
   }
-  return { buffer_ + readerIndex_, length };
+  return { buffer_ + readPos_, length };
 }
 } // namespace server

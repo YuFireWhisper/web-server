@@ -30,12 +30,12 @@ public:
   ssize_t readFromFd(int fd, int *errorCode);
 
   void resize(size_t newSize);
-  [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
-  [[nodiscard]] size_t writableSize() const noexcept { return capacity_ - writerIndex_; }
+  [[nodiscard]] size_t readableSize() const noexcept { return writePos_ - readPos_; }
+  [[nodiscard]] size_t writableSize() const noexcept { return capacity_ - writePos_; }
 
   [[nodiscard]] char *begin() const { return buffer_; }
 
-  [[nodiscard]] char *beginWrite() const noexcept { return begin() + writerIndex_; }
+  [[nodiscard]] char *beginWrite() const noexcept { return begin() + writePos_; }
 
   void hasWritten(size_t len) noexcept;
 
@@ -50,11 +50,11 @@ private:
   void ensureSpace(size_t len);
   void moveReadableDataToFront();
 
+  char *buffer_;
+  size_t writePos_;
+  size_t readPos_;
+  size_t capacity_;
   HttpConfig config_;
-  char *buffer_       = nullptr;
-  size_t writerIndex_ = 0;
-  size_t readerIndex_ = 0;
-  size_t capacity_    = 0;
 };
 
 } // namespace server
