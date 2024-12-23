@@ -17,6 +17,9 @@ public:
   Buffer(Buffer &&other) noexcept;
   Buffer &operator=(Buffer &&other) noexcept;
 
+  Buffer(const Buffer &)            = delete;
+  Buffer &operator=(const Buffer &) = delete;
+
   void write(const char *data, size_t len);
   void write(std::string_view str);
 
