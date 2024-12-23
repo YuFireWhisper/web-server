@@ -58,6 +58,17 @@ Buffer::~Buffer() {
   buffer_ = nullptr;
 }
 
+Buffer::Buffer(Buffer &&other) noexcept
+    : config_(std::move(other.config_))
+    , buffer_(other.buffer_)
+    , writerIndex_(other.writerIndex_)
+    , readerIndex_(other.readerIndex_)
+    , capacity_(other.capacity_) {
+  other.writerIndex_ = 0;
+  other.readerIndex_ = 0;
+  other.capacity_    = 0;
+}
+
 void Buffer::append(std::string_view str) {
   Buffer::append(str.data(), str.size());
 }
