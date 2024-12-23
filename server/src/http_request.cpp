@@ -44,7 +44,7 @@ bool HttpRequest::parseRequestInternal(Buffer *buf) {
 bool HttpRequest::parseNextState(Buffer *buf) {
   const char *begin = buf->peek();
   const char *end   = begin + buf->readableBytes();
-  std::string_view content{begin, static_cast<size_t>(end - begin)};
+  std::string_view content{ begin, static_cast<size_t>(end - begin) };
 
   switch (state_) {
     case ParseState::kExpectRequestLine:
@@ -74,7 +74,7 @@ bool HttpRequest::processRequestLine(Buffer *buf, const std::string_view &conten
   }
 
   setRequestLine(result);
-  buf->retrieve(position + kCRLF.size());
+  buf->hasRead(position + kCRLF.size());
   state_ = ParseState::kExpectHeaders;
   return true;
 }
@@ -83,13 +83,11 @@ HttpRequest::RequestLineResult HttpRequest::parseRequestLine(const char *begin, 
   // 請求的格式:
   // GET /api/users HTTP/1.1
 
-  RequestLineResult result = {
-      .method  = Method::kInvalid,
-      .path    = "",
-      .query   = "",
-      .version = Version::kUnknown,
-      .valid   = false
-  };
+  RequestLineResult result = { .method  = Method::kInvalid,
+                               .path    = "",
+                               .query   = "",
+                               .version = Version::kUnknown,
+                               .valid   = false };
   std::string_view line(begin, end - begin);
 
   auto methodEnd = line.find(' ');
@@ -158,7 +156,7 @@ bool HttpRequest::processHeaders(Buffer *buf, const std::string_view &content) {
   }
 
   setHeaders(result);
-  buf->retrieve(position + kCRLFCRLF.size());
+  buf->hasRead(position + kCRLFCRLF.size());
   state_ = (contentLength_ > 0) ? ParseState::kExpectBody : ParseState::kGotAll;
   return true;
 }
@@ -168,7 +166,7 @@ HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const cha
   // Host: www.example.com
   // User-Agent: Mozilla/5.0
 
-  HeaderResult result      = {.headers = {}, .contentLength = 0, .valid = false};
+  HeaderResult result      = { .headers = {}, .contentLength = 0, .valid = false };
   std::string_view headers = std::string_view(begin, end - begin);
 
   size_t position = 0;
@@ -241,7 +239,7 @@ bool HttpRequest::processBody(Buffer *buf, const std::string_view &content) {
   }
 
   setBody(result);
-  buf->retrieve(contentLength_);
+  buf->hasRead(contentLength_);
   state_ = ParseState::kGotAll;
   return true;
 }
@@ -252,7 +250,7 @@ HttpRequest::parseBody(const char *begin, const char *end, size_t contentLength)
   // 不過我們已經刪除了其他已讀取的資料了，
   // 直接讀取該資料即可。
 
-  BodyResult result = {.body = "", .valid = false};
+  BodyResult result = { .body = "", .valid = false };
 
   if (end - begin != static_cast<ptrdiff_t>(contentLength)) {
     return result;
@@ -272,13 +270,12 @@ void HttpRequest::setBody(const BodyResult &result) {
 }
 
 Method HttpRequest::stringToMethod(const std::string_view &methodStr) {
-  static const std::unordered_map<std::string_view, Method> methodMap = {
-      {"GET", Method::kGet},
-      {"POST", Method::kPost},
-      {"HEAD", Method::kHead},
-      {"PUT", Method::kPut},
-      {"DELETE", Method::kDelete}
-  };
+  static const std::unordered_map<std::string_view, Method> methodMap = { { "GET", Method::kGet },
+                                                                          { "POST", Method::kPost },
+                                                                          { "HEAD", Method::kHead },
+                                                                          { "PUT", Method::kPut },
+                                                                          { "DELETE",
+                                                                            Method::kDelete } };
 
   auto it = methodMap.find(methodStr);
   return (it != methodMap.end()) ? it->second : Method::kInvalid;

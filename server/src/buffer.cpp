@@ -110,26 +110,26 @@ std::string Buffer::retrieveAsString(size_t len) {
     throw std::out_of_range(message);
   }
   std::string result(peek(), len);
-  retrieve(len);
+  hasRead(len);
   return result;
 }
 
-void Buffer::retrieve(size_t len) {
+void Buffer::hasRead(size_t len) {
   if (len > readableBytes()) {
-    retrieveAll();
+    hasReadAll();
   } else {
     readerIndex_ += len;
   }
 }
 
-void Buffer::retrieveAll() noexcept {
+void Buffer::hasReadAll() noexcept {
   readerIndex_ = config_.prependSize;
   writerIndex_ = config_.prependSize;
 }
 
 std::string Buffer::retrieveAllAsString() {
   std::string result(peek(), readableBytes());
-  retrieveAll();
+  hasReadAll();
   return result;
 }
 

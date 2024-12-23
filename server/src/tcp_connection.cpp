@@ -76,11 +76,11 @@ void TcpConnection::send(Buffer *buffer) {
 
   if (loop_->isInLoopThread()) {
     sendInLoop(buffer->peek(), buffer->readableBytes());
-    buffer->retrieveAll();
+    buffer->hasReadAll();
   } else {
     std::string message(buffer->peek(), buffer->readableBytes());
     loop_->runInLoop([this, message]() { sendInLoop(message.data(), message.size()); });
-    buffer->retrieveAll();
+    buffer->hasReadAll();
   }
 }
 
@@ -182,7 +182,7 @@ void TcpConnection::handleWrite() {
     ssize_t result = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableBytes());
 
     if (result > 0) {
-      outputBuffer_.retrieve(result);
+      outputBuffer_.hasRead(result);
       if (outputBuffer_.readableBytes() == 0) {
         channel_->disableWriting();
 

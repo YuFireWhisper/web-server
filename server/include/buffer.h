@@ -38,8 +38,8 @@ public:
   void hasWritten(size_t len) noexcept;
   [[nodiscard]] const char *peek() const noexcept { return begin() + readerIndex_; }
 
-  void retrieve(size_t len);
-  void retrieveAll() noexcept;
+  void hasRead(size_t len);
+  void hasReadAll() noexcept;
 
   HttpConfig getConfig() { return config_; }
 
