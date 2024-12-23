@@ -124,7 +124,7 @@ TEST_F(BufferTest, WriteAndPeekOperations) {
   std::string testData = "Test";
   buffer->write(testData);
 
-  EXPECT_EQ(std::string(buffer->peek(), testData.length()), testData);
+  EXPECT_EQ(std::string(buffer->preview(), testData.length()), testData);
   EXPECT_EQ(buffer->readableSize(), testData.length());
 }
 

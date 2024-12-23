@@ -193,7 +193,7 @@ void Buffer::resize(size_t newSize) {
   char *newBuffer = new char[newSize];
 
   if (readableSize() > 0) {
-    std::memcpy(newBuffer + config_.prependSize, peek(), readableSize());
+    std::memcpy(newBuffer + config_.prependSize, preview(), readableSize());
   }
 
   capacity_    = newSize;

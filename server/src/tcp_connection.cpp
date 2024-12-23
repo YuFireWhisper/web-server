@@ -75,10 +75,10 @@ void TcpConnection::send(Buffer *buffer) {
   }
 
   if (loop_->isInLoopThread()) {
-    sendInLoop(buffer->peek(), buffer->readableSize());
+    sendInLoop(buffer->preview(), buffer->readableSize());
     buffer->hasReadAll();
   } else {
-    std::string message(buffer->peek(), buffer->readableSize());
+    std::string message(buffer->preview(), buffer->readableSize());
     loop_->runInLoop([this, message]() { sendInLoop(message.data(), message.size()); });
     buffer->hasReadAll();
   }
@@ -179,7 +179,7 @@ void TcpConnection::handleWrite() {
   loop_->assertInLoopThread();
 
   if (channel_->isWriting()) {
-    ssize_t result = ::write(channel_->fd(), outputBuffer_.peek(), outputBuffer_.readableSize());
+    ssize_t result = ::write(channel_->fd(), outputBuffer_.preview(), outputBuffer_.readableSize());
 
     if (result > 0) {
       outputBuffer_.hasRead(result);
