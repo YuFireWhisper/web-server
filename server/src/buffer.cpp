@@ -114,14 +114,13 @@ void Buffer::hasWritten(size_t len) noexcept {
   writerIndex_ += len;
 }
 
-std::string Buffer::read(size_t len) {
-  if (len > readableSize()) {
-    std::string message = "Not enough data in buffer";
-    LOG_ERROR(message);
-    throw std::out_of_range(message);
+std::string_view Buffer::read(size_t length) {
+  if (length > readableSize()) {
+    throw std::out_of_range("Read length exceeds available data");
   }
-  std::string result(peek(), len);
-  hasRead(len);
+
+  std::string_view result(buffer_ + readerIndex_, length);
+  hasRead(length);
   return result;
 }
 

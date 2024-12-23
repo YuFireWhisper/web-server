@@ -24,7 +24,7 @@ public:
   void resize(size_t newSize);
   ssize_t readData(int fd, int *savedErrno);
 
-  std::string read(size_t len);
+  std::string_view read(size_t length);
   std::string readAll();
 
   [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
