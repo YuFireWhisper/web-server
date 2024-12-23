@@ -28,8 +28,7 @@ public:
 
   std::string_view read(size_t length);
   std::string_view readAll() noexcept;
-  [[nodiscard]] const char *preview() const noexcept { return begin() + readerIndex_; }
-
+  [[nodiscard]] const char *preview() const;
   [[nodiscard]] size_t readableSize() const noexcept { return writerIndex_ - readerIndex_; }
   [[nodiscard]] size_t writableSize() const noexcept { return capacity_ - writerIndex_; }
   [[nodiscard]] size_t prependableBytes() const noexcept { return readerIndex_; }

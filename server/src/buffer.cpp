@@ -201,4 +201,8 @@ void Buffer::resize(size_t newSize) {
   writerIndex_ = readerIndex_ + readableSize();
   buffer_      = newBuffer;
 }
+
+const char *Buffer::preview() const {
+  return begin() + readerIndex_;
+}
 } // namespace server
