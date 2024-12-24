@@ -1,3 +1,2 @@
 #pragma once
-
-#define kPorjectRoot "home/projects/web-server/"
+#define kPorjectRoot "/home/yuwhisper/projects/web-server/"

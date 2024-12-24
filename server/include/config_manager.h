@@ -14,6 +14,7 @@ public:
     static ConfigManager instance;
     return instance;
   }
+  ~ConfigManager();
   ConfigManager(const ConfigManager &)            = delete;
   ConfigManager &operator=(const ConfigManager &) = delete;
   void registerCommand(const ServerCommand &cmd);

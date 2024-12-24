@@ -37,6 +37,7 @@ private:
       const HttpRequest &req,
       HttpResponse *resp
   ) const;
+  static std::filesystem::path normalizePath(const std::filesystem::path &path);
 
   LocationConfig routerNode_;
   std::unordered_map<StatusCode, RouteHandler> errorHandlers_;

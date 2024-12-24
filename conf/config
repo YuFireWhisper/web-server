@@ -78,7 +78,7 @@ http {
 
         # 工作程序數量
         # 預設值: CPU 核心數
-        #worker_processes 8;
+        worker_processes 0;
 
         # ----- TCP 選項 -----
         # 啟用埠口重用
@@ -111,10 +111,9 @@ http {
         #    root /var/www/html;
         #}
 
-        # 靜態文件配置示例
-        #location /static {
-        #    static_file /path/to/static;
-        #}
+        location / {
+            static_file /home/yuwhisper/projects/web-server/index.html;
+        }
 
         # API 反向代理示例
         #location /api {

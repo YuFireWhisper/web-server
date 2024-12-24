@@ -154,27 +154,39 @@ bool Router::serveStaticFile(
     HttpResponse *resp
 ) const {
   LOG_DEBUG("開始處理靜態文件");
-  if (!std::filesystem::exists(staticFilePath)) {
+
+  std::filesystem::path normalizedPath;
+  try {
+    normalizedPath = normalizePath(staticFilePath);
+    LOG_DEBUG("標準化後的路徑: " + normalizedPath.string());
+  } catch (const std::exception &e) {
+    LOG_ERROR("路徑標準化失敗: " + std::string(e.what()));
+    handleError(StatusCode::k500InternalServerError);
+    return true;
+  }
+
+  if (!std::filesystem::exists(normalizedPath)) {
+    LOG_DEBUG("靜態檔案不存在");
     return false;
   }
 
-  if (!std::filesystem::is_regular_file(staticFilePath)) {
+  if (!std::filesystem::is_regular_file(normalizedPath)) {
     handleError(StatusCode::k403Forbidden);
     return true;
   }
 
   try {
-    auto fileSize    = std::filesystem::file_size(staticFilePath);
-    auto contentType = getMimeType(staticFilePath.extension().string());
+    auto fileSize    = std::filesystem::file_size(normalizedPath);
+    auto contentType = getMimeType(normalizedPath.extension().string());
     resp->setContentType(contentType);
 
-    handleCaching(staticFilePath, req, resp);
+    handleCaching(normalizedPath, req, resp);
 
     if (resp->statusCode() == StatusCode::k304NotModified) {
       return true;
     }
 
-    std::ifstream file(staticFilePath, std::ios::binary);
+    std::ifstream file(normalizedPath, std::ios::binary);
     if (!file) {
       handleError(StatusCode::k500InternalServerError);
       return true;
@@ -257,36 +269,67 @@ void Router::handleCaching(
     const HttpRequest &req,
     HttpResponse *resp
 ) {
-    auto lastModTime = std::filesystem::last_write_time(filePath);
-    auto lastModTimeT = std::chrono::system_clock::to_time_t(
-        std::chrono::clock_cast<std::chrono::system_clock>(lastModTime)
-    );
+  auto lastModTime  = std::filesystem::last_write_time(filePath);
+  auto lastModTimeT = std::chrono::system_clock::to_time_t(
+      std::chrono::clock_cast<std::chrono::system_clock>(lastModTime)
+  );
 
-    char timeBuffer[100];
-    size_t timeLength = std::strftime(
-        timeBuffer,
-        sizeof(timeBuffer),
-        "%a, %d %b %Y %H:%M:%S GMT",
-        std::gmtime(&lastModTimeT)
-    );
+  char timeBuffer[100];
+  size_t timeLength = std::strftime(
+      timeBuffer,
+      sizeof(timeBuffer),
+      "%a, %d %b %Y %H:%M:%S GMT",
+      std::gmtime(&lastModTimeT)
+  );
 
-    // 添加調試日誌
-    LOG_DEBUG("Time buffer length: " + std::to_string(timeLength));
-    LOG_DEBUG("Formatted time: " + std::string(timeBuffer));
+  // 添加調試日誌
+  LOG_DEBUG("Time buffer length: " + std::to_string(timeLength));
+  LOG_DEBUG("Formatted time: " + std::string(timeBuffer));
 
-    std::string timeStr(timeBuffer);
-    resp->addHeader("Last-Modified", timeStr);
-    resp->addHeader("Cache-Control", "public, max-age=3600");
+  std::string timeStr(timeBuffer);
+  resp->addHeader("Last-Modified", timeStr);
+  resp->addHeader("Cache-Control", "public, max-age=3600");
 
-    if (req.hasHeader("If-Modified-Since")) {
-        auto ifModifiedSince = req.getHeader("If-Modified-Since");
-        LOG_DEBUG("If-Modified-Since: " + ifModifiedSince);
-        LOG_DEBUG("Current time string: " + timeStr);
-        if (ifModifiedSince == timeStr) {
-            resp->setStatusCode(StatusCode::k304NotModified);
-            resp->setBody("");
-            return;
-        }
+  if (req.hasHeader("If-Modified-Since")) {
+    auto ifModifiedSince = req.getHeader("If-Modified-Since");
+    LOG_DEBUG("If-Modified-Since: " + ifModifiedSince);
+    LOG_DEBUG("Current time string: " + timeStr);
+    if (ifModifiedSince == timeStr) {
+      resp->setStatusCode(StatusCode::k304NotModified);
+      resp->setBody("");
+      return;
     }
+  }
+}
+
+std::filesystem::path Router::normalizePath(const std::filesystem::path &path) {
+  std::string pathStr = path.string();
+
+  LOG_DEBUG("Input path: " + pathStr);
+  LOG_DEBUG("Is absolute: " + std::to_string(path.is_absolute()));
+
+  if (path.is_absolute() || pathStr[0] == '/') {
+    LOG_DEBUG("檢測到絕對路徑: " + pathStr);
+    return path;
+  }
+
+  if (path.is_absolute()) {
+    LOG_DEBUG("檢測到絕對路徑: " + pathStr);
+    return path;
+  }
+
+  if (!pathStr.empty() && pathStr[0] == '~') {
+    LOG_DEBUG("檢測到家目錄路徑: " + pathStr);
+    const char *homeDir = std::getenv("HOME");
+    if (homeDir == nullptr) {
+      LOG_ERROR("無法獲取家目錄路徑");
+      throw std::runtime_error("無法獲取家目錄路徑");
+    }
+    pathStr = pathStr.substr(1);
+    return std::filesystem::path(homeDir) / pathStr.substr(pathStr[0] == '/' ? 1 : 0);
+  }
+
+  LOG_DEBUG("轉換相對路徑為絕對路徑: " + pathStr);
+  return std::filesystem::absolute(path);
 }
 } // namespace server
