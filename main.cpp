@@ -1,4 +1,3 @@
-#include "include/config_manager.h"
 #include "include/event_loop.h"
 #include "include/http_request.h"
 #include "include/http_response.h"
@@ -12,14 +11,11 @@
 
 using namespace server;
 
-// 處理首頁請求的處理器
 void homeHandler(const HttpRequest &req, HttpResponse *resp) {
-  // 設定回應標頭
   resp->setStatusCode(StatusCode::k200Ok);
   resp->setContentType("text/html");
   resp->addHeader("Server", "MyHttpServer");
 
-  // 創建簡單的 HTML 回應
   std::string body = "<html>"
                      "<head><title>Welcome</title></head>"
                      "<body>"
@@ -38,11 +34,10 @@ void homeHandler(const HttpRequest &req, HttpResponse *resp) {
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
   try {
-    // 設定日誌系統
     Logger::setSystemLogPath("./logs/system.log");
     LOG_INFO("Starting HTTP server...");
 
-    Router::initializeMime(); // 初始化 MIME 類型
+    Router::initializeMime();
 
     // 設置路由配置
     LocationConfig rootLocation;
