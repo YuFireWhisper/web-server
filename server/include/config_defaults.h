@@ -53,7 +53,7 @@ struct ServerConfig {
 
 struct LocationConfig {
   std::string name = "/";
-  Method method;
+  Method method    = Method::kInvalid;
   std::filesystem::path staticFile;
   std::filesystem::path rootPath;
   std::string proxyPath;
