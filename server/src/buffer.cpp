@@ -8,22 +8,19 @@
 
 namespace server {
 
-Buffer::Buffer(size_t initialSize)
-    : buffer_(nullptr)
-    , writePos_(PREPEND_SIZE)
-    , readPos_(PREPEND_SIZE)
-    , capacity_(0) {
-
-  auto &configManager = ConfigManager::getInstance();
-  auto *ctx           = static_cast<HttpContext *>(configManager.getContextByOffset(kHttpOffset));
-  config_             = *ctx->conf;
-
+Buffer::Buffer(size_t initialSize) {
   size_t size = (initialSize != 0U) ? initialSize : config_.initialBufferSize;
   if (size > config_.maxBufferSize) {
     throw std::invalid_argument("Initial size exceeds maximum limit");
   }
 
+  auto &configManager = ConfigManager::getInstance();
+  auto *ctx           = static_cast<HttpContext *>(configManager.getContextByOffset(kHttpOffset));
+  config_             = *ctx->conf;
+
   buffer_   = new char[size];
+  writePos_ = config_.prependSize;
+  readPos_  = config_.prependSize;
   capacity_ = size;
 }
 
@@ -32,11 +29,11 @@ Buffer::~Buffer() {
 }
 
 Buffer::Buffer(Buffer &&other) noexcept
-    : buffer_(other.buffer_)
+    : config_(std::move(other.config_))
+    , buffer_(other.buffer_)
     , writePos_(other.writePos_)
     , readPos_(other.readPos_)
-    , capacity_(other.capacity_)
-    , config_(std::move(other.config_)) {
+    , capacity_(other.capacity_) {
 
   other.buffer_   = nullptr;
   other.capacity_ = 0;
@@ -85,8 +82,8 @@ std::string_view Buffer::read(size_t length) {
   readPos_ += length;
 
   if (readPos_ >= writePos_) {
-    readPos_  = PREPEND_SIZE;
-    writePos_ = PREPEND_SIZE;
+    readPos_  = config_.prependSize;
+    writePos_ = config_.prependSize;
   }
 
   return result;
@@ -94,8 +91,8 @@ std::string_view Buffer::read(size_t length) {
 
 std::string_view Buffer::readAll() noexcept {
   std::string_view result(buffer_ + readPos_, readableSize());
-  readPos_  = PREPEND_SIZE;
-  writePos_ = PREPEND_SIZE;
+  readPos_  = config_.prependSize;
+  writePos_ = config_.prependSize;
   return result;
 }
 
@@ -111,7 +108,7 @@ void Buffer::ensureWritableSpace(size_t length) {
     return;
   }
 
-  if (writableSize() + readPos_ - PREPEND_SIZE >= length) {
+  if (writableSize() + readPos_ - config_.prependSize >= length) {
     moveReadableDataToFront();
     return;
   }
@@ -125,8 +122,8 @@ void Buffer::ensureWritableSpace(size_t length) {
 
 void Buffer::moveReadableDataToFront() noexcept {
   size_t readable = readableSize();
-  std::copy(buffer_ + readPos_, buffer_ + writePos_, buffer_ + PREPEND_SIZE);
-  readPos_  = PREPEND_SIZE;
+  std::copy(buffer_ + readPos_, buffer_ + writePos_, buffer_ + config_.prependSize);
+  readPos_  = config_.prependSize;
   writePos_ = readPos_ + readable;
 }
 
@@ -143,13 +140,13 @@ void Buffer::resize(size_t newSize) {
   size_t readable = readableSize();
 
   if (readable > 0) {
-    std::copy_n(buffer_ + readPos_, readable, newBuffer + PREPEND_SIZE);
+    std::copy_n(buffer_ + readPos_, readable, newBuffer + config_.prependSize);
   }
 
   delete[] buffer_;
   buffer_   = newBuffer;
   capacity_ = newSize;
-  readPos_  = PREPEND_SIZE;
+  readPos_  = config_.prependSize;
   writePos_ = readPos_ + readable;
 }
 

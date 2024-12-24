@@ -34,18 +34,17 @@ public:
   [[nodiscard]] size_t writableSize() const noexcept;
 
 private:
-  static constexpr size_t PREPEND_SIZE       = 8;
   static constexpr size_t GROWTH_NUMERATOR   = 3;
   static constexpr size_t GROWTH_DENOMINATOR = 2;
 
   void ensureWritableSpace(size_t len);
   void moveReadableDataToFront() noexcept;
 
+  HttpConfig config_;
   char *buffer_;
   size_t writePos_;
   size_t readPos_;
   size_t capacity_;
-  HttpConfig config_;
 };
 
 } // namespace server
