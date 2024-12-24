@@ -5,37 +5,44 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace server {
 
 class ConfigManager {
 public:
-  static ConfigManager &getInstance() {
-    static ConfigManager instance;
-    return instance;
-  }
+  static ConfigManager &getInstance();
   ~ConfigManager();
-  ConfigManager(const ConfigManager &)            = delete;
-  ConfigManager &operator=(const ConfigManager &) = delete;
+
   void registerCommand(const ServerCommand &cmd);
   void registerCommands(const std::vector<ServerCommand> &cmds);
   void handleCommand(std::vector<std::string> field);
   void configParse(const char *data, size_t len);
   ConfigContext &getCurrentContext();
-  void setCurrentText(const ConfigContext &context);
-  void *getContextByOffset(size_t offset);
-  void *getConfigByOffset(size_t offset);
+  void setCurrentContext(const ConfigContext &context);
+  void *getContextByOffset(size_t offset) const;
+  void *getConfigByOffset(size_t offset) const;
 
 private:
   ConfigManager();
-  static size_t findNext(const char *data, char target, size_t len);
-  static bool handleBlockEnd(ConfigContext &context);
-  static bool hasFlag(CommandType input, CommandType flag);
+
+  static size_t findWordEnd(const char *data, size_t len);
   static bool setParentContext(ConfigContext &context);
-  CommandType getContextType(ConfigContext *context);
-  static void handleLocationEnd(LocationContext* ctx);
+  static bool hasCommandFlag(CommandType input, CommandType flag);
+  static void handleLocationEnd(LocationContext *ctx);
+  static void updateConfigValue(void *basePtr, const ServerCommand &cmd, const std::string &value);
+
+  static void processComment(const char *data, size_t len, size_t &pos);
+  void processBlockStart(std::string &word, std::vector<std::string> &words);
+  void processBlockEnd(std::string &word, std::vector<std::string> &words);
+  static void processCharacter(char c, std::string &word);
+
+  CommandType getContextType(ConfigContext *context) const;
+  void processCommandField(const std::vector<std::string> &field, const ServerCommand &cmd) const;
+  static size_t getMinimumArgCount(const ServerCommand &cmd);
 
   ConfigContext context_;
   std::unordered_map<std::string, ServerCommand> commands_;
 };
+
 } // namespace server

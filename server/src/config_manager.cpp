@@ -1,45 +1,43 @@
 #include "include/config_manager.h"
 
-#include "include/config_defaults.h"
-#include "include/log.h"
 #include "include/router.h"
 #include "include/types.h"
 
 #include <cctype>
-#include <cstdint>
 #include <cstring>
-#include <exception>
-#include <iostream>
-#include <stdexcept>
-#include <string>
-#include <vector>
-
-#include <sys/types.h>
 
 namespace server {
 
-ConfigManager::ConfigManager() {
-  auto globalConfig   = std::make_unique<GlobalConfig>();
-  auto httpConfig     = std::make_unique<HttpConfig>();
-  auto serverConfig   = std::make_unique<ServerConfig>();
-  auto locationConfig = std::make_unique<LocationConfig>();
+namespace {
+constexpr uint32_t GLOBAL_CTX   = 0;
+constexpr uint32_t HTTP_CTX     = 1;
+constexpr uint32_t SERVER_CTX   = 2;
+constexpr uint32_t LOCATION_CTX = 3;
+} // namespace
 
+ConfigManager &ConfigManager::getInstance() {
+  static ConfigManager instance;
+  return instance;
+}
+
+ConfigManager::ConfigManager()
+    : context_() {
   context_.globalContext        = new GlobalContext();
-  context_.globalContext->conf  = globalConfig.release();
+  context_.globalContext->conf  = new GlobalConfig();
   context_.globalContext->confB = context_.globalContext->conf;
 
   context_.httpContext         = new HttpContext();
-  context_.httpContext->conf   = httpConfig.release();
+  context_.httpContext->conf   = new HttpConfig();
   context_.httpContext->confB  = context_.httpContext->conf;
   context_.httpContext->parent = context_.globalContext;
 
   context_.serverContext         = new ServerContext();
-  context_.serverContext->conf   = serverConfig.release();
+  context_.serverContext->conf   = new ServerConfig();
   context_.serverContext->confB  = context_.serverContext->conf;
   context_.serverContext->parent = context_.httpContext;
 
   context_.locationContext         = new LocationContext();
-  context_.locationContext->conf   = locationConfig.release();
+  context_.locationContext->conf   = new LocationConfig();
   context_.locationContext->confB  = context_.locationContext->conf;
   context_.locationContext->parent = context_.serverContext;
 
@@ -51,6 +49,7 @@ ConfigManager::~ConfigManager() {
   delete context_.httpContext->conf;
   delete context_.serverContext->conf;
   delete context_.locationContext->conf;
+
   delete context_.globalContext;
   delete context_.httpContext;
   delete context_.serverContext;
@@ -58,313 +57,262 @@ ConfigManager::~ConfigManager() {
 }
 
 void ConfigManager::registerCommand(const ServerCommand &cmd) {
-  commands_[cmd.name] = cmd;
+  commands_.emplace(cmd.name, cmd);
 }
 
 void ConfigManager::registerCommands(const std::vector<ServerCommand> &cmds) {
+  commands_.reserve(commands_.size() + cmds.size());
   for (const auto &cmd : cmds) {
     registerCommand(cmd);
   }
 }
 
-size_t ConfigManager::findNext(const char *data, const char target, const size_t len) {
-  const char *result = static_cast<const char *>(memchr(data, target, len));
-  if (result != nullptr) {
-    return result - data;
-  }
-  return len;
+void ConfigManager::processComment(const char *data, size_t len, size_t &pos) {
+  const char *newline = std::strchr(data + pos, '\n');
+  pos                 = (newline != nullptr) ? (newline - data) : len;
 }
 
-void server::ConfigManager::configParse(const char *data, const size_t len) {
-  if (len <= 0) {
-    LOG_FATAL("Data length cannot be non-positive! Input length: " + std::to_string(len));
-    throw std::invalid_argument("Invalid data length");
+void ConfigManager::processBlockStart(std::string &word, std::vector<std::string> &words) {
+  if (!word.empty()) {
+    words.push_back(std::move(word));
+    word.clear();
+  }
+  if (!words.empty()) {
+    handleCommand(std::move(words));
+    words.clear();
+  }
+}
+
+void ConfigManager::processBlockEnd(std::string &word, std::vector<std::string> &words) {
+  if (!word.empty()) {
+    words.push_back(std::move(word));
+    word.clear();
+  }
+  if (!words.empty()) {
+    handleCommand(std::move(words));
+    words.clear();
+  }
+  if (!setParentContext(context_)) {
+    throw std::runtime_error("Invalid block nesting");
+  }
+}
+
+void ConfigManager::processCharacter(char c, std::string &word) {
+  if (std::isspace(static_cast<unsigned char>(c)) != 0) {
+    return;
+  }
+  word += c;
+}
+
+void ConfigManager::configParse(const char *data, const size_t len) {
+  if (len == 0) {
+    throw std::invalid_argument("Empty configuration data");
   }
 
   std::string word;
-  std::vector<std::string> wordVector;
-  bool inComment = false;
-
-  LOG_INFO("Starting configuration parsing");
+  std::vector<std::string> words;
+  words.reserve(8);
 
   for (size_t i = 0; i < len; ++i) {
-    if (data[i] == '#') {
-      inComment = true;
-      word.clear();
+    const char c = data[i];
+
+    if (c == '#' && i + 1 < len) {
+      processComment(data, len, i);
       continue;
     }
 
-    if (data[i] == '\n') {
-      inComment = false;
-      continue;
-    }
-
-    if (inComment) {
-      continue;
-    }
-
-    if (std::isspace(data[i]) != 0) {
+    if (std::isspace(static_cast<unsigned char>(c)) != 0) {
       if (!word.empty()) {
-        LOG_INFO("Found word: " + word);
-        wordVector.push_back(word);
+        words.push_back(std::move(word));
         word.clear();
       }
       continue;
     }
 
-    if (data[i] == '{') {
-      if (!word.empty()) {
-        LOG_INFO("Found block start: " + word);
-        wordVector.push_back(word);
-        word.clear();
-      }
-      handleCommand(wordVector);
-      wordVector.clear();
-      continue;
-    }
+    switch (c) {
+      case '{':
+        processBlockStart(word, words);
+        break;
 
-    if (data[i] == ';') {
-      if (!word.empty()) {
-        wordVector.push_back(word);
-        word.clear();
-      }
-      if (!wordVector.empty()) {
-        LOG_INFO("Handling command: " + wordVector[0]);
-        handleCommand(wordVector);
-        wordVector.clear();
-      }
-      continue;
-    }
+      case '}':
+        processBlockEnd(word, words);
+        break;
 
-    if (data[i] == '}') {
-      if (!word.empty()) {
-        wordVector.push_back(word);
-        word.clear();
-      }
-      if (!wordVector.empty()) {
-        handleCommand(wordVector);
-        wordVector.clear();
-      }
-      LOG_INFO("Found block end");
-      bool result = setParentContext(context_);
-      if (result) {
-        continue;
-      }
-      continue;
-    }
+      case ';':
+        if (!word.empty()) {
+          words.push_back(std::move(word));
+          word.clear();
+        }
+        if (!words.empty()) {
+          handleCommand(std::move(words));
+          words.clear();
+        }
+        break;
 
-    word += data[i];
+      default:
+        processCharacter(c, word);
+        break;
+    }
+  }
+}
+
+size_t ConfigManager::getMinimumArgCount(const ServerCommand &cmd) {
+  const auto cmdType  = static_cast<uint32_t>(cmd.type);
+  const bool hasMore2 = hasCommandFlag(cmd.type, CommandType::config2more);
+
+  if (hasMore2) {
+    return 2;
   }
 
-  LOG_INFO("Configuration parsing completed");
+  if (hasCommandFlag(cmd.type, CommandType::config1more)) {
+    return 1;
+  }
+
+  return (cmdType & argsMask) - 1;
 }
 
 void ConfigManager::handleCommand(std::vector<std::string> field) {
-  auto it = commands_.find(field[0]);
+  if (field.empty()) {
+    throw std::invalid_argument("Empty command field");
+  }
 
-  if (it == commands_.end()) {
-    std::string message = "Cannot find config name: " + field[0];
-    LOG_FATAL(message);
-    throw std::invalid_argument(message);
+  const auto cmdIt = commands_.find(field[0]);
+  if (cmdIt == commands_.end()) {
+    throw std::invalid_argument("Unknown command: " + field[0]);
   }
 
   field.erase(field.begin());
+  const auto &cmd = cmdIt->second;
 
-  CommandType contextType = getContextType(&context_);
-
-  if (!hasFlag(contextType, it->second.type)) {
-    std::string message = "Config at wrong place!";
-    LOG_FATAL(message);
-    throw std::invalid_argument(message);
+  if (!hasCommandFlag(getContextType(&context_), cmd.type)) {
+    throw std::invalid_argument("Invalid command context");
   }
 
-  const auto &cmd = it->second;
-
-  auto cmdType       = static_cast<uint32_t>(cmd.type);
-  uint32_t argsType  = cmdType & argsMask;
-  uint32_t valueType = cmdType & typeMask;
-
-  bool is1more = hasFlag(cmd.type, CommandType::config1more);
-  bool is2more = hasFlag(cmd.type, CommandType::config2more);
-
-  uint32_t expectedArgs = 0;
-  if (!is1more && !is2more) {
-    while (argsType > 1) {
-      argsType >>= 1;
-      expectedArgs++;
-    }
-
-    bool validArgs = field.empty() ? (expectedArgs == 0) : (field.size() == expectedArgs);
-    if (!validArgs) {
-      std::string message = "Args is not valid! Expected: " + std::to_string(expectedArgs)
-                            + ", Actual: " + std::to_string(field.size());
-      LOG_FATAL(message);
-      throw std::invalid_argument(message);
-    }
-  } else {
-    size_t minArgs = is1more ? 1 : 2;
-    if (field.size() < minArgs) {
-      std::string message = "Args is not valid! Expected at least: " + std::to_string(minArgs)
-                            + ", Actual: " + std::to_string(field.size());
-      LOG_FATAL(message);
-      throw std::invalid_argument(message);
-    }
+  const size_t minArgs = getMinimumArgCount(cmd);
+  if (field.size() < minArgs) {
+    throw std::invalid_argument("Insufficient arguments");
   }
 
-  LOG_INFO("Current context: " + std::to_string(context_.now));
-  LOG_INFO("Command offset: " + std::to_string(cmd.confOffset));
-
-  if (cmd.confOffset != 0U) {
+  if (cmd.confOffset != 0) {
     context_.now = cmd.confOffset;
-    LOG_INFO("Switching to context: " + std::to_string(context_.now));
   }
 
-  if (cmd.set) {
-    cmd.set(field, getContextByOffset(context_.now), it->second.offset);
+  processCommandField(field, cmd);
+}
+
+void ConfigManager::processCommandField(
+    const std::vector<std::string> &field,
+    const ServerCommand &cmd
+) const {
+  if (cmd.set != nullptr) {
+    cmd.set(field, getContextByOffset(context_.now), cmd.offset);
   }
 
+  const uint32_t valueType = static_cast<uint32_t>(cmd.type) & typeMask;
   if (valueType == 0) {
     return;
   }
 
-  try {
-    auto *ctx = getConfigByOffset(context_.now);
-    if (ctx == nullptr) {
-      throw std::runtime_error("Invalid configuration context");
+  auto *config = getConfigByOffset(context_.now);
+  if (config == nullptr) {
+    throw std::runtime_error("Invalid configuration context");
+  }
+
+  updateConfigValue(config, cmd, field[0]);
+}
+
+void ConfigManager::updateConfigValue(
+    void *basePtr,
+    const ServerCommand &cmd,
+    const std::string &value
+) {
+  const uint32_t valueType = static_cast<uint32_t>(cmd.type) & typeMask;
+  auto *base               = static_cast<char *>(basePtr);
+
+  switch (valueType) {
+    case static_cast<uint32_t>(CommandType::configFlag): {
+      auto *target = reinterpret_cast<bool *>(base + cmd.offset);
+      *target      = (value == "on" || value == "true" || value == "1");
+      break;
     }
-    char *base = reinterpret_cast<char *>(ctx);
-
-    LOG_INFO("Base pointer: " + std::to_string(reinterpret_cast<uintptr_t>(base)));
-    LOG_INFO("Config offset: " + std::to_string(cmd.offset));
-    LOG_INFO("Value type: " + std::to_string(static_cast<int>(valueType)));
-
-    switch (valueType) {
-      case static_cast<uint32_t>(CommandType::configFlag): {
-        bool *target = reinterpret_cast<bool *>(base + cmd.offset);
-        LOG_INFO(
-            "Setting bool value at address: " + std::to_string(reinterpret_cast<uintptr_t>(target))
-        );
-        *target = (field[0] == "on" || field[0] == "true" || field[0] == "1");
-        break;
-      }
-
-      case static_cast<uint32_t>(CommandType::configNumber): {
-        int *target = reinterpret_cast<int *>(base + cmd.offset);
-        LOG_INFO(
-            "Setting int value at address: " + std::to_string(reinterpret_cast<uintptr_t>(target))
-        );
-        *target = std::stoi(field[0]);
-        break;
-      }
-
-      case static_cast<uint32_t>(CommandType::configString): {
-        auto *target = reinterpret_cast<std::string *>(base + cmd.offset);
-        LOG_INFO(
-            "Setting string value at address: "
-            + std::to_string(reinterpret_cast<uintptr_t>(target))
-        );
-        *target = field[0];
-        break;
-      }
-
-      case static_cast<uint32_t>(CommandType::configSizeT): {
-        auto *target = reinterpret_cast<size_t *>(base + cmd.offset);
-        LOG_INFO(
-            "Setting size_t value at address: "
-            + std::to_string(reinterpret_cast<uintptr_t>(target))
-        );
-        *target = std::stoull(field[0]);
-        break;
-      }
-
-      default:
-        LOG_FATAL("No matching type!");
-        throw std::invalid_argument("No matching type!");
+    case static_cast<uint32_t>(CommandType::configNumber): {
+      auto *target = reinterpret_cast<int *>(base + cmd.offset);
+      *target      = std::stoi(value);
+      break;
     }
-
-  } catch (const std::exception &e) {
-    LOG_FATAL(e.what());
-    throw;
+    case static_cast<uint32_t>(CommandType::configString): {
+      auto *target = reinterpret_cast<std::string *>(base + cmd.offset);
+      *target      = value;
+      break;
+    }
+    case static_cast<uint32_t>(CommandType::configSizeT): {
+      auto *target = reinterpret_cast<size_t *>(base + cmd.offset);
+      *target      = std::stoull(value);
+      break;
+    }
+    default:
+      throw std::invalid_argument("Invalid value type");
   }
 }
 
-void *ConfigManager::getContextByOffset(size_t offset) {
-  if (offset != kGlobalOffset && offset != kHttpOffset && offset != kServerOffset
-      && offset != kLocationOffset) {
-    throw std::out_of_range("Invalid context offset");
+void *ConfigManager::getContextByOffset(size_t offset) const {
+  switch (static_cast<uint32_t>(offset)) {
+    case GLOBAL_CTX:
+      return context_.globalContext;
+    case HTTP_CTX:
+      return context_.httpContext;
+    case SERVER_CTX:
+      return context_.serverContext;
+    case LOCATION_CTX:
+      return context_.locationContext;
+    default:
+      throw std::out_of_range("Invalid context offset");
   }
-
-  std::cout << ("Getting context for offset: " + std::to_string(offset)) << '\n';
-  std::cout << ("Current context now: " + std::to_string(context_.now)) << '\n';
-
-  char *base = reinterpret_cast<char *>(&context_);
-  void **ptr = reinterpret_cast<void **>(base + offset);
-
-  if (*ptr == nullptr) {
-    throw std::runtime_error("Null context pointer");
-  }
-
-  std::cout
-      << ("Context pointer before dereference: " + std::to_string(reinterpret_cast<uintptr_t>(ptr)))
-      << '\n';
-  std::cout << ("Context value at pointer: " + std::to_string(reinterpret_cast<uintptr_t>(*ptr)))
-            << '\n';
-
-  return *ptr;
 }
 
-CommandType ConfigManager::getContextType(ConfigContext *context) {
-  void *ctx = getContextByOffset(context->now);
-  if (ctx == nullptr) {
-    throw std::runtime_error("Invalid context");
-  }
-  return static_cast<ContextBase *>(ctx)->typeB;
+CommandType ConfigManager::getContextType(ConfigContext *context) const {
+  auto *ctx = static_cast<ContextBase *>(getContextByOffset(context->now));
+  return ctx != nullptr ? ctx->typeB : throw std::runtime_error("Invalid context");
 }
 
-bool ConfigManager::hasFlag(CommandType input, CommandType flag) {
+bool ConfigManager::hasCommandFlag(CommandType input, CommandType flag) {
   return (static_cast<uint32_t>(input) & static_cast<uint32_t>(flag)) != 0;
 }
 
 bool ConfigManager::setParentContext(ConfigContext &context) {
-  if (context.now == kLocationOffset) {
-    handleLocationEnd(context.locationContext);
-    context.now = kServerOffset;
-    return true;
+  switch (static_cast<uint32_t>(context.now)) {
+    case LOCATION_CTX:
+      handleLocationEnd(context.locationContext);
+      context.now = kServerOffset;
+      return true;
+    case SERVER_CTX:
+      context.now = kHttpOffset;
+      return true;
+    case HTTP_CTX:
+      context.now = kGlobalOffset;
+      return true;
+    default:
+      return false;
   }
-
-  if (context.now == kServerOffset) {
-    context.now = kHttpOffset;
-    return true;
-  }
-
-  if (context.now == kHttpOffset) {
-    context.now = kGlobalOffset;
-    return true;
-  }
-
-  return false;
 }
 
 ConfigContext &ConfigManager::getCurrentContext() {
   return context_;
 }
 
-void ConfigManager::setCurrentText(const ConfigContext &context) {
+void ConfigManager::setCurrentContext(const ConfigContext &context) {
   context_ = context;
 }
 
-void *ConfigManager::getConfigByOffset(size_t offset) {
+void *ConfigManager::getConfigByOffset(size_t offset) const {
   auto *ctx = static_cast<ContextBase *>(getContextByOffset(offset));
-  if ((ctx == nullptr) || (ctx->confB == nullptr)) {
-    throw std::runtime_error("Invalid configuration pointer");
-  }
-  return ctx->confB;
+  return ctx != nullptr ? ctx->confB : nullptr;
 }
 
 void ConfigManager::handleLocationEnd(LocationContext *ctx) {
   auto &router = Router::getInstance();
   router.addRoute(*ctx->conf);
-
   *ctx->conf = LocationConfig();
 }
+
 } // namespace server
