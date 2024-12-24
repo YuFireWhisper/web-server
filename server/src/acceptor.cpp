@@ -36,7 +36,6 @@ void Acceptor::startListen() {
 }
 
 void Acceptor::handleConnection() {
-  LOG_DEBUG("GOT!");
   try {
     Socket newConnection    = serverSocket_->acceptNewConnection();
     InetAddress peerAddress = newConnection.getRemoteAddress();
@@ -50,11 +49,11 @@ void Acceptor::handleConnection() {
 }
 
 void Acceptor::processConnection(Socket &&connection, const InetAddress &peerAddress) {
-    int fd = connection.getSocketFd();
-    connection.detachFd();  // 防止 connection 被銷毀時關閉 fd
-    if (connectionHandler_) {
-        connectionHandler_(fd, peerAddress);
-    }
+  int fd = connection.getSocketFd();
+  connection.detachFd();
+  if (connectionHandler_) {
+    connectionHandler_(fd, peerAddress);
+  }
 }
 
 void Acceptor::handleResourceLimit(const std::string &errorMessage) {
