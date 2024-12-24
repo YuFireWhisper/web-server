@@ -108,8 +108,8 @@ void Router::addErrorHandler(StatusCode errorCode, const RouteHandler &func) {
 }
 
 void Router::handle(const HttpRequest &req, HttpResponse *resp) {
-  LOG_DEBUG("處理請求: " + req.path());
-  std::vector<std::string> segmentVector = splitPath(req.path());
+  LOG_DEBUG("處理請求: " + std::string(req.path()));
+  std::vector<std::string> segmentVector = splitPath(std::string(req.path()));
   LocationConfig *currentNode            = &routerNode_;
 
   for (const auto &segment : segmentVector) {
@@ -292,7 +292,7 @@ void Router::handleCaching(
 
   if (req.hasHeader("If-Modified-Since")) {
     auto ifModifiedSince = req.getHeader("If-Modified-Since");
-    LOG_DEBUG("If-Modified-Since: " + ifModifiedSince);
+    LOG_DEBUG("If-Modified-Since: " + std::string(ifModifiedSince));
     LOG_DEBUG("Current time string: " + timeStr);
     if (ifModifiedSince == timeStr) {
       resp->setStatusCode(StatusCode::k304NotModified);
