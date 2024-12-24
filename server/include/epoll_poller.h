@@ -1,78 +1,43 @@
 #pragma once
 
-#include "poller.h"
-#include "time_stamp.h"
-#include "types.h"
-
-#include <vector>
+#include "include/poller.h"
+#include "include/time_stamp.h"
+#include "include/types.h"
 
 #include <sys/epoll.h>
 
 namespace server {
 
-class EPollEvent {
-public:
-  explicit EPollEvent();
+class Channel;
 
-  void setEvents(uint32_t events);
-  void setChannelPtr(void *ptr);
-  epoll_event *raw();
-
-private:
-  epoll_event event_;
-};
-
-class EPollChannel {
-public:
-  explicit EPollChannel(Channel *channel);
-
-  [[nodiscard]] bool isNew() const;
-  [[nodiscard]] bool isDeleted() const;
-  [[nodiscard]] bool isNoneEvent() const;
-  void setAdded() const;
-  void setDeleted() const;
-  void setNew() const;
-
-  [[nodiscard]] Channel *get() const;
-  [[nodiscard]] int fd() const;
-
-private:
-  Channel *channel_;
-};
-
-class EPollOperator {
-public:
-  explicit EPollOperator();
-
-  static bool add(int epollFd, const EPollChannel &channel, EPollEvent &event);
-  static bool modify(int epollFd, const EPollChannel &channel, EPollEvent &event);
-  static bool remove(int epollFd, const EPollChannel &channel, EPollEvent &event);
-
-private:
-  static bool control(int epollFd, int operation, const EPollChannel &channel, EPollEvent &event);
-};
-
-class EPollPoller : public Poller {
+class EPollPoller final : public Poller {
 public:
   explicit EPollPoller(EventLoop *loop);
   ~EPollPoller() override;
+
+  EPollPoller(const EPollPoller &)            = delete;
+  EPollPoller &operator=(const EPollPoller &) = delete;
 
   TimeStamp poll(int timeoutMs, ChannelList *activeChannels) override;
   void updateChannel(Channel *channel) override;
   void removeChannel(Channel *channel) override;
 
 private:
-  void processNewChannel(EPollChannel &epollChannel);
-  void processExistingChannel(EPollChannel &epollChannel) const;
-  void cleanupChannels();
-  TimeStamp doPoll(int timeoutMs);
-  void handleActiveChannels(int numEvents);
+  void handleEvents(int eventCount);
+  bool createEpollFd();
+  void updateExistingChannel(Channel *channel);
+  void addNewChannel(Channel *channel);
+  void removeExistingChannel(Channel *channel);
 
-  static constexpr int INITIAL_EVENT_SIZE = 16;
+  bool updateChannelEvent(Channel *channel, int operation) const;
+  void cleanup();
 
-  std::vector<epoll_event> events_;
+  static constexpr size_t INITIAL_EVENT_SIZE = 16;
+
   int epollFd_;
-  EPollOperator operator_;
+  epoll_event *eventList_;
+  size_t eventListSize_;
+  size_t maxEventSize_;
   ChannelList *activeChannels_;
 };
 
