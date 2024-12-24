@@ -9,10 +9,10 @@
 namespace server {
 
 namespace {
-constexpr uint32_t GLOBAL_CTX   = 0;
-constexpr uint32_t HTTP_CTX     = 1;
-constexpr uint32_t SERVER_CTX   = 2;
-constexpr uint32_t LOCATION_CTX = 3;
+constexpr size_t GLOBAL_CTX   = offsetof(ConfigContext, globalContext);
+constexpr size_t HTTP_CTX     = offsetof(ConfigContext, httpContext);
+constexpr size_t SERVER_CTX   = offsetof(ConfigContext, serverContext);
+constexpr size_t LOCATION_CTX = offsetof(ConfigContext, locationContext);
 } // namespace
 
 ConfigManager &ConfigManager::getInstance() {
@@ -256,18 +256,19 @@ void ConfigManager::updateConfigValue(
 }
 
 void *ConfigManager::getContextByOffset(size_t offset) const {
-  switch (static_cast<uint32_t>(offset)) {
-    case GLOBAL_CTX:
-      return context_.globalContext;
-    case HTTP_CTX:
-      return context_.httpContext;
-    case SERVER_CTX:
-      return context_.serverContext;
-    case LOCATION_CTX:
-      return context_.locationContext;
-    default:
-      throw std::out_of_range("Invalid context offset");
+  if (offset == GLOBAL_CTX) {
+    return context_.globalContext;
   }
+  if (offset == HTTP_CTX) {
+    return context_.httpContext;
+  }
+  if (offset == SERVER_CTX) {
+    return context_.serverContext;
+  }
+  if (offset == LOCATION_CTX) {
+    return context_.locationContext;
+  }
+  throw std::out_of_range("Invalid context offset");
 }
 
 CommandType ConfigManager::getContextType(ConfigContext *context) const {
