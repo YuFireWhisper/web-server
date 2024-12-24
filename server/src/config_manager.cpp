@@ -13,6 +13,11 @@ constexpr size_t GLOBAL_CTX   = offsetof(ConfigContext, globalContext);
 constexpr size_t HTTP_CTX     = offsetof(ConfigContext, httpContext);
 constexpr size_t SERVER_CTX   = offsetof(ConfigContext, serverContext);
 constexpr size_t LOCATION_CTX = offsetof(ConfigContext, locationContext);
+
+constexpr uint32_t FIXED_ARG_MASK = static_cast<uint32_t>(CommandType::configNoArgs)
+                                    | static_cast<uint32_t>(CommandType::configTake1)
+                                    | static_cast<uint32_t>(CommandType::configTake2)
+                                    | static_cast<uint32_t>(CommandType::configTake3);
 } // namespace
 
 ConfigManager &ConfigManager::getInstance() {
@@ -156,19 +161,38 @@ void ConfigManager::configParse(const char *data, const size_t len) {
   }
 }
 
-size_t ConfigManager::getMinimumArgCount(const ServerCommand &cmd) {
-  const auto cmdType  = static_cast<uint32_t>(cmd.type);
-  const bool hasMore2 = hasCommandFlag(cmd.type, CommandType::config2more);
+uint32_t ConfigManager::getCommandArgBits(CommandType type) {
+  const auto typeValue = static_cast<uint32_t>(type);
+  return typeValue & argsMask;
+}
 
-  if (hasMore2) {
-    return 2;
+bool ConfigManager::validateCommandArgs(CommandType type, size_t argCount) {
+  const auto typeValue = static_cast<uint32_t>(type);
+
+  if ((typeValue & static_cast<uint32_t>(CommandType::config2more)) != 0U) {
+    return argCount >= 2;
   }
 
-  if (hasCommandFlag(cmd.type, CommandType::config1more)) {
-    return 1;
+  if ((typeValue & static_cast<uint32_t>(CommandType::config1more)) != 0U) {
+    return argCount >= 1;
   }
 
-  return (cmdType & argsMask) - 1;
+  if ((typeValue & FIXED_ARG_MASK) != 0U) {
+    switch (getCommandArgBits(type)) {
+      case static_cast<uint32_t>(CommandType::configNoArgs):
+        return argCount == 0;
+      case static_cast<uint32_t>(CommandType::configTake1):
+        return argCount == 1;
+      case static_cast<uint32_t>(CommandType::configTake2):
+        return argCount == 2;
+      case static_cast<uint32_t>(CommandType::configTake3):
+        return argCount == 3;
+      default:
+        return false;
+    }
+  }
+
+  return false;
 }
 
 void ConfigManager::handleCommand(std::vector<std::string> field) {
@@ -188,9 +212,8 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
     throw std::invalid_argument("Invalid command context");
   }
 
-  const size_t minArgs = getMinimumArgCount(cmd);
-  if (field.size() < minArgs) {
-    throw std::invalid_argument("Insufficient arguments");
+  if (!validateCommandArgs(cmd.type, field.size())) {
+    throw std::invalid_argument("Invalid argument count for command: " + cmdIt->first);
   }
 
   if (cmd.confOffset != 0) {

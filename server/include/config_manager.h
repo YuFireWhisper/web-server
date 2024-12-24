@@ -32,6 +32,9 @@ private:
   static void handleLocationEnd(LocationContext *ctx);
   static void updateConfigValue(void *basePtr, const ServerCommand &cmd, const std::string &value);
 
+  static bool validateCommandArgs(CommandType type, size_t argCount);
+  static uint32_t getCommandArgBits(CommandType type);
+
   static void processComment(const char *data, size_t len, size_t &pos);
   void processBlockStart(std::string &word, std::vector<std::string> &words);
   void processBlockEnd(std::string &word, std::vector<std::string> &words);
@@ -39,7 +42,6 @@ private:
 
   CommandType getContextType(ConfigContext *context) const;
   void processCommandField(const std::vector<std::string> &field, const ServerCommand &cmd) const;
-  static size_t getMinimumArgCount(const ServerCommand &cmd);
 
   ConfigContext context_;
   std::unordered_map<std::string, ServerCommand> commands_;
