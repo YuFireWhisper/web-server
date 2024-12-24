@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(web-server)
 
-option(BUILD_TESTS "Build the test files" OFF)
+option(BUILD_TESTS "Build the test files" ON)
 
 add_definitions(-DPROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
@@ -53,11 +53,10 @@ if(BUILD_TESTS)
     set(TEST_DIR ${PROJECT_SOURCE_DIR}/server/tests/unit)
 
     set(TEST_COMMON_FILES
-        ${TEST_DIR}/helpers/global_test_environment.cpp
+      ${TEST_DIR}/test_main.cpp
     )
 
     set(TEST_FILES
-        ${TEST_DIR}/test_main.cpp
         ${TEST_DIR}/time_stamp_test.cpp
         ${TEST_DIR}/timer_test.cpp
         ${TEST_DIR}/timer_id_test.cpp

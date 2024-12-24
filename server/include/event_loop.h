@@ -30,7 +30,7 @@ public:
   void updateChannel(Channel *channel);
   void removeChannel(Channel *channel);
 
-  [[nodiscard]] bool isInLoopThread() const { return threadId_ == pthread_self(); }
+  [[nodiscard]] bool isInLoopThread() const noexcept { return threadId_ == pthread_self(); }
   [[nodiscard]] bool isWakeupFd(int fd) const { return fd == wakeupFd_; }
   [[nodiscard]] int getWakeupFd() const { return wakeupFd_; }
   [[nodiscard]] Poller *getPoller() const { return poller_; }

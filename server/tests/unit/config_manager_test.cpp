@@ -7,7 +7,7 @@ namespace server {
 
 class ConfigManagerTest : public ::testing::Test {
 protected:
-  void SetUp() override { manager_.setCurrentText(manager_.getCurrentContext()); }
+  void SetUp() override { manager_.setCurrentContext(manager_.getCurrentContext()); }
 
   ConfigManager &manager_{ ConfigManager::getInstance() };
 };
@@ -44,7 +44,7 @@ TEST_F(ConfigManagerTest, HandleContextManagement) {
   auto originalContext = manager_.getCurrentContext();
   originalContext.now  = kHttpOffset;
 
-  EXPECT_NO_THROW(manager_.setCurrentText(originalContext));
+  EXPECT_NO_THROW(manager_.setCurrentContext(originalContext));
   EXPECT_EQ(manager_.getCurrentContext().now, kHttpOffset);
 }
 
