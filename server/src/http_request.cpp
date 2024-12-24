@@ -1,16 +1,30 @@
 #include "include/http_request.h"
 
 #include "include/buffer.h"
-#include "include/types.h"
+#include "include/config_manager.h"
 
-#include <csignal>
-#include <cstdlib>
+#include <algorithm>
+#include <cstring>
 
 namespace server {
 
-HttpRequest::HttpRequest() {
-  reset();
-}
+namespace {
+constexpr std::string_view METHOD_GET    = "GET";
+constexpr std::string_view METHOD_POST   = "POST";
+constexpr std::string_view METHOD_HEAD   = "HEAD";
+constexpr std::string_view METHOD_PUT    = "PUT";
+constexpr std::string_view METHOD_DELETE = "DELETE";
+
+constexpr std::string_view VERSION_10 = "HTTP/1.0";
+constexpr std::string_view VERSION_11 = "HTTP/1.1";
+} // namespace
+
+HttpRequest::HttpRequest()
+    : method_(Method::kInvalid)
+    , version_(Version::kUnknown)
+    , state_(ParseState::kExpectRequestLine)
+    , contentLength_(0)
+    , config_(ConfigManager::getInstance().getCurrentContext().httpContext->conf[0]) {}
 
 void HttpRequest::reset() {
   method_        = Method::kInvalid;
@@ -27,13 +41,33 @@ bool HttpRequest::parseRequest(Buffer *buf) {
   if (buf == nullptr) {
     return false;
   }
-
   return parseRequestInternal(buf);
 }
 
 bool HttpRequest::parseRequestInternal(Buffer *buf) {
   while (state_ != ParseState::kGotAll && state_ != ParseState::kError) {
-    bool success = parseNextState(buf);
+    const size_t readable = buf->readableSize();
+    if (readable == 0) {
+      return false;
+    }
+
+    std::string_view content = buf->preview(readable);
+    bool success             = false;
+
+    switch (state_) {
+      case ParseState::kExpectRequestLine:
+        success = processRequestLine(buf, content.data(), content.data() + content.size());
+        break;
+      case ParseState::kExpectHeaders:
+        success = processHeaders(buf, content.data(), content.data() + content.size());
+        break;
+      case ParseState::kExpectBody:
+        success = processBody(buf, content.data(), content.data() + content.size());
+        break;
+      default:
+        return false;
+    }
+
     if (!success) {
       return false;
     }
@@ -41,264 +75,276 @@ bool HttpRequest::parseRequestInternal(Buffer *buf) {
   return true;
 }
 
-bool HttpRequest::parseNextState(Buffer *buf) {
-  std::string_view content = buf->preview(buf->readableSize());
-
-  switch (state_) {
-    case ParseState::kExpectRequestLine:
-      return processRequestLine(buf, content);
-    case ParseState::kExpectHeaders:
-      return processHeaders(buf, content);
-    case ParseState::kExpectBody:
-      return processBody(buf, content);
-    default:
-      return false;
-  }
-}
-
-bool HttpRequest::processRequestLine(Buffer *buf, const std::string_view &content) {
-  auto position = content.find(kCRLF);
-  if (position == std::string_view::npos) {
+bool HttpRequest::processRequestLine(Buffer *buf, const char *begin, const char *end) {
+  const char *crlf = std::search(begin, end, kCRLF.begin(), kCRLF.end());
+  if (crlf == end) {
     return false;
   }
 
-  const char *begin   = content.data();
-  const char *lineEnd = begin + position;
-
-  auto result = parseRequestLine(begin, lineEnd);
-  if (!result.valid) {
+  auto result = parseRequestLine(begin, crlf);
+  if (!result.valid || !setRequestLine(result)) {
     state_ = ParseState::kError;
     return false;
   }
 
-  setRequestLine(result);
-  buf->read(position + kCRLF.size());
+  buf->read(crlf - begin + kCRLF.size());
   state_ = ParseState::kExpectHeaders;
   return true;
 }
 
-HttpRequest::RequestLineResult HttpRequest::parseRequestLine(const char *begin, const char *end) {
-  // 請求的格式:
-  // GET /api/users HTTP/1.1
+HttpRequest::RequestLineResult
+HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
+  RequestLineResult result{ nullptr, nullptr, nullptr, nullptr, nullptr,
+                            nullptr, nullptr, nullptr, false };
 
-  RequestLineResult result = { .method  = Method::kInvalid,
-                               .path    = "",
-                               .query   = "",
-                               .version = Version::kUnknown,
-                               .valid   = false };
-  std::string_view line(begin, end - begin);
+  const char *space = std::find_if(begin, end, isSpace);
+  if (space == end || static_cast<size_t>(space - begin) > MAX_METHOD_LEN) {
+    return result;
+  }
+  result.methodStart = begin;
+  result.methodEnd   = space;
 
-  auto methodEnd = line.find(' ');
-  if (methodEnd == std::string_view::npos) {
-    state_ = ParseState::kError;
+  const char *pathStart = std::find_if_not(space, end, isSpace);
+  if (pathStart == end) {
     return result;
   }
 
-  std::string_view methodStr = line.substr(0, methodEnd);
-
-  Method method = stringToMethod(methodStr);
-  if (method == Method::kInvalid) {
-    state_ = ParseState::kError;
+  const char *questionMark = std::find(pathStart, end, '?');
+  const char *pathEnd =
+      (questionMark != end) ? questionMark : std::find_if(pathStart, end, isSpace);
+  if (pathEnd == end) {
     return result;
   }
+  result.pathStart = pathStart;
+  result.pathEnd   = pathEnd;
 
-  result.method = method;
+  if (questionMark != end) {
+    const char *queryEnd = std::find_if(questionMark + 1, end, isSpace);
+    if (queryEnd == end) {
+      return result;
+    }
+    result.queryStart = questionMark + 1;
+    result.queryEnd   = queryEnd;
+  }
 
-  auto pathBegin    = methodEnd + 1;
-  auto questionMark = line.find('?', pathBegin);
-  auto versionStart = line.rfind(' ');
-
-  if (versionStart == std::string_view::npos || versionStart <= pathBegin) {
+  const char *versionStart =
+      std::find_if_not((result.queryEnd != nullptr) ? result.queryEnd : pathEnd, end, isSpace);
+  if (versionStart == end || static_cast<size_t>(end - versionStart) > MAX_VERSION_LEN) {
     return result;
   }
-
-  if (questionMark != std::string_view::npos && questionMark < versionStart) {
-    result.path  = std::string(line.substr(pathBegin, questionMark - pathBegin));
-    result.query = std::string(line.substr(questionMark + 1, versionStart - (questionMark + 1)));
-  } else {
-    result.path = std::string(line.substr(pathBegin, versionStart - pathBegin));
-  }
-
-  auto versionStr = line.substr(versionStart + 1);
-  result.version  = stringToVersion(versionStr);
+  result.versionStart = versionStart;
+  result.versionEnd   = end;
 
   result.valid = true;
   return result;
 }
 
-void HttpRequest::setRequestLine(const RequestLineResult &result) {
+bool HttpRequest::setRequestLine(const RequestLineResult &result) {
   if (!result.valid) {
-    return;
-  }
-
-  method_  = result.method;
-  version_ = result.version;
-  path_    = result.path;
-  query_   = result.query;
-}
-
-bool HttpRequest::processHeaders(Buffer *buf, const std::string_view &content) {
-  auto position = content.find(kCRLFCRLF);
-  if (position == std::string_view::npos) {
     return false;
   }
 
-  const char *begin = content.begin();
-  const char *end   = begin + position + kCRLF.size();
+  method_ = parseMethod(result.methodStart, result.methodEnd);
+  if (method_ == Method::kInvalid) {
+    return false;
+  }
 
-  auto result = parseHeaders(begin, end);
+  version_ = parseVersion(result.versionStart, result.versionEnd);
+  if (version_ == Version::kUnknown) {
+    return false;
+  }
 
-  if (!result.valid) {
+  path_.assign(result.pathStart, result.pathEnd);
+  if (result.queryStart != nullptr) {
+    query_.assign(result.queryStart, result.queryEnd);
+  }
+
+  return true;
+}
+
+Method HttpRequest::parseMethod(const char *begin, const char *end) noexcept {
+  const size_t len = end - begin;
+
+  switch (len) {
+    case 3: {
+      if (memcmp(begin, METHOD_GET.data(), 3) == 0) {
+        return Method::kGet;
+      }
+      if (memcmp(begin, METHOD_PUT.data(), 3) == 0) {
+        return Method::kPut;
+      }
+      return Method::kInvalid;
+    }
+    case 4: {
+      if (memcmp(begin, METHOD_POST.data(), 4) == 0) {
+        return Method::kPost;
+      }
+      if (memcmp(begin, METHOD_HEAD.data(), 4) == 0) {
+        return Method::kHead;
+      }
+      return Method::kInvalid;
+    }
+    case 6: {
+      if (memcmp(begin, METHOD_DELETE.data(), 6) == 0) {
+        return Method::kDelete;
+      }
+      return Method::kInvalid;
+    }
+    default:
+      return Method::kInvalid;
+  }
+}
+
+Version HttpRequest::parseVersion(const char *begin, const char *end) noexcept {
+  const size_t len = end - begin;
+
+  if (len == 8) {
+    if (memcmp(begin, VERSION_10.data(), 8) == 0) {
+      return Version::kHttp10;
+    }
+    if (memcmp(begin, VERSION_11.data(), 8) == 0) {
+      return Version::kHttp11;
+    }
+  }
+  return Version::kUnknown;
+}
+
+bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end) {
+  const char *crlf = std::search(begin, end, kCRLFCRLF.begin(), kCRLFCRLF.end());
+  if (crlf == end) {
+    return false;
+  }
+
+  auto result = parseHeaders(begin, crlf);
+  if (!result.valid || !setHeaders(begin, crlf, result)) {
     state_ = ParseState::kError;
     return false;
   }
 
-  setHeaders(result);
-  buf->read(position + kCRLFCRLF.size());
+  buf->read(crlf - begin + kCRLFCRLF.size());
   state_ = (contentLength_ > 0) ? ParseState::kExpectBody : ParseState::kGotAll;
   return true;
 }
 
-HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const char *end) {
-  // Header的格式(每個Header都是 Key: value):
-  // Host: www.example.com
-  // User-Agent: Mozilla/5.0
+HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const char *end) const {
+  HeaderResult result{ 0, false };
 
-  HeaderResult result      = { .headers = {}, .contentLength = 0, .valid = false };
-  std::string_view headers = std::string_view(begin, end - begin);
+  const char *lineStart       = begin;
+  const char *const bufferEnd = end;
 
-  size_t position = 0;
-  size_t start    = 0;
-
-  while ((position = headers.find(kCRLF, start)) != std::string_view::npos) {
-    std::string_view line = headers.substr(start, position - start);
-
-    if (line.empty()) {
-      break;
-    }
-
-    auto colonPons = line.find(':');
-    if (colonPons == std::string_view::npos) {
+  while (lineStart < bufferEnd) {
+    const char *lineEnd = std::search(lineStart, bufferEnd, kCRLF.begin(), kCRLF.end());
+    if (lineEnd == bufferEnd) {
       return result;
     }
 
-    std::string key = std::string(line.substr(0, colonPons));
-
-    auto valueStart = line.find_first_not_of(' ', colonPons + 1);
-    if (valueStart == std::string_view::npos) {
+    if (lineStart == lineEnd) {
+      result.valid = true;
       return result;
     }
 
-    std::string value = std::string(line.substr(valueStart));
+    const char *colon = std::find(lineStart, lineEnd, ':');
+    if (colon == lineEnd) {
+      return result;
+    }
 
-    if (key == "Content-Length") {
-      try {
-        result.contentLength = std::stoull(value);
-      } catch (...) {
+    const char *valueStart = std::find_if_not(colon + 1, lineEnd, isSpace);
+    if (valueStart == lineEnd) {
+      return result;
+    }
+
+    std::string_view headerName(lineStart, colon - lineStart);
+    std::string_view headerValue(valueStart, lineEnd - valueStart);
+
+    if (headerName == "Content-Length") {
+      result.contentLength = 0;
+      for (char c : headerValue) {
+        if (!isDigit(c)) {
+          return result;
+        }
+        result.contentLength = result.contentLength * 10 + (c - '0');
+      }
+      if (result.contentLength > config_.maxBodySize) {
         return result;
       }
     }
 
-    result.headers[key] = value;
-    start               = position + kCRLF.size();
+    lineStart = lineEnd + kCRLF.size();
   }
 
   result.valid = true;
   return result;
 }
 
-void HttpRequest::setHeaders(const HeaderResult &result) {
+bool HttpRequest::setHeaders(const char *begin, const char *end, const HeaderResult &result) {
   if (!result.valid) {
-    return;
+    return false;
   }
 
-  headers_       = result.headers;
   contentLength_ = result.contentLength;
+  headers_.clear();
+
+  const char *lineStart = begin;
+  while (lineStart < end) {
+    const char *lineEnd = std::search(lineStart, end, kCRLF.begin(), kCRLF.end());
+    if (lineStart == lineEnd) {
+      break;
+    }
+
+    const char *colon      = std::find(lineStart, lineEnd, ':');
+    const char *valueStart = std::find_if_not(colon + 1, lineEnd, isSpace);
+
+    headers_.emplace(
+        std::string(lineStart, colon - lineStart),
+        std::string(valueStart, lineEnd - valueStart)
+    );
+
+    lineStart = lineEnd + kCRLF.size();
+  }
+
+  return true;
 }
 
-bool HttpRequest::processBody(Buffer *buf, const std::string_view &content) {
+bool HttpRequest::processBody(Buffer *buf, const char *begin, const char *end) {
   if (contentLength_ == 0) {
     state_ = ParseState::kGotAll;
     return true;
   }
 
-  if (buf->readableSize() < contentLength_) {
-    state_ = ParseState::kExpectBody;
+  const size_t readable = end - begin;
+  if (readable < contentLength_) {
     return false;
   }
 
-  const char *begin = content.data();
-  const char *end   = begin + contentLength_;
-
-  auto result = parseBody(begin, end, contentLength_);
-
-  if (!result.valid) {
+  if (!parseBody(begin, contentLength_)) {
+    state_ = ParseState::kError;
     return false;
   }
 
-  setBody(result);
   buf->read(contentLength_);
   state_ = ParseState::kGotAll;
   return true;
 }
 
-HttpRequest::BodyResult
-HttpRequest::parseBody(const char *begin, const char *end, size_t contentLength) {
-  // Body 會位於 Header 的下面一行(沒有固定格式)，
-  // 不過我們已經刪除了其他已讀取的資料了，
-  // 直接讀取該資料即可。
-
-  BodyResult result = { .body = "", .valid = false };
-
-  if (end - begin != static_cast<ptrdiff_t>(contentLength)) {
-    return result;
+bool HttpRequest::parseBody(const char *begin, size_t length) {
+  if (length > config_.maxBodySize) {
+    return false;
   }
 
-  result.body  = std::string(begin, contentLength);
-  result.valid = true;
-  return result;
+  body_.assign(begin, length);
+  return true;
 }
 
-void HttpRequest::setBody(const BodyResult &result) {
-  if (!result.valid) {
-    return;
-  }
-
-  body_ = result.body;
+bool HttpRequest::hasHeader(std::string_view field) const {
+  return headers_.find(std::string(field)) != headers_.end();
 }
 
-Method HttpRequest::stringToMethod(const std::string_view &methodStr) {
-  static const std::unordered_map<std::string_view, Method> methodMap = { { "GET", Method::kGet },
-                                                                          { "POST", Method::kPost },
-                                                                          { "HEAD", Method::kHead },
-                                                                          { "PUT", Method::kPut },
-                                                                          { "DELETE",
-                                                                            Method::kDelete } };
-
-  auto it = methodMap.find(methodStr);
-  return (it != methodMap.end()) ? it->second : Method::kInvalid;
+std::string_view HttpRequest::getHeader(std::string_view field) const {
+  auto it = headers_.find(std::string(field));
+  return it != headers_.end() ? std::string_view(it->second) : std::string_view();
 }
 
-Version HttpRequest::stringToVersion(const std::string_view &versionStr) {
-  if (versionStr == "HTTP/1.0") {
-    return Version::kHttp10;
-  }
-  if (versionStr == "HTTP/1.1") {
-    return Version::kHttp11;
-  }
-  return Version::kUnknown;
-}
-
-bool HttpRequest::hasHeader(const std::string &field) const {
-  return headers_.find(field) != headers_.end();
-}
-
-std::string HttpRequest::getHeader(const std::string &field) const {
-  auto it = headers_.find(field);
-  return (it != headers_.end()) ? it->second : "";
-}
-
-const char *HttpRequest::methodString(Method method) {
+const char *HttpRequest::methodString(Method method) noexcept {
   switch (method) {
     case Method::kGet:
       return "GET";
@@ -315,7 +361,7 @@ const char *HttpRequest::methodString(Method method) {
   }
 }
 
-const char *HttpRequest::versionString(Version version) {
+const char *HttpRequest::versionString(Version version) noexcept {
   switch (version) {
     case Version::kHttp10:
       return "HTTP/1.0";
@@ -324,6 +370,44 @@ const char *HttpRequest::versionString(Version version) {
     default:
       return "UNKNOWN";
   }
+}
+
+bool HttpRequest::isChar(char c) noexcept {
+  return c >= 0 && c <= 127;
+}
+
+bool HttpRequest::isCtl(char c) noexcept {
+  return (c >= 0 && c <= 31) || c == 127;
+}
+
+bool HttpRequest::isTchar(char c) noexcept {
+  static constexpr char TCHAR_MAP[128] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0-15
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 16-31
+    0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, // 32-47
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, // 48-63
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 64-79
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, // 80-95
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 96-111
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0  // 112-127
+  };
+  return isChar(c) && (TCHAR_MAP[static_cast<unsigned char>(c)] != 0);
+}
+
+bool HttpRequest::isHeaderNameChar(char c) noexcept {
+  return isTchar(c);
+}
+
+bool HttpRequest::isSpace(char c) noexcept {
+  return c == ' ' || c == '\t';
+}
+
+bool HttpRequest::isDigit(char c) noexcept {
+  return c >= '0' && c <= '9';
+}
+
+bool HttpRequest::isHexDigit(char c) noexcept {
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
 } // namespace server
