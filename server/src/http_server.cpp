@@ -45,13 +45,13 @@ void HttpServer::onConnection(const TcpConnectionPtr &conn) {
   LOG_DEBUG("GOOD on Connection");
   if (conn->connected()) {
     LOG_DEBUG("is connected");
-    conn->setContext(HttpContext());
+    conn->setContext(HttpSessionContext());
   }
 }
 
 void HttpServer::onMessage(const TcpConnectionPtr &conn, Buffer *buf, TimeStamp receiveTime) {
   LOG_DEBUG("GOOD on message");
-  auto *context = std::any_cast<HttpContext>(conn->getMutableContext());
+  auto *context = std::any_cast<HttpSessionContext>(conn->getMutableContext());
 
   if (!context->parsingCompleted) {
     if (context->request.parseRequest(buf)) {
@@ -66,7 +66,7 @@ void HttpServer::onRequestComplete(
     TimeStamp receiveTime [[maybe_unused]]
 ) {
   LOG_DEBUG("GOOD on request");
-  auto *context              = std::any_cast<HttpContext>(conn->getMutableContext());
+  auto *context              = std::any_cast<HttpSessionContext>(conn->getMutableContext());
   const HttpRequest &request = context->request;
 
   HttpResponse response;
@@ -98,7 +98,7 @@ void HttpServer::defaultHttpCallback(const HttpRequest &req, HttpResponse *resp)
   resp->setStatusMessage("Not Found");
   resp->setCloseConnection(true);
   resp->setContentType("text/plain");
-  resp->setBody("404 Not Found: " + req.path());
+  resp->setBody("404 Not Found: " + std::string(req.path()));
 }
 
 void HttpServer::defaultNotFoundCallback(const HttpRequest &req, HttpResponse *resp) {
@@ -110,7 +110,7 @@ void HttpServer::defaultNotFoundCallback(const HttpRequest &req, HttpResponse *r
       "<html><head><title>404 Not Found</title></head>"
       "<body><h1>404 Not Found</h1>"
       "<p>The requested URL "
-      + req.path()
+      + std::string(req.path())
       + " was not found on this server.</p>"
         "</body></html>"
   );
@@ -126,7 +126,7 @@ void HttpServer::defaultErrorCallback(const HttpRequest &req, HttpResponse *resp
       "<body><h1>500 Internal Server Error</h1>"
       "<p>Sorry, the server encountered an internal error while "
       "processing your request for "
-      + req.path()
+      + std::string(req.path())
       + "</p>"
         "</body></html>"
   );

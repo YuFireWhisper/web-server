@@ -39,7 +39,7 @@ public:
   [[nodiscard]] EventLoop *getLoop() const { return server_.getLoop(); }
 
 private:
-  struct HttpContext {
+  struct HttpSessionContext {
     HttpRequest request;
     bool expectingBody    = false;
     bool parsingCompleted = false;
