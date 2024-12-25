@@ -2,6 +2,8 @@
 
 #include "include/buffer.h"
 #include "include/config_manager.h"
+#include "include/log.h"
+#include "include/types.h"
 
 #include <algorithm>
 #include <cstring>
@@ -48,7 +50,7 @@ bool HttpRequest::parseRequestInternal(Buffer *buf) {
   while (state_ != ParseState::kGotAll && state_ != ParseState::kError) {
     const size_t readable = buf->readableSize();
     if (readable == 0) {
-      return false;
+      return true;
     }
 
     std::string_view content = buf->preview(readable);
@@ -60,16 +62,24 @@ bool HttpRequest::parseRequestInternal(Buffer *buf) {
         break;
       case ParseState::kExpectHeaders:
         success = processHeaders(buf, content.data(), content.data() + content.size());
+        if (!success) {
+          LOG_ERROR("Header出錯");
+        }
+
         break;
       case ParseState::kExpectBody:
         success = processBody(buf, content.data(), content.data() + content.size());
+        if (!success) {
+          LOG_ERROR("Body出錯");
+        }
         break;
       default:
         return false;
     }
 
     if (!success) {
-      return false;
+      LOG_ERROR("出錯!");
+      return state_ != ParseState::kError;
     }
   }
   return true;
@@ -97,6 +107,7 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   RequestLineResult result{ nullptr, nullptr, nullptr, nullptr, nullptr,
                             nullptr, nullptr, nullptr, false };
 
+  // Find method
   const char *space = std::find_if(begin, end, isSpace);
   if (space == end || static_cast<size_t>(space - begin) > MAX_METHOD_LEN) {
     return result;
@@ -104,11 +115,13 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   result.methodStart = begin;
   result.methodEnd   = space;
 
+  // Skip spaces
   const char *pathStart = std::find_if_not(space, end, isSpace);
   if (pathStart == end) {
     return result;
   }
 
+  // Find path end / query start
   const char *questionMark = std::find(pathStart, end, '?');
   const char *pathEnd =
       (questionMark != end) ? questionMark : std::find_if(pathStart, end, isSpace);
@@ -118,6 +131,7 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   result.pathStart = pathStart;
   result.pathEnd   = pathEnd;
 
+  // Handle query if exists
   if (questionMark != end) {
     const char *queryEnd = std::find_if(questionMark + 1, end, isSpace);
     if (queryEnd == end) {
@@ -127,6 +141,7 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
     result.queryEnd   = queryEnd;
   }
 
+  // Find version
   const char *versionStart =
       std::find_if_not((result.queryEnd != nullptr) ? result.queryEnd : pathEnd, end, isSpace);
   if (versionStart == end || static_cast<size_t>(end - versionStart) > MAX_VERSION_LEN) {
@@ -166,7 +181,7 @@ Method HttpRequest::parseMethod(const char *begin, const char *end) noexcept {
   const size_t len = end - begin;
 
   switch (len) {
-    case 3: {
+    case 3: { // GET/PUT
       if (memcmp(begin, METHOD_GET.data(), 3) == 0) {
         return Method::kGet;
       }
@@ -175,7 +190,7 @@ Method HttpRequest::parseMethod(const char *begin, const char *end) noexcept {
       }
       return Method::kInvalid;
     }
-    case 4: {
+    case 4: { // POST/HEAD
       if (memcmp(begin, METHOD_POST.data(), 4) == 0) {
         return Method::kPost;
       }
@@ -184,7 +199,7 @@ Method HttpRequest::parseMethod(const char *begin, const char *end) noexcept {
       }
       return Method::kInvalid;
     }
-    case 6: {
+    case 6: { // DELETE
       if (memcmp(begin, METHOD_DELETE.data(), 6) == 0) {
         return Method::kDelete;
       }
@@ -210,18 +225,26 @@ Version HttpRequest::parseVersion(const char *begin, const char *end) noexcept {
 }
 
 bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end) {
-  const char *crlf = std::search(begin, end, kCRLFCRLF.begin(), kCRLFCRLF.end());
-  if (crlf == end) {
+  const char *headers_end = std::search(begin, end, kCRLFCRLF.begin(), kCRLFCRLF.end());
+  if (headers_end == end) {
     return false;
   }
 
-  auto result = parseHeaders(begin, crlf);
-  if (!result.valid || !setHeaders(begin, crlf, result)) {
+  auto result = parseHeaders(begin, end);
+  if (!result.valid || !setHeaders(begin, headers_end, result)) {
     state_ = ParseState::kError;
     return false;
   }
 
-  buf->read(crlf - begin + kCRLFCRLF.size());
+  auto readLen  = static_cast<size_t>(headers_end - begin) + kCRLFCRLF.size();
+  auto readData = buf->read(readLen);
+  if (readData.length() != readLen) {
+    LOG_DEBUG(std::to_string(readData.length()));
+    LOG_DEBUG(std::to_string(readLen));
+    state_ = ParseState::kError;
+    return false;
+  }
+
   state_ = (contentLength_ > 0) ? ParseState::kExpectBody : ParseState::kGotAll;
   return true;
 }
@@ -229,17 +252,26 @@ bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end
 HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const char *end) const {
   HeaderResult result{ 0, false };
 
+  struct ParseState {
+    bool foundContentLength{ false };
+    size_t contentLength{ 0 };
+  } parseState;
+
   const char *lineStart       = begin;
   const char *const bufferEnd = end;
 
+  LOG_DEBUG(std::string_view(begin, end - begin));
+
   while (lineStart < bufferEnd) {
     const char *lineEnd = std::search(lineStart, bufferEnd, kCRLF.begin(), kCRLF.end());
+
     if (lineEnd == bufferEnd) {
       return result;
     }
 
     if (lineStart == lineEnd) {
-      result.valid = true;
+      result.contentLength = parseState.contentLength;
+      result.valid         = true;
       return result;
     }
 
@@ -257,22 +289,32 @@ HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const cha
     std::string_view headerValue(valueStart, lineEnd - valueStart);
 
     if (headerName == "Content-Length") {
-      result.contentLength = 0;
+      parseState.contentLength = 0;
+      bool validNumber         = true;
+
       for (char c : headerValue) {
         if (!isDigit(c)) {
-          return result;
+          validNumber = false;
+          break;
         }
-        result.contentLength = result.contentLength * 10 + (c - '0');
+        parseState.contentLength = parseState.contentLength * 10 + (c - '0');
       }
-      if (result.contentLength > config_.maxBodySize) {
+
+      if (!validNumber || parseState.contentLength > config_.maxBodySize) {
         return result;
       }
+
+      parseState.foundContentLength = true;
     }
 
     lineStart = lineEnd + kCRLF.size();
   }
 
-  result.valid = true;
+  if (parseState.foundContentLength) {
+    result.contentLength = parseState.contentLength;
+    result.valid         = true;
+  }
+
   return result;
 }
 
@@ -313,15 +355,17 @@ bool HttpRequest::processBody(Buffer *buf, const char *begin, const char *end) {
 
   const size_t readable = end - begin;
   if (readable < contentLength_) {
-    return false;
+    return false; // 等待更多數據
   }
 
-  if (!parseBody(begin, contentLength_)) {
+  // 直接讀取所需長度的數據
+  auto bodyData = buf->read(contentLength_);
+  if (bodyData.length() != contentLength_) {
     state_ = ParseState::kError;
     return false;
   }
 
-  buf->read(contentLength_);
+  body_.assign(bodyData);
   state_ = ParseState::kGotAll;
   return true;
 }
@@ -381,6 +425,7 @@ bool HttpRequest::isCtl(char c) noexcept {
 }
 
 bool HttpRequest::isTchar(char c) noexcept {
+  // RFC7320 定義的 token 字符
   static constexpr char TCHAR_MAP[128] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0-15
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 16-31

@@ -24,11 +24,6 @@ public:
   HttpRequest();
   ~HttpRequest() = default;
 
-  HttpRequest(const HttpRequest &)                = delete;
-  HttpRequest &operator=(const HttpRequest &)     = delete;
-  HttpRequest(HttpRequest &&) noexcept            = default;
-  HttpRequest &operator=(HttpRequest &&) noexcept = delete;
-
   void reset();
   bool parseRequest(Buffer *buf);
 
