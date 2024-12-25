@@ -14,8 +14,8 @@ Diagnostics:
       - bugprone-easily-swappable-parameters
       - readability-magic-numbers
       - modernize-use-designated-initializers
-      - cppcoreguidelines-avoid-c-arrays
       - modernize-avoid-c-arrays
+      - bugprone-switch-missing-default-case
     CheckOptions:
       readability-identifier-length.MinimumVariableNameLength: 1
       readability-identifier-length.MinimumParameterNameLength: 1
@@ -27,4 +27,3 @@ CompileFlags:
     - -Wpedantic
     - -std=c++20
     - -Wno-missing-field-initializers
-

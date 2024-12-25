@@ -2,8 +2,6 @@
 
 #include "include/buffer.h"
 #include "include/config_manager.h"
-#include "include/log.h"
-#include "include/types.h"
 
 #include <algorithm>
 #include <cstring>
@@ -19,24 +17,42 @@ constexpr std::string_view METHOD_DELETE = "DELETE";
 
 constexpr std::string_view VERSION_10 = "HTTP/1.0";
 constexpr std::string_view VERSION_11 = "HTTP/1.1";
+
+constexpr size_t INITIAL_BUFFER_SIZE = 1024;
 } // namespace
 
 HttpRequest::HttpRequest()
     : method_(Method::kInvalid)
     , version_(Version::kUnknown)
+    , rawPath_(new char[INITIAL_BUFFER_SIZE])
+    , pathLength_(0)
+    , rawQuery_(new char[INITIAL_BUFFER_SIZE])
+    , queryLength_(0)
+    , rawBody_(new char[INITIAL_BUFFER_SIZE])
+    , bodyLength_(0)
     , state_(ParseState::kExpectRequestLine)
     , contentLength_(0)
+    , keepAlive_(false)
+    , expectContinue_(false)
     , config_(ConfigManager::getInstance().getCurrentContext().httpContext->conf[0]) {}
 
+HttpRequest::~HttpRequest() {
+  delete[] rawPath_;
+  delete[] rawQuery_;
+  delete[] rawBody_;
+}
+
 void HttpRequest::reset() {
-  method_        = Method::kInvalid;
-  version_       = Version::kUnknown;
-  state_         = ParseState::kExpectRequestLine;
-  contentLength_ = 0;
-  path_.clear();
-  query_.clear();
+  method_      = Method::kInvalid;
+  version_     = Version::kUnknown;
+  pathLength_  = 0;
+  queryLength_ = 0;
+  bodyLength_  = 0;
   headers_.clear();
-  body_.clear();
+  state_          = ParseState::kExpectRequestLine;
+  contentLength_  = 0;
+  keepAlive_      = false;
+  expectContinue_ = false;
 }
 
 bool HttpRequest::parseRequest(Buffer *buf) {
@@ -47,44 +63,57 @@ bool HttpRequest::parseRequest(Buffer *buf) {
 }
 
 bool HttpRequest::parseRequestInternal(Buffer *buf) {
+  bool needMoreData = false;
+
   while (state_ != ParseState::kGotAll && state_ != ParseState::kError) {
     const size_t readable = buf->readableSize();
     if (readable == 0) {
-      return true;
+      break;
     }
 
     std::string_view content = buf->preview(readable);
-    bool success             = false;
+    const char *begin        = content.data();
+    const char *end          = begin + content.size();
 
+    bool result = false;
     switch (state_) {
       case ParseState::kExpectRequestLine:
-        success = processRequestLine(buf, content.data(), content.data() + content.size());
-        break;
-      case ParseState::kExpectHeaders:
-        success = processHeaders(buf, content.data(), content.data() + content.size());
-        if (!success) {
-          LOG_ERROR("Header出錯");
+        result = processRequestLine(buf, begin, end);
+        if (!result && state_ != ParseState::kError) {
+          needMoreData = true;
         }
+        break;
 
-        break;
-      case ParseState::kExpectBody:
-        success = processBody(buf, content.data(), content.data() + content.size());
-        if (!success) {
-          LOG_ERROR("Body出錯");
+      case ParseState::kExpectHeaders:
+        result = processHeaders(buf, begin, end);
+        if (!result && state_ != ParseState::kError) {
+          needMoreData = true;
         }
         break;
+
+      case ParseState::kExpectBody:
+        result = processBody(buf, begin, end);
+        if (!result && state_ != ParseState::kError) {
+          needMoreData = true;
+        }
+        break;
+
       default:
+        state_ = ParseState::kError;
         return false;
     }
 
-    if (!success) {
-      LOG_ERROR("出錯!");
-      return state_ != ParseState::kError;
+    if (needMoreData) {
+      break;
+    }
+
+    if (!result) {
+      return false;
     }
   }
-  return true;
-}
 
+  return state_ == ParseState::kGotAll;
+}
 bool HttpRequest::processRequestLine(Buffer *buf, const char *begin, const char *end) {
   const char *crlf = std::search(begin, end, kCRLF.begin(), kCRLF.end());
   if (crlf == end) {
@@ -107,7 +136,7 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   RequestLineResult result{ nullptr, nullptr, nullptr, nullptr, nullptr,
                             nullptr, nullptr, nullptr, false };
 
-  // Find method
+  // Method
   const char *space = std::find_if(begin, end, isSpace);
   if (space == end || static_cast<size_t>(space - begin) > MAX_METHOD_LEN) {
     return result;
@@ -115,23 +144,28 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   result.methodStart = begin;
   result.methodEnd   = space;
 
-  // Skip spaces
+  // Path
   const char *pathStart = std::find_if_not(space, end, isSpace);
   if (pathStart == end) {
     return result;
   }
 
-  // Find path end / query start
+  // Query
   const char *questionMark = std::find(pathStart, end, '?');
   const char *pathEnd =
       (questionMark != end) ? questionMark : std::find_if(pathStart, end, isSpace);
   if (pathEnd == end) {
     return result;
   }
+
+  // Validate URI length and characters
+  if (!isValidUri(pathStart, pathEnd - pathStart)) {
+    return result;
+  }
+
   result.pathStart = pathStart;
   result.pathEnd   = pathEnd;
 
-  // Handle query if exists
   if (questionMark != end) {
     const char *queryEnd = std::find_if(questionMark + 1, end, isSpace);
     if (queryEnd == end) {
@@ -139,16 +173,235 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
     }
     result.queryStart = questionMark + 1;
     result.queryEnd   = queryEnd;
+
+    // Validate query string
+    if (!isValidUri(result.queryStart, result.queryEnd - result.queryStart)) {
+      return result;
+    }
   }
 
-  // Find version
+  // Version
   const char *versionStart =
       std::find_if_not((result.queryEnd != nullptr) ? result.queryEnd : pathEnd, end, isSpace);
   if (versionStart == end || static_cast<size_t>(end - versionStart) > MAX_VERSION_LEN) {
     return result;
   }
+
   result.versionStart = versionStart;
   result.versionEnd   = end;
+  result.valid        = true;
+  return result;
+}
+
+Method HttpRequest::parseMethod(const char *begin, const char *end) noexcept {
+  const size_t len = end - begin;
+
+  switch (len) {
+    case 3:
+      if (__builtin_memcmp(begin, METHOD_GET.data(), 3) == 0) {
+        return Method::kGet;
+      }
+      if (__builtin_memcmp(begin, METHOD_PUT.data(), 3) == 0) {
+        return Method::kPut;
+      }
+      break;
+    case 4:
+      if (__builtin_memcmp(begin, METHOD_POST.data(), 4) == 0) {
+        return Method::kPost;
+      }
+      if (__builtin_memcmp(begin, METHOD_HEAD.data(), 4) == 0) {
+        return Method::kHead;
+      }
+      break;
+    case 6:
+      if (__builtin_memcmp(begin, METHOD_DELETE.data(), 6) == 0) {
+        return Method::kDelete;
+      }
+      break;
+  }
+  return Method::kInvalid;
+}
+
+Version HttpRequest::parseVersion(const char *begin, const char *end) noexcept {
+  const size_t len = end - begin;
+  if (len != 8) {
+    return Version::kUnknown;
+  }
+
+  if (__builtin_memcmp(begin, VERSION_10.data(), 8) == 0) {
+    return Version::kHttp10;
+  }
+  if (__builtin_memcmp(begin, VERSION_11.data(), 8) == 0) {
+    return Version::kHttp11;
+  }
+  return Version::kUnknown;
+}
+
+bool HttpRequest::validateHeaderFormat() const {
+  if (!isValidMethod(method_)) {
+    return false;
+  }
+  if (version_ == Version::kUnknown) {
+    return false;
+  }
+  if (pathLength_ == 0 || pathLength_ > MAX_URI_LEN) {
+    return false;
+  }
+  if (queryLength_ > MAX_URI_LEN) {
+    return false;
+  }
+  return true;
+}
+
+bool HttpRequest::validateRequestLine() const {
+  for (size_t i = 0; i < pathLength_; ++i) {
+    if (const bool isValidChar = isValidUri(&rawPath_[i], 1); !isValidChar) {
+      return false;
+    }
+  }
+
+  for (size_t i = 0; i < queryLength_; ++i) {
+    if (const bool isValidChar = isValidUri(&rawQuery_[i], 1); !isValidChar) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool HttpRequest::validateHeaderFields() const {
+  for (const auto &[key, value] : headers_) {
+    if (key.empty()) {
+      return false;
+    }
+    for (char c : key) {
+      if (!isHeaderNameChar(c)) {
+        return false;
+      }
+    }
+
+    if (value.find('\r') != std::string::npos || value.find('\n') != std::string::npos) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool HttpRequest::validateContentLength() const {
+  // 檢查 Content-Length 是否合法
+  auto it = headers_.find("Content-Length");
+  if (it != headers_.end()) {
+    const std::string &value = it->second;
+    for (char c : value) {
+      if (!isDigit(c)) {
+        return false;
+      }
+    }
+
+    size_t contentLen = std::stoull(value);
+    if (contentLen > config_.maxBodySize) {
+      return false;
+    }
+    if (contentLen != bodyLength_) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool HttpRequest::isValidMethod(Method method) noexcept {
+  return method != Method::kInvalid;
+}
+
+bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end) {
+  const char *headersEnd = std::search(begin, end, kCRLFCRLF.begin(), kCRLFCRLF.end());
+  if (headersEnd == end) {
+    if (buf->readableSize() > config_.maxHeaderSize) {
+      state_ = ParseState::kError;
+      return false;
+    }
+    return true;
+  }
+
+  auto result = parseHeaders(begin, end);
+  if (!result.valid || !setHeaders(begin, headersEnd, result)) {
+    state_ = ParseState::kError;
+    return false;
+  }
+
+  keepAlive_      = result.keepAlive;
+  expectContinue_ = result.expectContinue;
+
+  // 驗證 HTTP 標準
+  if (!validateHeaderFormat() || !validateHeaderFields()) {
+    state_ = ParseState::kError;
+    return false;
+  }
+
+  size_t readLen = static_cast<size_t>(headersEnd - begin) + kCRLFCRLF.size();
+  auto readData  = buf->read(readLen);
+  if (readData.length() != readLen) {
+    state_ = ParseState::kError;
+    return false;
+  }
+
+  state_ = (contentLength_ > 0) ? ParseState::kExpectBody : ParseState::kGotAll;
+  return true;
+}
+
+HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const char *end) const {
+  HeaderResult result{ 0, false, false, true }; // 默認keep-alive為true
+
+  const char *lineStart       = begin;
+  const char *const bufferEnd = end;
+
+  while (lineStart < bufferEnd) {
+    const char *lineEnd = std::search(lineStart, bufferEnd, kCRLF.begin(), kCRLF.end());
+    if (lineEnd == bufferEnd) {
+      return result;
+    }
+
+    if (lineStart == lineEnd) {
+      result.valid = true;
+      return result;
+    }
+
+    const char *colon = std::find(lineStart, lineEnd, ':');
+    if (colon == lineEnd) {
+      return result;
+    }
+
+    const char *valueStart = std::find_if_not(colon + 1, lineEnd, isSpace);
+    if (valueStart == lineEnd) {
+      return result;
+    }
+
+    std::string_view headerName(lineStart, colon - lineStart);
+    std::string_view headerValue(valueStart, lineEnd - valueStart);
+
+    if (headerName == "Content-Length") {
+      result.contentLength = 0;
+      bool validNumber     = true;
+
+      for (char c : headerValue) {
+        if (!isDigit(c)) {
+          validNumber = false;
+          break;
+        }
+        result.contentLength = result.contentLength * 10 + (c - '0');
+      }
+
+      if (!validNumber || result.contentLength > config_.maxBodySize) {
+        return result;
+      }
+    } else if (headerName == "Connection") {
+      result.keepAlive = (headerValue != "close");
+    } else if (headerName == "Expect") {
+      result.expectContinue = (headerValue == "100-continue");
+    }
+
+    lineStart = lineEnd + kCRLF.size();
+  }
 
   result.valid = true;
   return result;
@@ -169,153 +422,25 @@ bool HttpRequest::setRequestLine(const RequestLineResult &result) {
     return false;
   }
 
-  path_.assign(result.pathStart, result.pathEnd);
+  size_t pathLen = result.pathEnd - result.pathStart;
+  if (pathLen > INITIAL_BUFFER_SIZE) {
+    delete[] rawPath_;
+    rawPath_ = new char[pathLen];
+  }
+  __builtin_memcpy(rawPath_, result.pathStart, pathLen);
+  pathLength_ = pathLen;
+
   if (result.queryStart != nullptr) {
-    query_.assign(result.queryStart, result.queryEnd);
+    size_t queryLen = result.queryEnd - result.queryStart;
+    if (queryLen > INITIAL_BUFFER_SIZE) {
+      delete[] rawQuery_;
+      rawQuery_ = new char[queryLen];
+    }
+    __builtin_memcpy(rawQuery_, result.queryStart, queryLen);
+    queryLength_ = queryLen;
   }
 
   return true;
-}
-
-Method HttpRequest::parseMethod(const char *begin, const char *end) noexcept {
-  const size_t len = end - begin;
-
-  switch (len) {
-    case 3: { // GET/PUT
-      if (memcmp(begin, METHOD_GET.data(), 3) == 0) {
-        return Method::kGet;
-      }
-      if (memcmp(begin, METHOD_PUT.data(), 3) == 0) {
-        return Method::kPut;
-      }
-      return Method::kInvalid;
-    }
-    case 4: { // POST/HEAD
-      if (memcmp(begin, METHOD_POST.data(), 4) == 0) {
-        return Method::kPost;
-      }
-      if (memcmp(begin, METHOD_HEAD.data(), 4) == 0) {
-        return Method::kHead;
-      }
-      return Method::kInvalid;
-    }
-    case 6: { // DELETE
-      if (memcmp(begin, METHOD_DELETE.data(), 6) == 0) {
-        return Method::kDelete;
-      }
-      return Method::kInvalid;
-    }
-    default:
-      return Method::kInvalid;
-  }
-}
-
-Version HttpRequest::parseVersion(const char *begin, const char *end) noexcept {
-  const size_t len = end - begin;
-
-  if (len == 8) {
-    if (memcmp(begin, VERSION_10.data(), 8) == 0) {
-      return Version::kHttp10;
-    }
-    if (memcmp(begin, VERSION_11.data(), 8) == 0) {
-      return Version::kHttp11;
-    }
-  }
-  return Version::kUnknown;
-}
-
-bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end) {
-  const char *headers_end = std::search(begin, end, kCRLFCRLF.begin(), kCRLFCRLF.end());
-  if (headers_end == end) {
-    return false;
-  }
-
-  auto result = parseHeaders(begin, end);
-  if (!result.valid || !setHeaders(begin, headers_end, result)) {
-    state_ = ParseState::kError;
-    return false;
-  }
-
-  auto readLen  = static_cast<size_t>(headers_end - begin) + kCRLFCRLF.size();
-  auto readData = buf->read(readLen);
-  if (readData.length() != readLen) {
-    LOG_DEBUG(std::to_string(readData.length()));
-    LOG_DEBUG(std::to_string(readLen));
-    state_ = ParseState::kError;
-    return false;
-  }
-
-  state_ = (contentLength_ > 0) ? ParseState::kExpectBody : ParseState::kGotAll;
-  return true;
-}
-
-HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const char *end) const {
-  HeaderResult result{ 0, false };
-
-  struct ParseState {
-    bool foundContentLength{ false };
-    size_t contentLength{ 0 };
-  } parseState;
-
-  const char *lineStart       = begin;
-  const char *const bufferEnd = end;
-
-  LOG_DEBUG(std::string_view(begin, end - begin));
-
-  while (lineStart < bufferEnd) {
-    const char *lineEnd = std::search(lineStart, bufferEnd, kCRLF.begin(), kCRLF.end());
-
-    if (lineEnd == bufferEnd) {
-      return result;
-    }
-
-    if (lineStart == lineEnd) {
-      result.contentLength = parseState.contentLength;
-      result.valid         = true;
-      return result;
-    }
-
-    const char *colon = std::find(lineStart, lineEnd, ':');
-    if (colon == lineEnd) {
-      return result;
-    }
-
-    const char *valueStart = std::find_if_not(colon + 1, lineEnd, isSpace);
-    if (valueStart == lineEnd) {
-      return result;
-    }
-
-    std::string_view headerName(lineStart, colon - lineStart);
-    std::string_view headerValue(valueStart, lineEnd - valueStart);
-
-    if (headerName == "Content-Length") {
-      parseState.contentLength = 0;
-      bool validNumber         = true;
-
-      for (char c : headerValue) {
-        if (!isDigit(c)) {
-          validNumber = false;
-          break;
-        }
-        parseState.contentLength = parseState.contentLength * 10 + (c - '0');
-      }
-
-      if (!validNumber || parseState.contentLength > config_.maxBodySize) {
-        return result;
-      }
-
-      parseState.foundContentLength = true;
-    }
-
-    lineStart = lineEnd + kCRLF.size();
-  }
-
-  if (parseState.foundContentLength) {
-    result.contentLength = parseState.contentLength;
-    result.valid         = true;
-  }
-
-  return result;
 }
 
 bool HttpRequest::setHeaders(const char *begin, const char *end, const HeaderResult &result) {
@@ -323,8 +448,9 @@ bool HttpRequest::setHeaders(const char *begin, const char *end, const HeaderRes
     return false;
   }
 
-  contentLength_ = result.contentLength;
-  headers_.clear();
+  contentLength_  = result.contentLength;
+  keepAlive_      = result.keepAlive;
+  expectContinue_ = result.expectContinue;
 
   const char *lineStart = begin;
   while (lineStart < end) {
@@ -336,15 +462,24 @@ bool HttpRequest::setHeaders(const char *begin, const char *end, const HeaderRes
     const char *colon      = std::find(lineStart, lineEnd, ':');
     const char *valueStart = std::find_if_not(colon + 1, lineEnd, isSpace);
 
-    headers_.emplace(
-        std::string(lineStart, colon - lineStart),
-        std::string(valueStart, lineEnd - valueStart)
-    );
+    // Check header name length before adding
+    size_t nameLen = colon - lineStart;
+    if (nameLen == 0 || nameLen > config_.maxHeaderSize) {
+      return false;
+    }
+
+    // Check header value length before adding
+    size_t valueLen = lineEnd - valueStart;
+    if (valueLen > config_.maxBodySize) {
+      return false;
+    }
+
+    headers_.emplace(std::string(lineStart, nameLen), std::string(valueStart, valueLen));
 
     lineStart = lineEnd + kCRLF.size();
   }
 
-  return true;
+  return validateHeaderFields();
 }
 
 bool HttpRequest::processBody(Buffer *buf, const char *begin, const char *end) {
@@ -355,27 +490,38 @@ bool HttpRequest::processBody(Buffer *buf, const char *begin, const char *end) {
 
   const size_t readable = end - begin;
   if (readable < contentLength_) {
-    return false; // 等待更多數據
+    return false;
   }
 
-  // 直接讀取所需長度的數據
   auto bodyData = buf->read(contentLength_);
   if (bodyData.length() != contentLength_) {
     state_ = ParseState::kError;
     return false;
   }
 
-  body_.assign(bodyData);
+  if (bodyData.length() > INITIAL_BUFFER_SIZE) {
+    delete[] rawBody_;
+    rawBody_ = new char[bodyData.length()];
+  }
+  __builtin_memcpy(rawBody_, bodyData.data(), bodyData.length());
+  bodyLength_ = bodyData.length();
+
+  if (!validateContentLength()) {
+    state_ = ParseState::kError;
+    return false;
+  }
+
   state_ = ParseState::kGotAll;
   return true;
 }
 
-bool HttpRequest::parseBody(const char *begin, size_t length) {
-  if (length > config_.maxBodySize) {
-    return false;
+bool HttpRequest::isValidUri(const char *uri, size_t length) noexcept {
+  for (size_t i = 0; i < length; ++i) {
+    char c = uri[i];
+    if (!isChar(c) || (URI_CHARS[static_cast<unsigned char>(c)] == 0)) {
+      return false;
+    }
   }
-
-  body_.assign(begin, length);
   return true;
 }
 
@@ -385,7 +531,7 @@ bool HttpRequest::hasHeader(std::string_view field) const {
 
 std::string_view HttpRequest::getHeader(std::string_view field) const {
   auto it = headers_.find(std::string(field));
-  return it != headers_.end() ? std::string_view(it->second) : std::string_view();
+  return it != headers_.end() ? std::string_view(it->second) : std::string_view{};
 }
 
 const char *HttpRequest::methodString(Method method) noexcept {
@@ -417,7 +563,7 @@ const char *HttpRequest::versionString(Version version) noexcept {
 }
 
 bool HttpRequest::isChar(char c) noexcept {
-  return c >= 0 && c <= 127;
+  return static_cast<unsigned char>(c) <= 127;
 }
 
 bool HttpRequest::isCtl(char c) noexcept {
@@ -425,18 +571,7 @@ bool HttpRequest::isCtl(char c) noexcept {
 }
 
 bool HttpRequest::isTchar(char c) noexcept {
-  // RFC7320 定義的 token 字符
-  static constexpr char TCHAR_MAP[128] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0-15
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 16-31
-    0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, // 32-47
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, // 48-63
-    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 64-79
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, // 80-95
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 96-111
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0  // 112-127
-  };
-  return isChar(c) && (TCHAR_MAP[static_cast<unsigned char>(c)] != 0);
+  return isChar(c) && TCHAR_MAP[static_cast<unsigned char>(c)];
 }
 
 bool HttpRequest::isHeaderNameChar(char c) noexcept {
