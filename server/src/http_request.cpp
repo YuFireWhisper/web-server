@@ -136,7 +136,6 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   RequestLineResult result{ nullptr, nullptr, nullptr, nullptr, nullptr,
                             nullptr, nullptr, nullptr, false };
 
-  // Method
   const char *space = std::find_if(begin, end, isSpace);
   if (space == end || static_cast<size_t>(space - begin) > MAX_METHOD_LEN) {
     return result;
@@ -144,13 +143,11 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
   result.methodStart = begin;
   result.methodEnd   = space;
 
-  // Path
   const char *pathStart = std::find_if_not(space, end, isSpace);
   if (pathStart == end) {
     return result;
   }
 
-  // Query
   const char *questionMark = std::find(pathStart, end, '?');
   const char *pathEnd =
       (questionMark != end) ? questionMark : std::find_if(pathStart, end, isSpace);
@@ -158,7 +155,6 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
     return result;
   }
 
-  // Validate URI length and characters
   if (!isValidUri(pathStart, pathEnd - pathStart)) {
     return result;
   }
@@ -174,13 +170,11 @@ HttpRequest::parseRequestLine(const char *begin, const char *end) noexcept {
     result.queryStart = questionMark + 1;
     result.queryEnd   = queryEnd;
 
-    // Validate query string
     if (!isValidUri(result.queryStart, result.queryEnd - result.queryStart)) {
       return result;
     }
   }
 
-  // Version
   const char *versionStart =
       std::find_if_not((result.queryEnd != nullptr) ? result.queryEnd : pathEnd, end, isSpace);
   if (versionStart == end || static_cast<size_t>(end - versionStart) > MAX_VERSION_LEN) {
@@ -288,7 +282,6 @@ bool HttpRequest::validateHeaderFields() const {
 }
 
 bool HttpRequest::validateContentLength() const {
-  // 檢查 Content-Length 是否合法
   auto it = headers_.find("Content-Length");
   if (it != headers_.end()) {
     const std::string &value = it->second;
@@ -332,7 +325,6 @@ bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end
   keepAlive_      = result.keepAlive;
   expectContinue_ = result.expectContinue;
 
-  // 驗證 HTTP 標準
   if (!validateHeaderFormat() || !validateHeaderFields()) {
     state_ = ParseState::kError;
     return false;
@@ -350,7 +342,7 @@ bool HttpRequest::processHeaders(Buffer *buf, const char *begin, const char *end
 }
 
 HttpRequest::HeaderResult HttpRequest::parseHeaders(const char *begin, const char *end) const {
-  HeaderResult result{ 0, false, false, true }; // 默認keep-alive為true
+  HeaderResult result{ 0, false, false, true };
 
   const char *lineStart       = begin;
   const char *const bufferEnd = end;
@@ -462,13 +454,11 @@ bool HttpRequest::setHeaders(const char *begin, const char *end, const HeaderRes
     const char *colon      = std::find(lineStart, lineEnd, ':');
     const char *valueStart = std::find_if_not(colon + 1, lineEnd, isSpace);
 
-    // Check header name length before adding
     size_t nameLen = colon - lineStart;
     if (nameLen == 0 || nameLen > config_.maxHeaderSize) {
       return false;
     }
 
-    // Check header value length before adding
     size_t valueLen = lineEnd - valueStart;
     if (valueLen > config_.maxBodySize) {
       return false;
