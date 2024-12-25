@@ -201,24 +201,26 @@ void TcpConnection::handleWrite() {
 
 void TcpConnection::handleClose() {
   LOG_DEBUG("開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd()));
-
   loop_->assertInLoopThread();
 
   if (state_ != State::kDisconnected) {
     setState(State::kDisconnected);
-
     channel_->disableAll();
 
+    // 保存 shared_ptr 以確保在回調期間 TcpConnection 不會被銷毀
+    auto guardThis = shared_from_this();
+
     if (connectionCallback_) {
-      connectionCallback_(shared_from_this());
+      connectionCallback_(guardThis);
     }
 
     if (channel_) {
       channel_->remove();
     }
 
+    // 將 closeCallback_ 延遲到下一個事件循環執行
     if (closeCallback_) {
-      closeCallback_(shared_from_this());
+      loop_->queueInLoop([guardThis, cb = closeCallback_]() { cb(guardThis); });
     }
   }
 
@@ -267,17 +269,22 @@ void TcpConnection::handleError() {
 }
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
-  LOG_DEBUG(
-      "handleRead called with timestamp: " + std::to_string(receiveTime.microSecondsSinceEpoch())
-  );
+  // 先檢查連接狀態
+  if (state_ == State::kDisconnected) {
+    return;
+  }
+
   int savedErrno = 0;
   ssize_t result = inputBuffer_.readFromFd(socket_->getSocketFd(), &savedErrno);
 
+  // 使用 shared_ptr 保護
+  auto guardThis = shared_from_this();
+
   if (result > 0) {
-    LOG_DEBUG("need to call messageCallback");
-    messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
+    messageCallback_(guardThis, &inputBuffer_, receiveTime);
   } else if (result == 0) {
-    handleClose();
+    // 延遲關閉操作到事件循環的下一個迭代
+    loop_->queueInLoop([guardThis]() { guardThis->handleClose(); });
   } else {
     errno = savedErrno;
     LOG_ERROR("Read Error" + std::string(strerror(errno)));

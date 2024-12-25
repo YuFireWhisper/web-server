@@ -1,151 +1,183 @@
 #include "include/router.h"
 
-#include "include/config_defaults.h"
 #include "include/http_request.h"
 #include "include/http_response.h"
 #include "include/log.h"
-#include "include/types.h"
 
 #include <chrono>
-#include <ctime>
-#include <exception>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <ios>
-#include <memory>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <utility>
 
 namespace server {
+
+Router &Router::getInstance() {
+  static Router instance;
+  return instance;
+}
+
+Router::Router() {
+  LOG_DEBUG("初始化Router實例");
+  rootNode_.name = "/";
+}
+
 void Router::addRoute(const LocationConfig &node) {
-  std::vector<std::string> segmentVector = splitPath(node.name);
-  LocationConfig *currentNode            = &routerNode_;
+  LOG_DEBUG("開始添加路由: " + node.name);
+  std::string_view segments[MAX_PATH_SEGMENTS];
+  const size_t segmentCount = splitPath(node.name, segments);
 
-  LOG_DEBUG("開始處理路由: " + node.name);
-  LOG_DEBUG("路徑片段數量: " + std::to_string(segmentVector.size()));
+  LOG_DEBUG("路徑切分結果:");
+  for (size_t i = 0; i < segmentCount; ++i) {
+    LOG_DEBUG("  段[" + std::to_string(i) + "]: " + std::string(segments[i]));
+  }
 
-  for (size_t index = 0; index < segmentVector.size(); ++index) {
-    const std::string &currentSegment = segmentVector[index];
-    LOG_DEBUG("處理第 " + std::to_string(index + 1) + " 個片段: " + currentSegment);
+  LocationConfig *currentNode = &rootNode_;
+  LOG_DEBUG("從根節點開始處理，根節點名稱: " + rootNode_.name);
 
-    if (index == segmentVector.size() - 1) {
-      // 最後一個片段的處理
-      if (currentNode->children.find(currentSegment) != currentNode->children.end()) {
-        // 更新已存在的路由，保留子節點
-        LOG_DEBUG("檢測到重複的route: " + node.name);
-        LOG_DEBUG("開始更新現有路由配置...");
+  for (size_t i = 0; i < segmentCount; ++i) {
+    const auto &segment = segments[i];
+    auto segmentStr     = std::string(segment);
+    LOG_DEBUG("處理段[" + std::to_string(i) + "]: " + segmentStr);
 
-        auto existingChildren = currentNode->children[currentSegment]->children;
-        auto childrenCount    = existingChildren.size();
-        LOG_DEBUG("保存現有子節點數量: " + std::to_string(childrenCount));
-
-        *(currentNode->children[currentSegment])        = node;
-        currentNode->children[currentSegment]->children = existingChildren;
-
-        LOG_DEBUG("路由更新完成: " + node.name);
-        LOG_DEBUG(
-            "保留原有子節點數量: "
-            + std::to_string(currentNode->children[currentSegment]->children.size())
-        );
+    if (i == segmentCount - 1) {
+      LOG_DEBUG("到達最後一段，配置終端節點");
+      auto &targetNode = currentNode->children[segmentStr];
+      if (!targetNode) {
+        LOG_DEBUG("創建新的終端節點");
+        targetNode = std::make_shared<LocationConfig>();
       } else {
-        // 新增路由
-        LOG_DEBUG("新增路由節點: " + currentSegment);
-        currentNode->children[currentSegment]    = std::make_shared<LocationConfig>();
-        *(currentNode->children[currentSegment]) = node;
-        LOG_DEBUG("新路由節點創建完成");
+        LOG_DEBUG("更新已存在的終端節點");
       }
 
-      LOG_DEBUG("路由處理完成: " + node.name);
+      auto existingChildren = targetNode->children;
+      LOG_DEBUG("保存現有子節點數: " + std::to_string(existingChildren.size()));
+
+      *targetNode          = node;
+      targetNode->children = std::move(existingChildren);
+      LOG_DEBUG("終端節點配置完成");
       return;
     }
 
-    // 非最後片段的處理
-    if (currentNode->children.find(currentSegment) == currentNode->children.end()) {
-      LOG_DEBUG("創建中間節點: " + currentSegment);
-      currentNode->children[currentSegment] = std::make_shared<LocationConfig>();
+    auto &nextNode = currentNode->children[segmentStr];
+    if (!nextNode) {
+      LOG_DEBUG("創建新的中間節點: " + segmentStr);
+      nextNode       = std::make_shared<LocationConfig>();
+      nextNode->name = segmentStr;
     } else {
-      LOG_DEBUG("使用已存在的中間節點: " + currentSegment);
+      LOG_DEBUG("使用已存在的中間節點: " + segmentStr);
     }
-
-    currentNode = currentNode->children[currentSegment].get();
-    LOG_DEBUG("移動到下一個節點: " + currentSegment);
+    currentNode = nextNode.get();
   }
 }
 
-std::vector<std::string> Router::splitPath(const std::string &path) {
-  std::vector<std::string> segmentVector;
-  std::string segment;
+size_t Router::splitPath(std::string_view path, std::string_view *segments) const noexcept {
+  LOG_DEBUG("開始分割路徑: " + std::string(path));
+  size_t count = 0;
 
   if (path == "/") {
-    segmentVector.emplace_back("/");
-    return segmentVector;
+    LOG_DEBUG("根路徑處理");
+    segments[0] = path;
+    return 1;
   }
 
-  size_t start = (path[0] == '/') ? 1 : 0;
+  size_t start        = path[0] == '/' ? 1 : 0;
+  size_t pos          = start;
+  const size_t length = path.length();
 
-  for (size_t i = start; i < path.length(); ++i) {
-    if (path[i] == '/') {
-      if (!segment.empty()) {
-        segmentVector.push_back(std::move(segment));
-        segment.clear();
+  while (pos < length && count < MAX_PATH_SEGMENTS) {
+    if (path[pos] == '/') {
+      if (pos > start) {
+        segments[count] = path.substr(start, pos - start);
+        LOG_DEBUG("分割得到段[" + std::to_string(count) + "]: " + std::string(segments[count]));
+        ++count;
       }
-    } else {
-      segment += path[i];
+      start = pos + 1;
     }
+    ++pos;
   }
 
-  if (!segment.empty()) {
-    segmentVector.push_back(std::move(segment));
+  if (start < length && count < MAX_PATH_SEGMENTS) {
+    segments[count] = path.substr(start);
+    LOG_DEBUG("分割得到最後一段[" + std::to_string(count) + "]: " + std::string(segments[count]));
+    ++count;
   }
 
-  return segmentVector;
+  LOG_DEBUG("路徑分割完成，共 " + std::to_string(count) + " 段");
+  return count;
 }
 
-void Router::addErrorHandler(StatusCode errorCode, const RouteHandler &func) {
-  errorHandlers_[errorCode] = func;
+const LocationConfig *Router::findMatchingRoute(const HttpRequest &req) const noexcept {
+  LOG_DEBUG("開始查找匹配路由，請求路徑: " + std::string(req.path()));
+
+  std::string_view segments[MAX_PATH_SEGMENTS];
+  const size_t segmentCount = splitPath(req.path(), segments);
+
+  const LocationConfig *currentNode = &rootNode_;
+  LOG_DEBUG("從根節點開始查找，根節點名稱: " + currentNode->name);
+
+  for (size_t i = 0; i < segmentCount; ++i) {
+    const auto &segment = segments[i];
+    LOG_DEBUG("嘗試匹配段[" + std::to_string(i) + "]: " + std::string(segment));
+
+    auto it = currentNode->children.find(std::string(segment));
+    if (it == currentNode->children.end()) {
+      LOG_DEBUG("未找到精確匹配，嘗試通配符匹配");
+      it = currentNode->children.find("*");
+      if (it == currentNode->children.end()) {
+        LOG_DEBUG("未找到匹配的節點，返回nullptr");
+        return nullptr;
+      }
+      LOG_DEBUG("找到通配符匹配");
+    } else {
+      LOG_DEBUG("找到精確匹配");
+    }
+    currentNode = it->second.get();
+    LOG_DEBUG("移動到下一個節點: " + currentNode->name);
+  }
+
+  LOG_DEBUG("找到最終匹配節點: " + currentNode->name);
+  return currentNode;
 }
 
 void Router::handle(const HttpRequest &req, HttpResponse *resp) {
-  LOG_DEBUG("處理請求: " + std::string(req.path()));
-  std::vector<std::string> segmentVector = splitPath(std::string(req.path()));
-  LocationConfig *currentNode            = &routerNode_;
+  LOG_DEBUG(
+      "開始處理請求，方法: " + std::string(HttpRequest::methodString(req.method()))
+      + ", 路徑: " + std::string(req.path())
+  );
 
-  for (const auto &segment : segmentVector) {
-    auto it = currentNode->children.find(segment);
-    if (it == currentNode->children.end()) {
-      it = currentNode->children.find("*");
-      if (it == currentNode->children.end()) {
-        handleError(StatusCode::k404NotFound, resp);
-        return;
-      }
-    }
-    currentNode = it->second.get();
+  const LocationConfig *matchingNode = findMatchingRoute(req);
+
+  if (matchingNode == nullptr) {
+    LOG_DEBUG("未找到匹配的路由，返回404");
+    handleError(StatusCode::k404NotFound, resp);
+    return;
   }
 
-  if (currentNode->method != Method::kInvalid && req.method() != currentNode->method) {
-    LOG_DEBUG("Method is not match");
+  LOG_DEBUG("找到匹配的路由節點: " + matchingNode->name);
+
+  if (matchingNode->method != Method::kInvalid && req.method() != matchingNode->method) {
+    LOG_DEBUG("請求方法不匹配，返回405");
     handleError(StatusCode::k405MethodNotAllowed, resp);
     return;
   }
 
-  LOG_DEBUG("currentNode的靜態文件的路徑為: " + currentNode->staticFile.string());
-
-  if (!currentNode->staticFile.empty()) {
-    LOG_DEBUG("嘗試提供靜態文件: " + currentNode->staticFile.string());
+  if (!matchingNode->staticFile.empty()) {
+    LOG_DEBUG("發現靜態文件配置: " + matchingNode->staticFile.string());
+    if (serveStaticFile(matchingNode->staticFile, req, resp)) {
+      LOG_DEBUG("靜態文件處理完成");
+      return;
+    }
+    LOG_DEBUG("靜態文件處理失敗，繼續檢查handler");
   }
 
-  if (!currentNode->staticFile.empty() && serveStaticFile(currentNode->staticFile, req, resp)) {
+  if (matchingNode->handler) {
+    LOG_DEBUG("執行自定義處理器");
+    matchingNode->handler(req, resp);
     return;
   }
 
-  if (currentNode->handler) {
-    LOG_DEBUG("執行路由處理器");
-    currentNode->handler(req, resp);
-  } else {
-    handleError(StatusCode::k500InternalServerError, resp);
-  }
+  LOG_DEBUG("無可用的處理方式，返回500");
+  handleError(StatusCode::k500InternalServerError, resp);
 }
 
 bool Router::serveStaticFile(
@@ -153,90 +185,97 @@ bool Router::serveStaticFile(
     const HttpRequest &req,
     HttpResponse *resp
 ) const {
-  LOG_DEBUG("開始處理靜態文件");
-
-  std::filesystem::path normalizedPath;
-  try {
-    normalizedPath = normalizePath(staticFilePath);
-    LOG_DEBUG("標準化後的路徑: " + normalizedPath.string());
-  } catch (const std::exception &e) {
-    LOG_ERROR("路徑標準化失敗: " + std::string(e.what()));
-    handleError(StatusCode::k500InternalServerError);
-    return true;
-  }
-
-  if (!std::filesystem::exists(normalizedPath)) {
-    LOG_DEBUG("靜態檔案不存在");
-    return false;
-  }
-
-  if (!std::filesystem::is_regular_file(normalizedPath)) {
-    handleError(StatusCode::k403Forbidden);
-    return true;
-  }
+  LOG_DEBUG("開始處理靜態文件: " + staticFilePath.string());
 
   try {
-    auto fileSize    = std::filesystem::file_size(normalizedPath);
-    auto contentType = getMimeType(normalizedPath.extension().string());
-    resp->setContentType(contentType);
+    const auto normalizedPath = normalizePath(staticFilePath);
+    LOG_DEBUG("規範化後的路徑: " + normalizedPath.string());
+
+    if (!std::filesystem::exists(normalizedPath)) {
+      LOG_DEBUG("文件不存在: " + normalizedPath.string());
+      return false;
+    }
+
+    LOG_DEBUG("文件存在");
+
+    if (!std::filesystem::is_regular_file(normalizedPath)) {
+      LOG_DEBUG("不是普通文件，返回403");
+      handleError(StatusCode::k403Forbidden, resp);
+      return true;
+    }
+    LOG_DEBUG("確認是普通文件");
+
+    const auto fileSize = std::filesystem::file_size(normalizedPath);
+    LOG_DEBUG("文件大小: " + std::to_string(fileSize));
+
+    auto extension = normalizedPath.extension().string();
+    LOG_DEBUG("文件擴展名: " + extension);
+
+    resp->setContentType(std::string(getMimeType(extension)));
+    LOG_DEBUG("設置Content-Type完成");
 
     handleCaching(normalizedPath, req, resp);
-
     if (resp->statusCode() == StatusCode::k304NotModified) {
+      LOG_DEBUG("文件未修改，返回304");
       return true;
     }
 
     std::ifstream file(normalizedPath, std::ios::binary);
     if (!file) {
-      handleError(StatusCode::k500InternalServerError);
+      LOG_DEBUG("無法打開文件，返回500");
+      handleError(StatusCode::k500InternalServerError, resp);
       return true;
     }
+    LOG_DEBUG("成功打開文件");
 
     std::string content;
     content.resize(fileSize);
+
     if (file.read(content.data(), static_cast<std::streamsize>(fileSize))) {
+      LOG_DEBUG("成功讀取文件內容");
       resp->setBody(std::move(content));
       resp->setStatusCode(StatusCode::k200Ok);
-    } else {
-      handleError(StatusCode::k500InternalServerError);
+      return true;
     }
 
+    LOG_DEBUG("讀取文件失敗，返回500");
+    handleError(StatusCode::k500InternalServerError, resp);
     return true;
+
   } catch (const std::exception &e) {
-    LOG_ERROR("Error serving static file: " + std::string(e.what()));
-    handleError(StatusCode::k500InternalServerError);
+    LOG_ERROR("處理靜態文件時發生錯誤: " + std::string(e.what()));
+    handleError(StatusCode::k500InternalServerError, resp);
     return true;
   }
 }
 
 void Router::initializeMime() {
-  std::ifstream mimeFile = std::ifstream("/etc/mime.types");
-  if (!mimeFile.is_open()) {
-    std::string message = "Cannot open etc/mime.types!";
-    LOG_FATAL(message);
-    throw std::runtime_error(message);
+  std::ifstream mimeFile("/etc/mime.types");
+  if (!mimeFile) {
+    throw std::runtime_error("Cannot open /etc/mime.types");
   }
 
   std::string line;
+
   while (std::getline(mimeFile, line)) {
     if (line.empty() || line[0] == '#') {
       continue;
     }
 
-    std::istringstream iss = std::istringstream(line);
+    std::istringstream iss(line);
     std::string mimeType;
     std::string extension;
 
-    if (!(iss >> mimeType)) {
-      continue;
-    }
-
-    while (iss >> extension) {
-      mimeTypes_["." + extension] = mimeType;
+    if (iss >> mimeType) {
+      while (iss >> extension) {
+        server::Router::mimeTypes_["." + extension] = mimeType;
+      }
     }
   }
+}
 
-  mimeFile.close();
+void Router::addErrorHandler(StatusCode errorCode, const RouteHandler &func) {
+  errorHandlers_[errorCode] = func;
 }
 
 void Router::handleError(StatusCode errorCode, HttpResponse *resp) const {
@@ -253,83 +292,59 @@ void Router::handleError(StatusCode errorCode) const {
   handleError(errorCode, &resp);
 }
 
-std::string Router::getMimeType(const std::string &extension) {
-  auto it = mimeTypes_.find(extension);
-  if (it == mimeTypes_.end()) {
-    std::string message = "Unknown Extension. Extension: " + extension;
-    LOG_ERROR(message);
-    throw std::invalid_argument(message);
-  }
-
-  return it->second;
+std::string_view Router::getMimeType(std::string_view extension) const noexcept {
+  auto it = mimeTypes_.find(std::string(extension));
+  return it != mimeTypes_.end() ? std::string_view(it->second) : "application/octet-stream";
 }
 
 void Router::handleCaching(
     const std::filesystem::path &filePath,
     const HttpRequest &req,
     HttpResponse *resp
-) {
-  auto lastModTime  = std::filesystem::last_write_time(filePath);
-  auto lastModTimeT = std::chrono::system_clock::to_time_t(
+) const {
+  const auto lastModTime  = std::filesystem::last_write_time(filePath);
+  const auto lastModTimeT = std::chrono::system_clock::to_time_t(
       std::chrono::clock_cast<std::chrono::system_clock>(lastModTime)
   );
 
-  char timeBuffer[100];
-  size_t timeLength = std::strftime(
-      timeBuffer,
-      sizeof(timeBuffer),
+  std::strftime(
+      pathBuffer_.data(),
+      pathBuffer_.size(),
       "%a, %d %b %Y %H:%M:%S GMT",
       std::gmtime(&lastModTimeT)
   );
 
-  // 添加調試日誌
-  LOG_DEBUG("Time buffer length: " + std::to_string(timeLength));
-  LOG_DEBUG("Formatted time: " + std::string(timeBuffer));
-
-  std::string timeStr(timeBuffer);
+  const std::string timeStr(pathBuffer_.data());
   resp->addHeader("Last-Modified", timeStr);
   resp->addHeader("Cache-Control", "public, max-age=3600");
 
-  if (req.hasHeader("If-Modified-Since")) {
-    auto ifModifiedSince = req.getHeader("If-Modified-Since");
-    LOG_DEBUG("If-Modified-Since: " + std::string(ifModifiedSince));
-    LOG_DEBUG("Current time string: " + timeStr);
-    if (ifModifiedSince == timeStr) {
-      resp->setStatusCode(StatusCode::k304NotModified);
-      resp->setBody("");
-      return;
-    }
+  if (req.hasHeader("If-Modified-Since") && req.getHeader("If-Modified-Since") == timeStr) {
+    resp->setStatusCode(StatusCode::k304NotModified);
+    resp->setBody("");
   }
 }
 
-std::filesystem::path Router::normalizePath(const std::filesystem::path &path) {
-  std::string pathStr = path.string();
+std::filesystem::path Router::normalizePath(const std::filesystem::path &path) const {
+  LOG_DEBUG("正在規範化路徑: " + path.string());
 
-  LOG_DEBUG("Input path: " + pathStr);
-  LOG_DEBUG("Is absolute: " + std::to_string(path.is_absolute()));
-
-  if (path.is_absolute() || pathStr[0] == '/') {
-    LOG_DEBUG("檢測到絕對路徑: " + pathStr);
+  if (path.is_absolute() || path.string()[0] == '/') {
+    LOG_DEBUG("已經是絕對路徑，直接返回");
     return path;
   }
 
-  if (path.is_absolute()) {
-    LOG_DEBUG("檢測到絕對路徑: " + pathStr);
-    return path;
-  }
-
+  const std::string pathStr = path.string();
   if (!pathStr.empty() && pathStr[0] == '~') {
-    LOG_DEBUG("檢測到家目錄路徑: " + pathStr);
+    LOG_DEBUG("處理波浪號路徑");
     const char *homeDir = std::getenv("HOME");
     if (homeDir == nullptr) {
-      LOG_ERROR("無法獲取家目錄路徑");
-      throw std::runtime_error("無法獲取家目錄路徑");
+      throw std::runtime_error("無法獲取HOME目錄");
     }
-    pathStr = pathStr.substr(1);
-    return std::filesystem::path(homeDir) / pathStr.substr(pathStr[0] == '/' ? 1 : 0);
+    size_t skipLength = (pathStr.length() > 1 && pathStr[1] == '/') ? 2 : 1;
+    return std::filesystem::path(homeDir) / pathStr.substr(skipLength);
   }
 
-  LOG_DEBUG("轉換相對路徑為絕對路徑: " + pathStr);
+  LOG_DEBUG("處理相對路徑");
   return std::filesystem::absolute(path);
 }
+
 } // namespace server
