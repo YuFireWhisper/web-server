@@ -2,6 +2,8 @@
 
 #include "include/types.h"
 
+#include <atomic>
+
 namespace server {
 
 class EventLoop;
@@ -63,6 +65,9 @@ private:
   int index_;
   bool addedToLoop_;
   bool eventHandling_;
+
+  std::atomic<bool> removed_{ false };
+  std::atomic<bool> resourcesCleared_{false};
 
   ReadEventCallback readCallback_;
   EventCallback writeCallback_;

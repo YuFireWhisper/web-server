@@ -9,9 +9,16 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 
 include_directories(${PROJECT_SOURCE_DIR}/server)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address)
+endif()
 
 add_library(server
     server/src/thread.cpp

@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <string_view>
 #include <unistd.h>
@@ -48,11 +49,30 @@ TcpConnection::TcpConnection(
 }
 
 TcpConnection::~TcpConnection() {
-  channel_->disableAll();
-  channel_->remove();
+  try {
+    LOG_DEBUG(
+        "Destroying TcpConnection " + name_ + ", state=" + std::to_string(static_cast<int>(state_))
+    );
+    LOG_DEBUG("Channel status: " + std::to_string(channel_ ? channel_->index() : -999));
 
-  if (socket_->hasActiveConnection()) {
-    LOG_WARN("Connect did not close properly!");
+    LOG_DEBUG("開始設置destroying");
+    destroying_ = true;
+    LOG_DEBUG("設置destroying完成");
+
+    if (state_ != State::kDisconnected) {
+      LOG_DEBUG("state_ 不為 kDisconnected");
+      setState(State::kDisconnected);
+      channel_->disableAll();
+    }
+    LOG_DEBUG("state_ 為 kDisconnected");
+
+    if (socket_->hasActiveConnection()) {
+      LOG_WARN("Connect did not close properly!");
+    }
+
+    LOG_DEBUG("解構結束");
+  } catch (const std::exception &e) {
+    LOG_ERROR(e.what());
   }
 }
 
@@ -124,7 +144,12 @@ void TcpConnection::sendInLoop(const void *message, size_t len) {
 void TcpConnection::shutdown() {
   if (state_ == State::kConnected) {
     setState(State::kDisconnecting);
-    loop_->runInLoop([capture0 = shared_from_this()] { capture0->shutdownInLoop(); });
+
+    loop_->runInLoop([this]() {
+      if (!channel_->isWriting()) {
+        socket_->closeWriteEnd();
+      }
+    });
   }
 }
 
@@ -200,28 +225,32 @@ void TcpConnection::handleWrite() {
 }
 
 void TcpConnection::handleClose() {
+  LOG_DEBUG(
+      "handleClose for " + name_ + ", use_count=" + std::to_string(shared_from_this().use_count())
+  );
   LOG_DEBUG("開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd()));
   loop_->assertInLoopThread();
 
-  if (state_ != State::kDisconnected) {
-    setState(State::kDisconnected);
-    channel_->disableAll();
+  if (state_ == State::kDisconnected || destroying_) {
+    return;
+  }
 
-    // 保存 shared_ptr 以確保在回調期間 TcpConnection 不會被銷毀
-    auto guardThis = shared_from_this();
+  setState(State::kDisconnected);
 
-    if (connectionCallback_) {
-      connectionCallback_(guardThis);
-    }
+  auto guardThis = shared_from_this();
 
-    if (channel_) {
-      channel_->remove();
-    }
+  channel_->disableAll();
 
-    // 將 closeCallback_ 延遲到下一個事件循環執行
-    if (closeCallback_) {
-      loop_->queueInLoop([guardThis, cb = closeCallback_]() { cb(guardThis); });
-    }
+  if (closeCallback_) {
+    closeCallback_(guardThis);
+  }
+
+  if (connectionCallback_) {
+    connectionCallback_(guardThis);
+  }
+
+  if (!channelRemoved_.exchange(true)) {
+    channel_->remove();
   }
 
   LOG_DEBUG("完成關閉連接：" + name_);
@@ -269,7 +298,6 @@ void TcpConnection::handleError() {
 }
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
-  // 先檢查連接狀態
   if (state_ == State::kDisconnected) {
     return;
   }
@@ -277,13 +305,11 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
   int savedErrno = 0;
   ssize_t result = inputBuffer_.readFromFd(socket_->getSocketFd(), &savedErrno);
 
-  // 使用 shared_ptr 保護
   auto guardThis = shared_from_this();
 
   if (result > 0) {
     messageCallback_(guardThis, &inputBuffer_, receiveTime);
   } else if (result == 0) {
-    // 延遲關閉操作到事件循環的下一個迭代
     loop_->queueInLoop([guardThis]() { guardThis->handleClose(); });
   } else {
     errno = savedErrno;
@@ -307,13 +333,25 @@ void TcpConnection::connectEstablished() {
 }
 
 void TcpConnection::connectDestroyed() {
+  LOG_DEBUG(
+      "connectDestroyed for " + name_
+      + ", use_count=" + std::to_string(shared_from_this().use_count())
+  );
   loop_->assertInLoopThread();
+
+  if (destroying_) {
+    return;
+  }
+
+  if (state_ == State::kDisconnected) {
+    LOG_DEBUG("state_ 為 kDissconnected");
+    return;
+  }
 
   if (state_ == State::kConnected) {
     setState(State::kDisconnected);
     channel_->disableAll();
     connectionCallback_(shared_from_this());
-    channel_->remove();
   }
 }
 

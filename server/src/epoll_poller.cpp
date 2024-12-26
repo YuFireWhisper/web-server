@@ -75,17 +75,22 @@ void EPollPoller::removeChannel(Channel *channel) {
   assertInLoopThread();
 
   if (hasChannel(channel)) {
-    removeExistingChannel(channel);
-    channels_.erase(channel->fd());
-    channel->setIndex(static_cast<int>(PollerState::kNew));
+    auto it = channels_.find(channel->fd());
+    if (it != channels_.end()) {
+      removeExistingChannel(channel);
+      channels_.erase(it);
+      channel->setIndex(static_cast<int>(PollerState::kNew));
+    }
   }
 }
 
 void EPollPoller::handleEvents(int eventCount) {
   for (int i = 0; i < eventCount; ++i) {
     auto *channel = static_cast<Channel *>(eventList_[i].data.ptr);
-    channel->setRevents(static_cast<int>(eventList_[i].events));
-    activeChannels_->push_back(channel);
+    if (hasChannel(channel)) {
+      channel->setRevents(static_cast<int>(eventList_[i].events));
+      activeChannels_->push_back(channel);
+    }
   }
 }
 

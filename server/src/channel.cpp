@@ -1,7 +1,10 @@
 #include "include/channel.h"
 
 #include "include/event_loop.h"
+#include "include/log.h"
 #include "include/time_stamp.h"
+
+#include <exception>
 
 #include <sys/epoll.h>
 
@@ -17,18 +20,27 @@ Channel::Channel(EventLoop *loop, int fd)
     , eventHandling_(false) {}
 
 Channel::~Channel() {
-  cleanupResources();
+  try {
+    LOG_DEBUG(
+        "Destroying Channel for fd=" + std::to_string(fd_) + ", index=" + std::to_string(index_)
+    );
+    cleanupResources();
+  } catch (const std::exception &e) {
+    LOG_ERROR(e.what());
+  }
 }
 
 void Channel::cleanupResources() {
-  if (addedToLoop_) {
+  LOG_DEBUG("cleanupResources 被調用");
+  if (removed_) {
+    LOG_DEBUG("removed_ 為 true，不刪除");
+  } else {
+    LOG_DEBUG("removed_ 不為 true");
+  }
+  if (addedToLoop_ && !removed_.exchange(true)) {
     disableAll();
-    loop_->runInLoop([this]() {
-      if (addedToLoop_) {
-        loop_->removeChannel(this);
-        addedToLoop_ = false;
-      }
-    });
+    loop_->removeChannel(this);
+    addedToLoop_ = false;
   }
 }
 
@@ -89,9 +101,12 @@ void Channel::notifyLoopOfUpdate() {
 }
 
 void Channel::remove() {
-  if (isNoneEvent()) {
-    addedToLoop_ = false;
-    loop_->removeChannel(this);
+  LOG_DEBUG("remove調用");
+  if (isNoneEvent() && !removed_.exchange(true)) {
+    if (addedToLoop_) {
+      addedToLoop_ = false;
+      loop_->removeChannel(this);
+    }
   }
 }
 

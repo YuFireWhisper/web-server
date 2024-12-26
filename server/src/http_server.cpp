@@ -42,18 +42,24 @@ HttpServer::HttpServer(
 
 void HttpServer::onConnection(const TcpConnectionPtr &conn) {
   if (conn->connected()) {
-    conn->setContext(HttpSessionContext());
+    auto context     = std::make_shared<HttpSessionContext>();
+    context->request = std::make_unique<HttpRequest>();
+    conn->setContext(context);
   }
 }
 
 void HttpServer::onMessage(const TcpConnectionPtr &conn, Buffer *buf, TimeStamp receiveTime) {
-  auto *context = std::any_cast<HttpSessionContext>(conn->getMutableContext());
+  auto *context = std::any_cast<std::shared_ptr<HttpSessionContext>>(conn->getMutableContext());
+  if (context == nullptr) {
+    *context = std::make_shared<HttpSessionContext>();
+    conn->setContext(context);
+  }
 
-  if (!context->parsingCompleted) {
-    if (context->request.parseRequest(buf)) {
-      context->parsingCompleted = true;
-      onRequestComplete(conn, receiveTime);
-    }
+  if ((*context)->request->parseRequest(buf)) {
+    onRequestComplete(conn, receiveTime);
+    (*context)->request          = std::make_unique<HttpRequest>();
+    (*context)->parsingCompleted = false;
+    (*context)->expectingBody    = false;
   }
 }
 
@@ -61,9 +67,12 @@ void HttpServer::onRequestComplete(
     const TcpConnectionPtr &conn,
     TimeStamp receiveTime [[maybe_unused]]
 ) {
-  auto *context              = std::any_cast<HttpSessionContext>(conn->getMutableContext());
-  const HttpRequest &request = context->request;
+  auto *context = std::any_cast<std::shared_ptr<HttpSessionContext>>(conn->getMutableContext());
+  if ((context == nullptr) || !(*context)->request) {
+    return;
+  }
 
+  const HttpRequest &request = *(*context)->request;
   HttpResponse response;
 
   if (request.hasError()) {
@@ -74,16 +83,15 @@ void HttpServer::onRequestComplete(
 
   Buffer buf;
   response.appendToBuffer(&buf);
-
   conn->send(&buf);
 
   if (response.closeConnection()) {
     conn->shutdown();
   }
 
-  context->request.reset();
-  context->expectingBody    = false;
-  context->parsingCompleted = false;
+  (*context)->request          = std::make_unique<HttpRequest>();
+  (*context)->expectingBody    = false;
+  (*context)->parsingCompleted = false;
 }
 
 void HttpServer::defaultHttpCallback(const HttpRequest &req, HttpResponse *resp) {

@@ -98,6 +98,9 @@ private:
   Buffer outputBuffer_;
   std::any context_;
 
+  std::atomic<bool> channelRemoved_{false};
+  std::atomic<bool> destroying_{false};
+
   ConnectionCallback connectionCallback_ = [](const TcpConnectionPtr &) {};
   MessageCallback messageCallback_ = [](const TcpConnectionPtr &, Buffer *, TimeStamp) {};
   WriteCompleteCallback writeCompleteCallback_ = [](const TcpConnectionPtr &) {};

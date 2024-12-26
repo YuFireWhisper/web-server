@@ -103,6 +103,7 @@ void EventLoop::updateChannel(Channel *channel) {
 }
 
 void EventLoop::removeChannel(Channel *channel) {
+  LOG_DEBUG("Removing channel from EventLoop, fd=" + std::to_string(channel->fd()));
   assertInLoopThread();
   poller_->removeChannel(channel);
 }

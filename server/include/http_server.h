@@ -40,9 +40,12 @@ public:
 
 private:
   struct HttpSessionContext {
-    HttpRequest request;
+    std::unique_ptr<HttpRequest> request;
     bool expectingBody    = false;
     bool parsingCompleted = false;
+
+    HttpSessionContext()
+        : request(std::make_unique<HttpRequest>()) {}
   };
 
   static void onConnection(const TcpConnectionPtr &conn);
