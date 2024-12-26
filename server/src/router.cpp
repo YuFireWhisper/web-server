@@ -70,7 +70,7 @@ void Router::addRoute(const LocationConfig &node) {
   }
 }
 
-size_t Router::splitPath(std::string_view path, std::string_view *segments) const noexcept {
+size_t Router::splitPath(std::string_view path, std::string_view *segments) noexcept {
   LOG_DEBUG("開始分割路徑: " + std::string(path));
   size_t count = 0;
 
@@ -292,7 +292,7 @@ void Router::handleError(StatusCode errorCode) const {
   handleError(errorCode, &resp);
 }
 
-std::string_view Router::getMimeType(std::string_view extension) const noexcept {
+std::string_view Router::getMimeType(std::string_view extension) noexcept {
   auto it = mimeTypes_.find(std::string(extension));
   return it != mimeTypes_.end() ? std::string_view(it->second) : "application/octet-stream";
 }
@@ -324,7 +324,7 @@ void Router::handleCaching(
   }
 }
 
-std::filesystem::path Router::normalizePath(const std::filesystem::path &path) const {
+std::filesystem::path Router::normalizePath(const std::filesystem::path &path) {
   LOG_DEBUG("正在規範化路徑: " + path.string());
 
   if (path.is_absolute() || path.string()[0] == '/') {
