@@ -148,6 +148,10 @@ void TcpConnection::shutdown() {
     loop_->runInLoop([this]() {
       if (!channel_->isWriting()) {
         socket_->closeWriteEnd();
+        setState(State::kDisconnected);
+        if (closeCallback_) {
+          closeCallback_(shared_from_this());
+        }
       }
     });
   }

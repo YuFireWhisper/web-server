@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(web-server)
 
-option(BUILD_TESTS "Build the test files" OFF)
+option(BUILD_TESTS "Build the test files" ON)
 
 add_definitions(-DPROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 

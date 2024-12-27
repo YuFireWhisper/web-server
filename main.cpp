@@ -1,4 +1,5 @@
 #include "include/config_commands.h"
+#include "include/config_defaults.h"
 #include "server/include/config_manager.h"
 #include "server/include/http_server.h"
 #include "server/include/inet_address.h"
@@ -130,11 +131,8 @@ int main(int argc, char *argv[]) {
     LOG_INFO("Creating HTTP server instance");
     server::HttpServer server(&loop, listenAddr, "MyServer");
 
-    LOG_INFO(
-        "Configuring thread pool with " + std::to_string(serverContext->conf->threadNum)
-        + " threads"
-    );
-    server.setThreadNum(static_cast<int>(serverContext->conf->threadNum));
+    auto* globalContext = static_cast<server::GlobalContext*>(server::ConfigManager::getInstance().getContextByOffset(kGlobalOffset));
+    server.setThreadNum(static_cast<int>(globalContext->conf->threadNum));
 
     LOG_INFO("Starting server on " + listenAddr.getIpPort());
     server.start();

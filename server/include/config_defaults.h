@@ -23,6 +23,7 @@ struct GlobalConfig {
   size_t maxTimers          = 10000;
   int pollTimeoutMs         = 10000;
   size_t maxEvents          = 4096;
+  size_t threadNum          = std::thread::hardware_concurrency();
 };
 
 struct HttpConfig {
@@ -40,10 +41,9 @@ struct HttpConfig {
 
 struct ServerConfig {
   short AddressFamily   = AF_INET;
-  in_port_t port        = 8080;
   std::string ip        = "0.0.0.0";
+  in_port_t port        = 8080;
   bool reusePort        = false;
-  size_t threadNum      = std::thread::hardware_concurrency();
   bool tcpNoDelay       = true;
   bool keepAlive        = true;
   int keepAliveIdle     = 60;
