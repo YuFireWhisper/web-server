@@ -84,7 +84,7 @@ struct HttpContext : public ContextBase {
 };
 
 struct ServerContext : public ContextBase {
-  ServerConfig *conf;
+  std::vector<ServerConfig> *conf;
   HttpContext *parent;
   ServerContext() {
     typeB = CommandType::server;

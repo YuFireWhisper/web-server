@@ -122,20 +122,17 @@ int main(int argc, char *argv[]) {
     server::EventLoop loop;
 
     LOG_INFO("Setting up listen address");
-    server::InetAddress listenAddr(
-        serverContext->conf->AddressFamily,
-        serverContext->conf->ip,
-        serverContext->conf->port
-    );
+    // server::InetAddress listenAddr(
+    //     serverContext->conf->AddressFamily,
+    //     serverContext->conf->ip,
+    //     serverContext->conf->port
+    // );
 
-    LOG_INFO("Creating HTTP server instance");
-    server::HttpServer server(&loop, listenAddr, "MyServer");
-
-    auto* globalContext = static_cast<server::GlobalContext*>(server::ConfigManager::getInstance().getContextByOffset(kGlobalOffset));
-    server.setThreadNum(static_cast<int>(globalContext->conf->threadNum));
-
-    LOG_INFO("Starting server on " + listenAddr.getIpPort());
-    server.start();
+    // LOG_INFO("Creating HTTP server instance");
+    // server::HttpServer server(&loop, listenAddr, "MyServer");
+    //
+    // LOG_INFO("Starting server on " + listenAddr.getIpPort());
+    // server.start();
 
     LOG_INFO("Entering main event loop");
     loop.loop();

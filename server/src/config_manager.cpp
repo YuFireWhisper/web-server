@@ -37,7 +37,7 @@ ConfigManager::ConfigManager()
   context_.httpContext->parent = context_.globalContext;
 
   context_.serverContext         = new ServerContext();
-  context_.serverContext->conf   = new ServerConfig();
+  context_.serverContext->conf   = new std::vector<ServerConfig>();
   context_.serverContext->confB  = context_.serverContext->conf;
   context_.serverContext->parent = context_.httpContext;
 
