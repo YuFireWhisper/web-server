@@ -90,8 +90,10 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
       removeConnection(std::forward<decltype(PH1)>(PH1));
     });
 
+    acceptor_->incrementConnectionCount();
     connections_[connName] = conn;
     ioLoop->runInLoop([conn] { conn->connectEstablished(); });
+
   } catch (const std::exception &e) {
     LOG_ERROR(e.what());
   }
@@ -105,7 +107,12 @@ void TcpServer::setThreadNum(int numThreads) {
 }
 
 void TcpServer::removeConnection(const TcpConnectionPtr &conn) {
+  acceptor_->decrementConnectionCount();
   loop_->runInLoop([this, conn]() { removeConnectionInLoop(conn); });
+
+  if (acceptor_) {
+    acceptor_->onResourceAvailable();
+  }
 }
 
 void TcpServer::removeConnectionInLoop(const TcpConnectionPtr &conn) {

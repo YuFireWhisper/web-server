@@ -24,6 +24,8 @@ public:
 
   Socket(const Socket &)            = delete;
   Socket &operator=(const Socket &) = delete;
+  Socket(Socket &&other) noexcept;
+  Socket& operator=(Socket &&other) noexcept;
 
   void bindToPort(uint16_t port) const;
   void bindToAddress(const InetAddress &address) const;

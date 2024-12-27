@@ -30,7 +30,7 @@ public:
 
   ~TcpServer();
 
-  TcpServer(const TcpServer &) = delete;
+  TcpServer(const TcpServer &)            = delete;
   TcpServer &operator=(const TcpServer &) = delete;
 
   void setThreadNum(int numThreads);
@@ -59,6 +59,7 @@ private:
   void newConnection(int sockfd, const InetAddress &peerAddr);
   void removeConnection(const TcpConnectionPtr &conn);
   void removeConnectionInLoop(const TcpConnectionPtr &conn);
+  void updateConnectionCount(bool increment);
 
   using ConnectionMap = std::unordered_map<std::string, TcpConnectionPtr>;
 
