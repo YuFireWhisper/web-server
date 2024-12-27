@@ -21,7 +21,7 @@ public:
       EventLoop *loop,
       const InetAddress &listenAddr,
       const std::string &name,
-      TcpServer::Option option = TcpServer::Option::kNoReusePort
+      bool reusePort = false
   );
 
   ~HttpServer() = default;
@@ -37,6 +37,8 @@ public:
 
   [[nodiscard]] const std::string &name() const { return server_.getName(); }
   [[nodiscard]] EventLoop *getLoop() const { return server_.getLoop(); }
+
+  static void handleSetListen(const std::vector<std::string> &value, void* serverContext, size_t offset);
 
 private:
   struct HttpSessionContext {

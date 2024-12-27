@@ -1,8 +1,5 @@
 #include "include/config_commands.h"
-#include "include/config_defaults.h"
 #include "server/include/config_manager.h"
-#include "server/include/http_server.h"
-#include "server/include/inet_address.h"
 #include "server/include/log.h"
 #include "server/include/router.h"
 
@@ -106,37 +103,6 @@ int main(int argc, char *argv[]) {
     }
 
     loadConfig(configPath);
-
-    LOG_INFO("Retrieving server configuration");
-    auto &configManager = server::ConfigManager::getInstance();
-    auto *serverContext =
-        static_cast<server::ServerContext *>(configManager.getContextByOffset(server::kServerOffset)
-        );
-
-    if ((serverContext == nullptr) || (serverContext->conf == nullptr)) {
-      LOG_ERROR("Failed to get server configuration");
-      return 1;
-    }
-
-    LOG_INFO("Creating event loop");
-    server::EventLoop loop;
-
-    LOG_INFO("Setting up listen address");
-    // server::InetAddress listenAddr(
-    //     serverContext->conf->AddressFamily,
-    //     serverContext->conf->ip,
-    //     serverContext->conf->port
-    // );
-
-    // LOG_INFO("Creating HTTP server instance");
-    // server::HttpServer server(&loop, listenAddr, "MyServer");
-    //
-    // LOG_INFO("Starting server on " + listenAddr.getIpPort());
-    // server.start();
-
-    LOG_INFO("Entering main event loop");
-    loop.loop();
-
     return 0;
   } catch (const std::exception &e) {
     LOG_FATAL("Fatal error occurred: " + std::string(e.what()));

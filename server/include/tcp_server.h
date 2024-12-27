@@ -25,7 +25,7 @@ public:
       EventLoop *loop,
       const InetAddress &listenAddr,
       std::string nameArg,
-      Option option = Option::kNoReusePort
+      bool reusePort = false
   );
 
   ~TcpServer();

@@ -30,6 +30,7 @@ private:
   static bool setParentContext(ConfigContext &context);
   static bool hasCommandFlag(CommandType input, CommandType flag);
   static void handleLocationEnd(LocationContext *ctx);
+  static void handleServerEnd(ServerContext* ctx);
   static void updateConfigValue(void *basePtr, const ServerCommand &cmd, const std::string &value);
 
   static bool validateCommandArgs(CommandType type, size_t argCount);

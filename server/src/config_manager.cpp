@@ -1,5 +1,9 @@
 #include "include/config_manager.h"
 
+#include "include/config_defaults.h"
+#include "include/event_loop.h"
+#include "include/http_server.h"
+#include "include/inet_address.h"
 #include "include/router.h"
 #include "include/types.h"
 
@@ -37,7 +41,7 @@ ConfigManager::ConfigManager()
   context_.httpContext->parent = context_.globalContext;
 
   context_.serverContext         = new ServerContext();
-  context_.serverContext->conf   = new std::vector<ServerConfig>();
+  context_.serverContext->conf   = new ServerConfig();
   context_.serverContext->confB  = context_.serverContext->conf;
   context_.serverContext->parent = context_.httpContext;
 
@@ -310,6 +314,7 @@ bool ConfigManager::setParentContext(ConfigContext &context) {
       context.now = kServerOffset;
       return true;
     case SERVER_CTX:
+      handleServerEnd(context.serverContext);
       context.now = kHttpOffset;
       return true;
     case HTTP_CTX:
@@ -339,4 +344,15 @@ void ConfigManager::handleLocationEnd(LocationContext *ctx) {
   *ctx->conf = LocationConfig();
 }
 
+void ConfigManager::handleServerEnd(ServerContext *ctx) {
+  auto *conf = ctx->conf;
+  EventLoop loop;
+  InetAddress addr(conf->AddressFamily, conf->ip, conf->port);
+
+  HttpServer server(&loop, addr, conf->ip, conf->reusePort);
+  server.start();
+  loop.loop();
+
+  *ctx->conf = ServerConfig();
+}
 } // namespace server

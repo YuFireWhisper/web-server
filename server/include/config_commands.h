@@ -1,6 +1,7 @@
 #pragma once
 
 #include "include/config_defaults.h"
+#include "include/http_server.h"
 #include "include/types.h"
 
 #include <vector>
@@ -111,17 +112,11 @@ inline std::vector<ServerCommand> getHttpCommands() {
 inline std::vector<ServerCommand> getServerCommands() {
   return {
     { "server", CommandType::configNoArgs | CommandType::http, kServerOffset, 0, nullptr, nullptr },
-    { "init_addr",
-      CommandType::configTake1 | CommandType::configString | CommandType::server,
-      0,
-      OFFSET_OF(ServerConfig, ip),
-      nullptr,
-      nullptr },
     { "listen",
       CommandType::configTake1 | CommandType::configNumber | CommandType::server,
       0,
       OFFSET_OF(ServerConfig, port),
-      nullptr,
+      HttpServer::handleSetListen,
       nullptr },
     { "reuse_port",
       CommandType::configTake1 | CommandType::configFlag | CommandType::server,

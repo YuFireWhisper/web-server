@@ -1,6 +1,7 @@
 #include "include/http_server.h"
 
 #include "include/buffer.h"
+#include "include/config_defaults.h"
 #include "include/event_loop.h"
 #include "include/http_request.h"
 #include "include/http_response.h"
@@ -11,6 +12,8 @@
 #include "include/time_stamp.h"
 
 #include <any>
+#include <cctype>
+#include <cstdlib>
 
 namespace server {
 
@@ -18,9 +21,9 @@ HttpServer::HttpServer(
     EventLoop *loop,
     const InetAddress &listenAddr,
     const std::string &name,
-    TcpServer::Option option
+    bool reusePort
 )
-    : server_(loop, listenAddr, name, option)
+    : server_(loop, listenAddr, name, reusePort)
     , router_(Router::getInstance())
     , httpCallback_([](const HttpRequest &req, HttpResponse *resp) {
       defaultHttpCallback(req, resp);
@@ -131,5 +134,45 @@ void HttpServer::defaultErrorCallback(const HttpRequest &req, HttpResponse *resp
       + "</p>"
         "</body></html>"
   );
+}
+
+void HttpServer::handleSetListen(const std::vector<std::string> &value, void* serverContext, size_t offset[[maybe_unused]]) {
+  auto* ctx = static_cast<ServerContext*>(serverContext);
+  auto* conf = ctx->conf;
+
+  std::string_view str = value[0];
+  size_t con = str.find(':');
+
+  if (con == std::string_view::npos) {
+    if (str.empty() || str == "*") {
+      return;
+    }
+
+    bool isPort = true;
+    for (char c : str) {
+      if (std::isdigit(static_cast<unsigned char>(c)) == 0) {
+        isPort = false;
+        break;
+      }
+    }
+
+    if (isPort) {
+      conf->port = std::atoi(std::string(str).c_str());
+      return;
+    }
+
+    conf->ip = str;
+    return;
+  }
+
+  std::string_view ip = str.substr(0, con);
+  if (!ip.empty() && ip != "*") {
+    conf->ip = ip;
+  }
+
+  std::string_view port = str.substr(0, con);
+  if (!ip.empty()) {
+    conf->port = htons(std::atoi(std::string(port).c_str()));
+  }
 }
 } // namespace server

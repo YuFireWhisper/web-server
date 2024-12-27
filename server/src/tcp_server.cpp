@@ -19,7 +19,7 @@ TcpServer::TcpServer(
     EventLoop *loop,
     const InetAddress &listenAddr,
     std::string nameArg,
-    Option option
+    bool reusePort
 )
     : loop_(loop)
     , name_(std::move(nameArg))
@@ -32,7 +32,7 @@ TcpServer::TcpServer(
     newConnection(sockfd, addr);
   });
 
-  if (option == Option::kReusePort) {
+  if (reusePort) {
     acceptor_->enablePortReuse();
   }
 }

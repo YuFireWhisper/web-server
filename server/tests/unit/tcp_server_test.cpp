@@ -88,7 +88,7 @@ TEST_F(TcpServerTest, ReusePortOptionCreatesValidServer) {
       loop_.get(),
       InetAddress(AF_INET, "0.0.0.0", kServerPort + 1),
       kServerName,
-      TcpServer::Option::kReusePort
+      true
   );
   reusePortServer->start();
   EXPECT_EQ(reusePortServer->numConnections(), 0);
