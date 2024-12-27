@@ -23,7 +23,7 @@ struct GlobalConfig {
   size_t maxTimers          = 10000;
   int pollTimeoutMs         = 10000;
   size_t maxEvents          = 4096;
-  size_t threadNum          = std::thread::hardware_concurrency();
+  unsigned int threadNum          = std::thread::hardware_concurrency();
 };
 
 struct HttpConfig {

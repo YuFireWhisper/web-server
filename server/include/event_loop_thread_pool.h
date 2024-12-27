@@ -31,7 +31,7 @@ private:
   EventLoop *baseLoop_;
   std::string name_;
   bool started_;
-  int numThreads_;
+  unsigned int numThreads_;
   int next_;
   std::vector<std::unique_ptr<EventLoopThread>> threads_;
   std::vector<EventLoop *> loops_;

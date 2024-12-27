@@ -40,7 +40,7 @@ inline std::vector<ServerCommand> getGlobalCommands() {
       nullptr,
       nullptr },
     { "worker_processes",
-      CommandType::configTake1 | CommandType::configSizeT | CommandType::global,
+      CommandType::configTake1 | CommandType::configNumber | CommandType::global,
       0,
       OFFSET_OF(GlobalConfig, threadNum),
       nullptr,
