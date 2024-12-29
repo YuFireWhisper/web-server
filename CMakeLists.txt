@@ -43,6 +43,7 @@ add_library(server
     server/src/http_server.cpp
     server/src/config_manager.cpp
     server/src/router.cpp
+    server/src/resource_manager.cpp
 )
 
 add_executable(web_server main.cpp)
@@ -86,6 +87,7 @@ if(BUILD_TESTS)
         ${TEST_DIR}/http_server_test.cpp
         ${TEST_DIR}/config_manager_test.cpp
         ${TEST_DIR}/router_test.cpp
+        ${TEST_DIR}/resource_manager_test.cpp
     )
 
     foreach(TEST_FILE ${TEST_FILES})
