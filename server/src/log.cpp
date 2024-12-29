@@ -2,35 +2,27 @@
 
 #include "include/config_defaults.h"
 #include "include/config_manager.h"
+#include "include/types.h"
 
 #include <array>
 #include <format>
-#include <fstream>
 #include <iostream>
 
 namespace server {
 
 namespace {
-constexpr std::array<const char *, 6> LEVEL_NAMES = { "TRACE", "DEBUG", "INFO",
-                                                      "WARN",  "ERROR", "FATAL" };
 
-constexpr std::array<const char *, 6> LEVEL_COLORS = { "\033[36m", "\033[34m", "\033[32m",
-                                                       "\033[33m", "\033[31m", "\033[1;31m" };
-
-std::filesystem::path expandTilde(const std::filesystem::path &path) {
-  if (path.empty() || path.string()[0] != '~') {
+std::filesystem::path expandTilde(const std::filesystem::path &path) noexcept {
+  const auto &pathStr = path.string();
+  if (pathStr.empty() || pathStr[0] != '~') {
     return path;
   }
 
   const char *home = std::getenv("HOME");
-  if (home == nullptr) {
-    return path;
-  }
-
-  return std::filesystem::path(home) / path.string().substr(2);
+  return (home != nullptr) ? std::filesystem::path(home) / pathStr.substr(2) : path;
 }
 
-std::string getSystemLogPath() {
+std::string getSystemLogPath() noexcept {
   auto &configManager = ConfigManager::getInstance();
   auto *ctx = static_cast<GlobalContext *>(configManager.getContextByOffset(kGlobalOffset));
   return (ctx != nullptr) ? ctx->conf->systemLogPath
@@ -39,40 +31,21 @@ std::string getSystemLogPath() {
 
 } // namespace
 
-LogEntry::LogEntry(LogLevel level, std::string_view message, std::string_view file, int line)
+LogEntry::LogEntry(
+    LogLevel level,
+    std::string_view message,
+    std::string_view file,
+    int line
+) noexcept
     : level_(level)
     , message_(message)
     , timestamp_(std::chrono::system_clock::now())
     , file_(file)
     , line_(line) {}
 
-LogLevel LogEntry::getLevel() const {
-  return level_;
-}
-std::string_view LogEntry::getMessage() const {
-  return message_;
-}
-const auto &LogEntry::getTimestamp() const {
-  return timestamp_;
-}
-std::string_view LogEntry::getFile() const {
-  return file_;
-}
-int LogEntry::getLine() const {
-  return line_;
-}
-
-const char *LogFormatter::getLevelName(LogLevel level) {
-  return LEVEL_NAMES[static_cast<size_t>(level)];
-}
-
-const char *LogFormatter::getLevelColor(LogLevel level) {
-  return LEVEL_COLORS[static_cast<size_t>(level)];
-}
-
-std::string LogFormatter::formatForFile(const LogEntry &entry) {
-  auto time       = std::chrono::system_clock::to_time_t(entry.getTimestamp());
-  auto *localTime = std::localtime(&time);
+std::string LogFormatter::formatForFile(const LogEntry &entry) noexcept {
+  const auto time       = std::chrono::system_clock::to_time_t(entry.getTimestamp());
+  const auto *localTime = std::localtime(&time);
 
   constexpr size_t timeStampSize = 32;
   std::array<char, timeStampSize> timestamp{};
@@ -88,9 +61,9 @@ std::string LogFormatter::formatForFile(const LogEntry &entry) {
   );
 }
 
-std::string LogFormatter::formatForConsole(const LogEntry &entry) {
-  auto time       = std::chrono::system_clock::to_time_t(entry.getTimestamp());
-  auto *localTime = std::localtime(&time);
+std::string LogFormatter::formatForConsole(const LogEntry &entry) noexcept {
+  const auto time       = std::chrono::system_clock::to_time_t(entry.getTimestamp());
+  const auto *localTime = std::localtime(&time);
 
   constexpr size_t timeStampSize = 32;
   std::array<char, timeStampSize> timestamp{};
@@ -107,97 +80,120 @@ std::string LogFormatter::formatForConsole(const LogEntry &entry) {
   );
 }
 
-void LogWriter::writeConsole(const std::string &message) {
+FileHandle::FileHandle(const std::filesystem::path &path)
+    : path_(path) {
+  const auto expandedPath = expandTilde(path);
+  std::filesystem::create_directories(expandedPath.parent_path());
+  file_ = std::fopen(expandedPath.c_str(), "a");
+  if (file_ == nullptr) {
+    throw std::runtime_error("Failed to open log file: " + expandedPath.string());
+  }
+  std::setvbuf(file_, nullptr, _IOLBF, 8 * kKib);
+}
+
+FileHandle::~FileHandle() {
+  if (file_ != nullptr) {
+    std::fclose(file_);
+  }
+}
+
+void FileHandle::write(std::string_view message) {
+  if (file_ != nullptr) {
+    std::fwrite(message.data(), 1, message.size(), file_);
+    std::fwrite("\n", 1, 1, file_);
+  }
+}
+
+LogWriter::LogWriter() noexcept
+    : handleCount_(0) {
+  std::ranges::fill(fileHandles_, nullptr);
+}
+
+LogWriter::~LogWriter() {
+  for (size_t i = 0; i < handleCount_; ++i) {
+    delete fileHandles_[i];
+  }
+}
+
+void LogWriter::writeConsole(std::string_view message) noexcept {
   std::cout << message << '\n';
 }
 
-bool LogWriter::ensureFileExists(const std::filesystem::path &path) {
-  try {
-    const auto parent_path = path.parent_path();
-    if (!parent_path.empty() && !std::filesystem::is_symlink(parent_path)) {
-      std::filesystem::create_directories(parent_path);
+void LogWriter::writeFile(std::string_view message, const std::filesystem::path &path) {
+  for (size_t i = 0; i < handleCount_; ++i) {
+    if (fileHandles_[i] != nullptr && fileHandles_[i]->getPath() == path) {
+      fileHandles_[i]->write(message);
+      return;
     }
+  }
 
-    if (!std::filesystem::exists(path)) {
-      std::ofstream file(path);
-      return file.good();
+  if (handleCount_ < MAX_FILES) {
+    try {
+      auto *handle                 = new FileHandle(path);
+      fileHandles_[handleCount_++] = handle;
+      handle->write(message);
+    } catch (const std::exception &e) {
+      std::cerr << "Failed to create log file: " << e.what() << '\n';
     }
-    return true;
-  } catch (const std::filesystem::filesystem_error &e) {
-    std::cerr << "Filesystem error: " << e.what() << '\n';
-    return false;
   }
-}
-
-void LogWriter::writeFile(const std::string &message, const std::filesystem::path &path) {
-  std::lock_guard<std::mutex> lock(fileMutex_);
-
-  auto expandedPath = expandTilde(path);
-  std::error_code ec;
-
-  // 確保父目錄存在
-  std::filesystem::create_directories(expandedPath.parent_path(), ec);
-  if (ec) {
-    std::cerr << "Failed to create directories: " << ec.message() << '\n';
-    return;
-  }
-
-  // 嘗試打開文件
-  std::ofstream outfile(expandedPath, std::ios::app);
-  if (!outfile) {
-    std::cerr << "Failed to open file: " << expandedPath << " (errno: " << errno << ")" << '\n';
-    return;
-  }
-
-  outfile << message << '\n';
 }
 
 std::string Logger::systemLogPath_;
 std::filesystem::path Logger::defaultOutputPath_;
-LogWriter Logger::writer_;
+thread_local LogWriter Logger::localWriter_;
 
-void Logger::log(LogLevel level, std::string_view message, std::string_view file, int line) {
+void Logger::log(
+    LogLevel level,
+    std::string_view message,
+    std::string_view file,
+    int line
+) noexcept {
   if (systemLogPath_.empty()) {
     systemLogPath_ = getSystemLogPath();
   }
 
   LogEntry entry(level, message, file, line);
-  auto consoleMessage = LogFormatter::formatForConsole(entry);
-  auto fileMessage    = LogFormatter::formatForFile(entry);
+  const auto consoleMessage = LogFormatter::formatForConsole(entry);
+  const auto fileMessage    = LogFormatter::formatForFile(entry);
 
   LogWriter::writeConsole(consoleMessage);
-  writer_.writeFile(fileMessage, systemLogPath_);
+  localWriter_.writeFile(fileMessage, systemLogPath_);
 
   if (!defaultOutputPath_.empty()) {
-    writer_.writeFile(fileMessage, defaultOutputPath_);
+    localWriter_.writeFile(fileMessage, defaultOutputPath_);
   }
 }
+
 void Logger::log(
     LogLevel level,
     std::string_view message,
     const std::filesystem::path &outputPath,
     std::string_view file,
     int line
-) {
+) noexcept {
   if (systemLogPath_.empty()) {
     systemLogPath_ = getSystemLogPath();
   }
 
   LogEntry entry(level, message, file, line);
-  auto consoleMessage = LogFormatter::formatForFile(entry);
-  auto fileMessage    = LogFormatter::formatForFile(entry);
+  const auto consoleMessage = LogFormatter::formatForConsole(entry);
+  const auto fileMessage    = LogFormatter::formatForFile(entry);
 
   LogWriter::writeConsole(consoleMessage);
-  writer_.writeFile(fileMessage, systemLogPath_);
-  writer_.writeFile(fileMessage, outputPath);
+  localWriter_.writeFile(fileMessage, systemLogPath_);
+  localWriter_.writeFile(fileMessage, outputPath);
 }
 
-void Logger::setDefaultOutputFile(const std::filesystem::path &path) {
+void Logger::setDefaultOutputFile(const std::filesystem::path &path) noexcept {
   defaultOutputPath_ = path;
 }
 
-void Logger::clearDefaultOutputFile() {
+void Logger::clearDefaultOutputFile() noexcept {
   defaultOutputPath_.clear();
+}
+
+void Logger::setSystemLogPath(std::string_view path) noexcept {
+  systemLogPath_ = std::string(path);
 }
 
 } // namespace server

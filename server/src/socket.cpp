@@ -43,24 +43,6 @@ Socket::~Socket() {
   ::close(socketFd_);
 }
 
-Socket::Socket(Socket &&other) noexcept
-    : socketFd_(other.socketFd_) {
-  other.socketFd_ = -1;
-  LOG_DEBUG("移動建構 Socket，fd=" + std::to_string(socketFd_));
-}
-
-Socket &Socket::operator=(Socket &&other) noexcept {
-  if (this != &other) {
-    if (socketFd_ >= 0) {
-      ::close(socketFd_);
-    }
-    socketFd_       = other.socketFd_;
-    other.socketFd_ = -1;
-    LOG_DEBUG("移動賦值 Socket，fd=" + std::to_string(socketFd_));
-  }
-  return *this;
-}
-
 int Socket::createTcpSocket() {
   int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP);
   if (fd < 0) {
@@ -265,9 +247,9 @@ void Socket::attachFd(int fd) {
 }
 
 int Socket::detachFd() {
-  int fd    = socketFd_;
-  socketFd_ = -1;
-  return fd;
+    int fd    = socketFd_;
+    socketFd_ = -1;
+    return fd;
 }
 
 } // namespace server

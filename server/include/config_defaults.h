@@ -23,7 +23,7 @@ struct GlobalConfig {
   size_t maxTimers          = 10000;
   int pollTimeoutMs         = 10000;
   size_t maxEvents          = 4096;
-  unsigned int threadNum    = std::thread::hardware_concurrency();
+  unsigned int threadNum          = std::thread::hardware_concurrency();
 };
 
 struct HttpConfig {
@@ -40,18 +40,15 @@ struct HttpConfig {
 };
 
 struct ServerConfig {
-  short AddressFamily          = AF_INET;
-  std::string ip               = "0.0.0.0";
-  in_port_t port               = 8080;
-  bool reusePort               = false;
-  bool tcpNoDelay              = true;
-  bool keepAlive               = true;
-  int keepAliveIdle            = 60;
-  int keepAliveInterval        = 30;
-  int keepAliveCount           = 3;
-  size_t maxConnections        = 1024;
-  size_t maxPendingConnections = 512;
-  size_t pendingTimeout        = 60;
+  short AddressFamily   = AF_INET;
+  std::string ip        = "0.0.0.0";
+  in_port_t port        = 8080;
+  bool reusePort        = false;
+  bool tcpNoDelay       = true;
+  bool keepAlive        = true;
+  int keepAliveIdle     = 60;
+  int keepAliveInterval = 30;
+  int keepAliveCount    = 3;
 };
 
 struct LocationConfig {
