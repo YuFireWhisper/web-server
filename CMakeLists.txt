@@ -11,6 +11,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_BUILD_TYPE Debug)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+
 add_definitions(-D_GLIBCXX_USE_CXX11_ABI=1)
 
 include_directories(${PROJECT_SOURCE_DIR}/server)
