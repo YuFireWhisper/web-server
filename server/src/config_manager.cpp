@@ -347,9 +347,9 @@ void ConfigManager::handleLocationEnd(LocationContext *ctx) {
 void ConfigManager::handleServerEnd(ServerContext *ctx) {
   auto *conf = ctx->conf;
   EventLoop loop;
-  InetAddress addr(conf->AddressFamily, conf->ip, conf->port);
+  InetAddress addr(conf->AddressFamily, conf->address, conf->port);
 
-  HttpServer server(&loop, addr, conf->ip, conf->reusePort);
+  HttpServer server(&loop, addr, conf->address, conf->reusePort);
   server.start();
   loop.loop();
 

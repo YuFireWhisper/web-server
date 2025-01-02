@@ -22,6 +22,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_link_options(-fsanitize=address)
 endif()
 
+find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
+find_package(nlohmann_json REQUIRED)
+
 add_library(server
     server/src/thread.cpp
     server/src/poller.cpp
@@ -45,14 +49,28 @@ add_library(server
     server/src/http_server.cpp
     server/src/config_manager.cpp
     server/src/router.cpp
-    server/src/resource_manager.cpp
+    server/src/ssl_manager.cpp
+    server/src/file_system.cpp
 )
 
 add_executable(web_server main.cpp)
+
+target_link_libraries(server
+    PRIVATE
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    CURL::libcurl
+    nlohmann_json::nlohmann_json
+)
+
 target_link_libraries(web_server
     PRIVATE
     server
     pthread
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    CURL::libcurl
+    nlohmann_json::nlohmann_json
 )
 
 if(BUILD_TESTS)
@@ -89,17 +107,21 @@ if(BUILD_TESTS)
         ${TEST_DIR}/http_server_test.cpp
         ${TEST_DIR}/config_manager_test.cpp
         ${TEST_DIR}/router_test.cpp
-        ${TEST_DIR}/resource_manager_test.cpp
+        ${TEST_DIR}/ssl_manager_test.cpp
     )
 
     foreach(TEST_FILE ${TEST_FILES})
         get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
         add_executable(${TEST_NAME} ${TEST_FILE} ${TEST_COMMON_FILES} ${TEST_DIR}/test_main.cpp)
         target_link_libraries(${TEST_NAME}
-            PRIVATE
-            server
-            GTest::GTest
-            pthread
+          PRIVATE
+          server
+          GTest::GTest
+          pthread
+          OpenSSL::SSL
+          OpenSSL::Crypto
+          CURL::libcurl
+          nlohmann_json::nlohmann_json
         )
         gtest_discover_tests(${TEST_NAME})
     endforeach()

@@ -18,10 +18,10 @@ public:
   using HttpRequestCallback = std::function<void(const HttpRequest &, HttpResponse *)>;
 
   HttpServer(
-      EventLoop *loop,
-      const InetAddress &listenAddr,
-      const std::string &name,
-      bool reusePort = false
+    EventLoop *loop,
+    const InetAddress &listenAddr,
+    const std::string &name,
+    bool reusePort
   );
 
   ~HttpServer() = default;
@@ -38,16 +38,17 @@ public:
   [[nodiscard]] const std::string &name() const { return server_.getName(); }
   [[nodiscard]] EventLoop *getLoop() const { return server_.getLoop(); }
 
-  static void handleSetListen(const std::vector<std::string> &value, void* serverContext, size_t offset);
+  void handleSetListen(
+      const std::vector<std::string> &value,
+      void *serverContext,
+      size_t offset [[maybe_unused]]
+  );
 
 private:
   struct HttpSessionContext {
     std::unique_ptr<HttpRequest> request;
     bool expectingBody    = false;
     bool parsingCompleted = false;
-
-    HttpSessionContext()
-        : request(std::make_unique<HttpRequest>()) {}
   };
 
   static void onConnection(const TcpConnectionPtr &conn);

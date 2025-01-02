@@ -1,7 +1,5 @@
 #include "include/event_loop_thread_pool.h"
 
-#include "include/config_defaults.h"
-#include "include/config_manager.h"
 #include "include/event_loop.h"
 #include "include/event_loop_thread.h"
 #include "include/log.h"
@@ -18,12 +16,9 @@ EventLoopThreadPool::EventLoopThreadPool(EventLoop *baseLoop, std::string nameAr
     : baseLoop_(baseLoop)
     , name_(std::move(nameArg))
     , started_(false)
+    , numThreads_(0)
     , next_(0) {
   checkBaseLoop(baseLoop);
-
-  auto& configManager = ConfigManager::getInstance();
-  auto* conf = static_cast<GlobalConfig*>(configManager.getConfigByOffset(kGlobalOffset));
-  numThreads_ = conf->threadNum;
 }
 
 void checkBaseLoop(EventLoop *baseLoop) {
@@ -41,7 +36,7 @@ void EventLoopThreadPool::start(const ThreadInitCallback &cb) {
     numThreads_ = static_cast<int>(std::thread::hardware_concurrency());
   }
 
-  for (unsigned int i = 0; i < numThreads_; ++i) {
+  for (int i = 0; i < numThreads_; ++i) {
     std::string threadName = name_ + std::to_string(i);
 
     auto thread     = std::make_unique<EventLoopThread>(cb, threadName);

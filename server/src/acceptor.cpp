@@ -38,22 +38,11 @@ void Acceptor::startListen() {
 void Acceptor::handleConnection() {
   try {
     Socket newConnection    = serverSocket_->acceptNewConnection();
-    InetAddress peerAddress = newConnection.getRemoteAddress(); 
-
-    static std::atomic<uint64_t> connectionCount{0};
-    uint64_t connection = ++connectionCount;
-
-    if (connection % 100 == 0) {
-      LOG_INFO("Total connections accepted: " + std::to_string(connection));
-    }
-
+    InetAddress peerAddress = newConnection.getRemoteAddress();
     processConnection(std::move(newConnection), peerAddress);
-
-    --connectionCount;
   } catch (const SocketException &error) {
     if (errno == EMFILE || errno == ENFILE) {
       handleResourceLimit(error.what());
-      return;
     }
     LOG_ERROR("Accept failed: " + std::string(error.what()));
   }
@@ -68,20 +57,8 @@ void Acceptor::processConnection(Socket &&connection, const InetAddress &peerAdd
 }
 
 void Acceptor::handleResourceLimit(const std::string &errorMessage) {
-    static time_t lastWarningTime = 0;
-    time_t currentTime = time(nullptr);
-    
-    if (currentTime - lastWarningTime >= 60) {
-      LOG_WARN("Resource limit reached (dropping connection): " + errorMessage);
-      lastWarningTime = currentTime;
-    }
-    
-    static std::atomic<uint64_t> droppedConnections{0};
-    uint64_t dropped = ++droppedConnections;
-    
-    if (dropped % 1000 == 0) {
-      LOG_INFO("Total dropped connections due to resource limits: " + std::to_string(dropped));
-    }
+  LOG_FATAL("Resource limit reached: " + errorMessage);
+  abort();
 }
 
 void Acceptor::enablePortReuse() {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "include/config_defaults.h"
-#include "include/http_server.h"
 #include "include/types.h"
 
 #include <vector>
@@ -41,7 +40,7 @@ inline std::vector<ServerCommand> getGlobalCommands() {
       nullptr,
       nullptr },
     { "worker_processes",
-      CommandType::configTake1 | CommandType::configNumber | CommandType::global,
+      CommandType::configTake1 | CommandType::configSizeT | CommandType::server,
       0,
       OFFSET_OF(GlobalConfig, threadNum),
       nullptr,
@@ -112,11 +111,17 @@ inline std::vector<ServerCommand> getHttpCommands() {
 inline std::vector<ServerCommand> getServerCommands() {
   return {
     { "server", CommandType::configNoArgs | CommandType::http, kServerOffset, 0, nullptr, nullptr },
+    { "init_addr",
+      CommandType::configTake1 | CommandType::configString | CommandType::server,
+      0,
+      OFFSET_OF(ServerConfig, address),
+      nullptr,
+      nullptr },
     { "listen",
       CommandType::configTake1 | CommandType::configNumber | CommandType::server,
       0,
       OFFSET_OF(ServerConfig, port),
-      HttpServer::handleSetListen,
+      nullptr,
       nullptr },
     { "reuse_port",
       CommandType::configTake1 | CommandType::configFlag | CommandType::server,

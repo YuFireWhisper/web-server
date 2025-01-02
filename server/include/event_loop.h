@@ -1,7 +1,6 @@
 #pragma once
 
 #include "include/config_defaults.h"
-#include "include/epoll_poller.h"
 #include "include/time_stamp.h"
 #include "include/types.h"
 
@@ -51,7 +50,7 @@ private:
   std::atomic<bool> callingPendingFunctors_{ false };
 
   const pthread_t threadId_;
-  EPollPoller *poller_;
+  Poller *poller_;
   const int wakeupFd_;
   Channel *wakeupChannel_;
 

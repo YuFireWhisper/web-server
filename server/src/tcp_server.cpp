@@ -9,7 +9,6 @@
 #include <array>
 #include <cassert>
 #include <cstdio>
-#include <exception>
 #include <memory>
 #include <string>
 
@@ -38,7 +37,6 @@ TcpServer::TcpServer(
 }
 
 TcpServer::~TcpServer() {
-  LOG_DEBUG("TcpServer 開始解構");
   loop_->assertInLoopThread();
 
   for (const auto &[name, conn] : connections_) {
@@ -46,7 +44,6 @@ TcpServer::~TcpServer() {
     connections_.erase(name);
     connection->getLoop()->runInLoop([connection] { connection->connectDestroyed(); });
   }
-  LOG_DEBUG("TcpServer解構結束");
 }
 
 void TcpServer::start() {
@@ -59,44 +56,37 @@ void TcpServer::start() {
 }
 
 void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
-  try {
-    LOG_DEBUG("處理新連接，sockfd=" + std::to_string(sockfd));
-    loop_->assertInLoopThread();
+  LOG_DEBUG("處理新連接，sockfd=" + std::to_string(sockfd));
+  loop_->assertInLoopThread();
 
-    EventLoop *ioLoop = threadPool_->getNextLoop();
+  EventLoop *ioLoop = threadPool_->getNextLoop();
 
-    constexpr int kBufferSize = 64;
+  constexpr int kBufferSize = 64;
 
-    std::array<char, kBufferSize> buf;
-    snprintf(buf.data(), buf.size(), "-%s#%d", ipPort_.c_str(), nextConnId_);
-    ++nextConnId_;
-    std::string connName = name_ + buf.data();
+  std::array<char, kBufferSize> buf;
+  snprintf(buf.data(), buf.size(), "-%s#%d", ipPort_.c_str(), nextConnId_);
+  ++nextConnId_;
+  std::string connName = name_ + buf.data();
 
-    auto socket = std::make_unique<Socket>();
-    socket->attachFd(sockfd);
+  auto socket = std::make_unique<Socket>();
+  socket->attachFd(sockfd);
 
-    TcpConnectionPtr conn = std::make_shared<TcpConnection>(
-        ioLoop,
-        connName,
-        std::move(socket),
-        acceptor_->getLocalAddress(),
-        peerAddr
-    );
+  TcpConnectionPtr conn = std::make_shared<TcpConnection>(
+      ioLoop,
+      connName,
+      std::move(socket),
+      acceptor_->getLocalAddress(),
+      peerAddr
+  );
 
-    conn->setConnectionCallback(connectionCallback_);
-    conn->setMessageCallback(messageCallback_);
-    conn->setWriteCompleteCallback(writeCompleteCallback_);
-    conn->setCloseCallback([this](auto &&PH1) {
-      removeConnection(std::forward<decltype(PH1)>(PH1));
-    });
+  conn->setConnectionCallback(connectionCallback_);
+  conn->setMessageCallback(messageCallback_);
+  conn->setWriteCompleteCallback(writeCompleteCallback_);
+  conn->setCloseCallback([this](auto &&PH1) { removeConnection(std::forward<decltype(PH1)>(PH1)); }
+  );
 
-    connections_[connName] = conn;
-    ioLoop->runInLoop([conn] { conn->connectEstablished(); });
-  } catch (const std::exception &e) {
-    LOG_ERROR(e.what());
-  }
-
-  LOG_DEBUG("TcpServer::newConnection 處理完畢");
+  connections_[connName] = conn;
+  ioLoop->runInLoop([conn] { conn->connectEstablished(); });
 }
 
 void TcpServer::setThreadNum(int numThreads) {
@@ -109,15 +99,11 @@ void TcpServer::removeConnection(const TcpConnectionPtr &conn) {
 }
 
 void TcpServer::removeConnectionInLoop(const TcpConnectionPtr &conn) {
-  try {
-    loop_->assertInLoopThread();
-    size_t result = connections_.erase(conn->name());
-    assert(result == 1);
-    EventLoop *ioLoop = conn->getLoop();
-    ioLoop->queueInLoop([conn]() { conn->connectDestroyed(); });
-  } catch (const std::exception &e) {
-    LOG_ERROR(e.what());
-  }
+  loop_->assertInLoopThread();
+  size_t result = connections_.erase(conn->name());
+  assert(result == 1);
+  EventLoop *ioLoop = conn->getLoop();
+  ioLoop->queueInLoop([conn]() { conn->connectDestroyed(); });
 }
 
 } // namespace server

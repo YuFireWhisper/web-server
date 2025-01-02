@@ -1,5 +1,6 @@
 #include "include/log.h"
 
+#include "auto/auto_config.h"
 #include "include/config_defaults.h"
 #include "include/config_manager.h"
 #include "include/types.h"
@@ -26,7 +27,7 @@ std::string getSystemLogPath() noexcept {
   auto &configManager = ConfigManager::getInstance();
   auto *ctx = static_cast<GlobalContext *>(configManager.getContextByOffset(kGlobalOffset));
   return (ctx != nullptr) ? ctx->conf->systemLogPath
-                          : std::string(kPorjectRoot) + "logs/system.log";
+                          : std::string(kProjectRoot) + "logs/system.log";
 }
 
 } // namespace

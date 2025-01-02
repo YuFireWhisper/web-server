@@ -30,7 +30,7 @@ public:
 
   ~TcpServer();
 
-  TcpServer(const TcpServer &) = delete;
+  TcpServer(const TcpServer &)            = delete;
   TcpServer &operator=(const TcpServer &) = delete;
 
   void setThreadNum(int numThreads);

@@ -136,12 +136,16 @@ void HttpServer::defaultErrorCallback(const HttpRequest &req, HttpResponse *resp
   );
 }
 
-void HttpServer::handleSetListen(const std::vector<std::string> &value, void* serverContext, size_t offset[[maybe_unused]]) {
-  auto* ctx = static_cast<ServerContext*>(serverContext);
-  auto* conf = ctx->conf;
+void HttpServer::handleSetListen(
+    const std::vector<std::string> &value,
+    void *serverContext,
+    size_t offset [[maybe_unused]]
+) {
+  auto *ctx  = static_cast<ServerContext *>(serverContext);
+  auto *conf = ctx->conf;
 
   std::string_view str = value[0];
-  size_t con = str.find(':');
+  size_t con           = str.find(':');
 
   if (con == std::string_view::npos) {
     if (str.empty() || str == "*") {
@@ -161,13 +165,13 @@ void HttpServer::handleSetListen(const std::vector<std::string> &value, void* se
       return;
     }
 
-    conf->ip = str;
+    conf->address = str;
     return;
   }
 
   std::string_view ip = str.substr(0, con);
   if (!ip.empty() && ip != "*") {
-    conf->ip = ip;
+    conf->address = ip;
   }
 
   std::string_view port = str.substr(0, con);

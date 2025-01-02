@@ -18,12 +18,12 @@
 namespace server {
 
 struct GlobalConfig {
-  std::string systemLogPath = std::string(kPorjectRoot) + "logs/system.log";
+  std::string systemLogPath = std::string(kProjectRoot) + "logs/system.log";
   int timerCheckInterval    = 100;
   size_t maxTimers          = 10000;
   int pollTimeoutMs         = 10000;
   size_t maxEvents          = 4096;
-  unsigned int threadNum          = std::thread::hardware_concurrency();
+  unsigned int threadNum    = std::thread::hardware_concurrency();
 };
 
 struct HttpConfig {
@@ -40,15 +40,35 @@ struct HttpConfig {
 };
 
 struct ServerConfig {
-  short AddressFamily   = AF_INET;
-  std::string ip        = "0.0.0.0";
-  in_port_t port        = 8080;
-  bool reusePort        = false;
-  bool tcpNoDelay       = true;
-  bool keepAlive        = true;
-  int keepAliveIdle     = 60;
-  int keepAliveInterval = 30;
-  int keepAliveCount    = 3;
+  short AddressFamily          = AF_INET;
+  std::string address          = "0.0.0.0";
+  in_port_t port               = 8080;
+  bool reusePort               = false;
+  bool tcpNoDelay              = true;
+  bool keepAlive               = true;
+  int keepAliveIdle            = 60;
+  int keepAliveInterval        = 30;
+  int keepAliveCount           = 3;
+  bool sslEnable               = false;
+  bool sslEnableAutoGen        = true;
+  std::string sslKeyType       = "ED25519";
+  int sslKeyParam              = 0;
+  std::string sslApiUrl        = "https://acme-v02.api.letsencrypt.org/directory";
+  std::string sslCertFile      = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_.crt";
+  std::string sslPublicKeyFile = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_public.key";
+  std::string sslPrivateKeyFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_private.key";
+  std::string sslAccountUrlFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_account.url";
+  std::string sslLocationUrlFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_location.url";
+  std::string sslFinalizeUrlFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_finalize.url";
+  std::string sslChallengeUrlFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_challenge.url";
+  uint16_t sslRenewDays = 30;
+  std::string sslEmail;
+  int nid = 0;
 };
 
 struct LocationConfig {

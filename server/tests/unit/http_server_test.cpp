@@ -22,7 +22,6 @@ protected:
   static constexpr const char *kTestPath   = "/test";
 
   void SetUp() override {
-    // 創建測試文件
     std::ofstream test_file("/tmp/test.html");
     test_file << "<html><body>Test Content</body></html>";
     test_file.close();
@@ -31,7 +30,8 @@ protected:
     server_ = std::make_unique<HttpServer>(
         loop_.get(),
         InetAddress(AF_INET, "0.0.0.0", kTestPort),
-        kServerName
+        kServerName,
+        false
     );
     setupTestRoutes();
   }
