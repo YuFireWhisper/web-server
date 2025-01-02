@@ -20,14 +20,20 @@ using TcpConnectionPtr = std::shared_ptr<TcpConnection>;
 
 class TcpConnection : public std::enable_shared_from_this<TcpConnection> {
 public:
-  using ConnectionCallback = std::function<void(const TcpConnectionPtr &)>;
-  using MessageCallback = std::function<void(const TcpConnectionPtr &, Buffer *, TimeStamp)>;
+  using ConnectionCallback    = std::function<void(const TcpConnectionPtr &)>;
+  using MessageCallback       = std::function<void(const TcpConnectionPtr &, Buffer *, TimeStamp)>;
   using WriteCompleteCallback = std::function<void(const TcpConnectionPtr &)>;
-  using CloseCallback = std::function<void(const TcpConnectionPtr &)>;
+  using CloseCallback         = std::function<void(const TcpConnectionPtr &)>;
   using HighWaterMarkCallback = std::function<void(const TcpConnectionPtr &, size_t)>;
-  using ErrorCallback = std::function<void(const TcpConnectionPtr &)>;
+  using ErrorCallback         = std::function<void(const TcpConnectionPtr &)>;
 
-  enum class State : int8_t { kDisconnected, kConnecting, kConnected, kDisconnecting };
+  enum class State : int8_t {
+    kDisconnected,
+    kConnecting,
+    kConnected,
+    kDisconnecting,
+    kSSLHandshaking
+  };
 
   TcpConnection(
       EventLoop *loop,
@@ -39,7 +45,7 @@ public:
 
   ~TcpConnection();
 
-  TcpConnection(const TcpConnection &) = delete;
+  TcpConnection(const TcpConnection &)            = delete;
   TcpConnection &operator=(const TcpConnection &) = delete;
 
   void setContext(const std::any &context) { context_ = context; }
@@ -67,11 +73,16 @@ public:
   void setErrorCallback(const ErrorCallback &cb) { errorCallback_ = cb; }
   void setHighWaterMarkCallback(const HighWaterMarkCallback &cb, size_t highWaterMark) {
     highWaterMarkCallback_ = cb;
-    highWaterMark_ = highWaterMark;
+    highWaterMark_         = highWaterMark;
   }
 
   void connectEstablished();
   void connectDestroyed();
+
+  void enableSSL(const std::string &certFile, const std::string &keyFile);
+  [[nodiscard]] bool isSSLEnabled() const { return socket_ && socket_->isSSLEnabled(); }
+  void startSSLHandshake(bool isServer);
+  [[nodiscard]] bool isSSLConnected() const { return socket_ && socket_->isSSLConnected(); }
 
 private:
   void handleRead(TimeStamp receiveTime);
@@ -85,6 +96,10 @@ private:
 
   void setState(State state) { state_ = state; }
 
+  void handleSSLHandshake();
+  void continueSSLHandshake();
+  bool processSSLHandshakeResult(int result);
+
   EventLoop *loop_;
   const std::string name_;
   State state_;
@@ -97,14 +112,16 @@ private:
   Buffer inputBuffer_;
   Buffer outputBuffer_;
   std::any context_;
+  bool isServer_{ false };
+  bool sslHandshakeComplete_{ false };
 
   ConnectionCallback connectionCallback_ = [](const TcpConnectionPtr &) {};
-  MessageCallback messageCallback_ = [](const TcpConnectionPtr &, Buffer *, TimeStamp) {};
+  MessageCallback messageCallback_       = [](const TcpConnectionPtr &, Buffer *, TimeStamp) {};
   WriteCompleteCallback writeCompleteCallback_ = [](const TcpConnectionPtr &) {};
-  CloseCallback closeCallback_ = [](const TcpConnectionPtr &) {};
+  CloseCallback closeCallback_                 = [](const TcpConnectionPtr &) {};
   HighWaterMarkCallback highWaterMarkCallback_ = [](const TcpConnectionPtr &, size_t) {};
-  ErrorCallback errorCallback_ = [](const TcpConnectionPtr &) {};
-  size_t highWaterMark_ = kDefaultHighWaterMark;
+  ErrorCallback errorCallback_                 = [](const TcpConnectionPtr &) {};
+  size_t highWaterMark_                        = kDefaultHighWaterMark;
 };
 
 } // namespace server

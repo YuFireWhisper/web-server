@@ -21,6 +21,12 @@ public:
 
   enum class Option : int8_t { kNoReusePort, kReusePort };
 
+  struct SSLConfig {
+    bool enabled = false;
+    std::string certFile;
+    std::string keyFile;
+  };
+
   TcpServer(
       EventLoop *loop,
       const InetAddress &listenAddr,
@@ -55,10 +61,17 @@ public:
 
   size_t numConnections() const { return connections_.size(); }
 
+  void enableSSL(const std::string &certFile, const std::string &keyFile);
+  void disableSSL();
+  [[nodiscard]] bool isSSLEnabled() const { return sslConfig_.enabled; }
+  [[nodiscard]] size_t getSSLConnectionCount() const;
+
 private:
   void newConnection(int sockfd, const InetAddress &peerAddr);
   void removeConnection(const TcpConnectionPtr &conn);
   void removeConnectionInLoop(const TcpConnectionPtr &conn);
+
+  void initializeNewSSLConnection(const TcpConnectionPtr &conn) const;
 
   using ConnectionMap = std::unordered_map<std::string, TcpConnectionPtr>;
 
@@ -76,6 +89,8 @@ private:
   std::atomic<bool> started_;
   int nextConnId_;
   ConnectionMap connections_;
+
+  SSLConfig sslConfig_;
 };
 
 } // namespace server

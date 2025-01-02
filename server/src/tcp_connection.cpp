@@ -56,6 +56,54 @@ TcpConnection::~TcpConnection() {
   }
 }
 
+void TcpConnection::enableSSL(const std::string &certFile, const std::string &keyFile) {
+  loop_->assertInLoopThread();
+  if (!socket_) {
+    return;
+  }
+  socket_->initializeSSL(certFile, keyFile);
+}
+
+void TcpConnection::startSSLHandshake(bool isServer) {
+  loop_->assertInLoopThread();
+  if (!socket_ || !socket_->isSSLEnabled()) {
+    return;
+  }
+
+  isServer_             = isServer;
+  state_                = State::kSSLHandshaking;
+  sslHandshakeComplete_ = false;
+
+  channel_->enableReading();
+  channel_->enableWriting();
+
+  loop_->queueInLoop([this] { handleSSLHandshake(); });
+}
+
+void TcpConnection::handleSSLHandshake() {
+  loop_->assertInLoopThread();
+
+  try {
+    if (isServer_) {
+      socket_->acceptSSL();
+    } else {
+      socket_->connectSSL();
+    }
+    sslHandshakeComplete_ = true;
+    state_                = State::kConnected;
+
+    channel_->disableWriting();
+    channel_->enableReading();
+
+    if (connectionCallback_) {
+      connectionCallback_(shared_from_this());
+    }
+  } catch (const SocketException &e) {
+    LOG_ERROR("SSL handshake failed: " + std::string(e.what()));
+    handleError();
+  }
+}
+
 void TcpConnection::send(const std::string &message) {
   if (loop_->isInLoopThread()) {
     sendInLoop(message.data(), message.size());
@@ -86,8 +134,10 @@ void TcpConnection::send(Buffer *buffer) {
 
 void TcpConnection::sendInLoop(const void *message, size_t len) {
   loop_->assertInLoopThread();
-  if (len >= highWaterMark_ && highWaterMarkCallback_) {
-    loop_->queueInLoop([this, len]() { highWaterMarkCallback_(shared_from_this(), len); });
+
+  if (state_ == State::kDisconnected) {
+    LOG_WARN("Disconnected, give up writing");
+    return;
   }
 
   ssize_t nwrote   = 0;
@@ -95,15 +145,16 @@ void TcpConnection::sendInLoop(const void *message, size_t len) {
   bool faultError  = false;
 
   if (!channel_->isWriting() && outputBuffer_.readableSize() == 0) {
-    nwrote = ::write(channel_->fd(), message, len);
-
-    if (nwrote >= 0) {
+    try {
+      nwrote    = static_cast<ssize_t>(socket_->writeData(message, len));
       remaining = len - nwrote;
 
       if (remaining == 0 && writeCompleteCallback_) {
-        loop_->queueInLoop([this]() { writeCompleteCallback_(shared_from_this()); });
+        loop_->queueInLoop([this] { writeCompleteCallback_(shared_from_this()); });
       }
-    } else {
+    } catch (const SocketException &e) {
+      nwrote = 0;
+      LOG_ERROR("Write error: " + std::string(e.what()));
       if (errno != EWOULDBLOCK) {
         if (errno == EPIPE || errno == ECONNRESET) {
           faultError = true;
@@ -113,14 +164,18 @@ void TcpConnection::sendInLoop(const void *message, size_t len) {
   }
 
   if (!faultError && remaining > 0) {
+    if (remaining + outputBuffer_.readableSize() >= highWaterMark_
+        && outputBuffer_.readableSize() < highWaterMark_ && highWaterMarkCallback_) {
+      loop_->queueInLoop([this, remaining] {
+        highWaterMarkCallback_(shared_from_this(), remaining + outputBuffer_.readableSize());
+      });
+    }
     outputBuffer_.write(static_cast<const char *>(message) + nwrote, remaining);
-
     if (!channel_->isWriting()) {
       channel_->enableWriting();
     }
   }
 }
-
 void TcpConnection::shutdown() {
   if (state_ == State::kConnected) {
     setState(State::kDisconnecting);
@@ -269,25 +324,28 @@ void TcpConnection::handleError() {
 }
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
-  // 先檢查連接狀態
+  loop_->assertInLoopThread();
+
   if (state_ == State::kDisconnected) {
     return;
   }
 
-  int savedErrno = 0;
-  ssize_t result = inputBuffer_.readFromFd(socket_->getSocketFd(), &savedErrno);
+  if (state_ == State::kSSLHandshaking) {
+    handleSSLHandshake();
+    return;
+  }
 
-  // 使用 shared_ptr 保護
   auto guardThis = shared_from_this();
 
-  if (result > 0) {
-    messageCallback_(guardThis, &inputBuffer_, receiveTime);
-  } else if (result == 0) {
-    // 延遲關閉操作到事件循環的下一個迭代
-    loop_->queueInLoop([guardThis]() { guardThis->handleClose(); });
-  } else {
-    errno = savedErrno;
-    LOG_ERROR("Read Error" + std::string(strerror(errno)));
+  try {
+    auto n = static_cast<ssize_t>(socket_->readData(inputBuffer_));
+    if (n > 0) {
+      messageCallback_(guardThis, &inputBuffer_, receiveTime);
+    } else if (n == 0) {
+      loop_->queueInLoop([guardThis] { guardThis->handleClose(); });
+    }
+  } catch (const SocketException &e) {
+    LOG_ERROR("Read error: " + std::string(e.what()));
     handleError();
   }
 }

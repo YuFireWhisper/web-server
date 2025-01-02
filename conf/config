@@ -1,134 +1,166 @@
-# ======================
-# 伺服器配置模板
-# 所有配置項都已被註釋
-# 要啟用配置，請移除前面的 #
-# ======================
+# =========================================
+# Web Server Configuration Template
+# 所有預設值已被註釋
+# 要啟用配置項，請移除該行前的 '#' 符號
+# =========================================
 
-# ===== 全域配置 =====
-# 系統日誌檔案路徑
-# 預設值: logs/system.log
+# ==== 全域配置（Global Configuration）====
+# 系統日誌路徑設置
+# 用途：指定系統日誌檔案的儲存位置
+# 預設值：logs/system.log
 #system_log_path logs/system.log;
 
+# 效能與資源限制設置
+# 工作程序數量（依據 CPU 核心數自動配置）
+# 預設值：CPU 核心數
+#worker_processes auto;
+
+# 定時器設置
 # 定時器檢查間隔（毫秒）
-# 預設值: 100
+# 預設值：100ms
 #timer_check_interval 100;
 
 # 最大定時器數量
-# 預設值: 10000
+# 預設值：10000
 #max_timers 10000;
 
+# 事件處理設置
 # poll 超時時間（毫秒）
-# 預設值: 10000
+# 預設值：10000ms
 #poll_timeout 10000;
 
 # 最大事件數量
-# 預設值: 4096
+# 預設值：4096
 #max_events 4096;
 
-# ===== HTTP 配置 =====
+# ==== HTTP 伺服器配置 ====
 http {
-    # ----- 客戶端請求限制 -----
+    # ---- 客戶端請求設置 ----
+    # 請求大小限制
     # 客戶端最大請求體大小（位元組）
-    # 預設值: 1MB (1048576 bytes)
+    # 預設值：1MB（1048576 bytes）
     #client_max_body_size 1048576;
 
-    # 客戶端請求標頭大小限制（位元組）
-    # 預設值: 8KB (8192 bytes)
+    # 請求標頭大小限制（位元組）
+    # 預設值：8KB（8192 bytes）
     #client_header_size 8192;
 
+    # 連線保持設置
     # Keep-Alive 超時時間（秒）
-    # 預設值: 60
+    # 預設值：60s
     #keepalive_timeout 60;
 
-    # 伺服器名稱
-    # 預設值: MyServer
+    # 伺服器標識
+    # 預設值：MyServer
     #server_name MyServer;
 
-    # ----- 緩衝區配置 -----
+    # ---- 緩衝區設置 ----
     # 初始緩衝區大小（位元組）
-    # 預設值: 1KB (1024 bytes)
+    # 預設值：1KB（1024 bytes）
     #buffer_initial_size 1024;
 
     # 最大緩衝區大小（位元組）
-    # 預設值: 64MB (67108864 bytes)
+    # 預設值：64MB（67108864 bytes）
     #buffer_max_size 67108864;
 
     # 額外緩衝區大小（位元組）
-    # 預設值: 64KB (65536 bytes)
+    # 預設值：64KB（65536 bytes）
     #buffer_extra_size 65536;
 
     # 前置緩衝區大小（位元組）
-    # 預設值: 8
+    # 預設值：8 bytes
     #buffer_prepend_size 8;
 
     # 緩衝區高水位標記（位元組）
-    # 預設值: 64MB (67108864 bytes)
+    # 預設值：64MB（67108864 bytes）
     #buffer_high_water_mark 67108864;
 
-    # ===== 伺服器實例配置 =====
+    # ==== 虛擬主機配置 ====
     server {
-        # ----- 基本連線設置 -----
-        # 監聽地址
-        # 預設值: 0.0.0.0
-        #init_addr 0.0.0.0;
+        # ---- 基本連線設置 ----
+        # 監聽配置（地址:端口）
+        # 格式：listen [address:]port;
+        listen 80;
 
-        # 監聽埠口
-        # 預設值: 8080
-        #listen 8080;
-
-        # 工作程序數量
-        # 預設值: CPU 核心數
-        worker_processes 0;
-
-        # ----- TCP 選項 -----
-        # 啟用埠口重用
-        # 預設值: off
+        # ---- TCP 選項 ----
+        # 埠口重用
+        # 預設值：off
         #reuse_port off;
 
-        # TCP NODELAY
-        # 預設值: on
+        # TCP NODELAY 選項
+        # 預設值：on
         #tcp_nodelay on;
 
-        # TCP keepalive
-        # 預設值: on
+        # TCP keepalive 設置
+        # 啟用 TCP keepalive
+        # 預設值：on
         #tcp_keepalive on;
 
         # Keepalive 空閒時間（秒）
-        # 預設值: 60
+        # 預設值：60s
         #keepalive_idle 60;
 
-        # Keepalive 間隔時間（秒）
-        # 預設值: 30
+        # Keepalive 檢測間隔（秒）
+        # 預設值：30s
         #keepalive_interval 30;
 
         # Keepalive 重試次數
-        # 預設值: 3
+        # 預設值：3
         #keepalive_count 3;
 
-        # ----- 位置配置 -----
-        # 根路徑配置
-        #location / {
-        #    root /var/www/html;
-        #}
+        # ---- SSL 設置 ----
+        # 啟用 SSL
+        # 預設值：off
+        #ssl off;
 
+        # 啟用自動生成 SSL 證書
+        # 預設值：off
+        #ssl_auto_gen off;
+
+        # SSL 證書設置
+        #ssl_cert_file cert.pem;
+        #ssl_private_key private.key;
+        #ssl_public_key public.key;
+
+        # SSL 金鑰類型
+        #ssl_key_type RSA;
+
+        # SSL 金鑰參數
+        #ssl_key_param 2048;
+
+        # SSL 自動更新設置
+        #ssl_renew_days 30;
+        #ssl_email admin@example.com;
+
+        # SSL API 設置
+        #ssl_api_url https://acme-v02.api.letsencrypt.org/directory;
+        #ssl_account_url account.json;
+        #ssl_location_url location.json;
+        #ssl_finalize_url finalize.json;
+        #ssl_challenge_url challenge.json;
+
+        # ---- 路由配置 ----
+        # 根目錄配置
         location / {
-            static_file /home/yuwhisper/projects/web-server/index.html;
+            root /var/www/html;
+            #static_file /path/to/index.html;
         }
 
         # API 反向代理示例
         #location /api {
         #    proxy_pass http://backend;
+        }
+
+        # 靜態文件配置示例
+        #location /static {
+        #    root /var/www/static;
+        #    static_file /path/to/static;
         #}
 
-        # 其他位置配置示例
-        #location /downloads {
-        #    root /var/www/downloads;
-        #    static_file /path/to/downloads;
-        #}
-
+        # 上傳目錄配置示例
         #location /upload {
-        #    root /var/www/uploads;
-        #    client_max_body_size 10485760;  # 針對此路徑設置較大的上傳限制（10MB）
+        #    root /var/www/upload;
+        #    client_max_body_size 10485760;  # 10MB
         #}
     }
 }

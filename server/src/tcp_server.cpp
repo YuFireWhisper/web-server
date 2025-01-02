@@ -55,6 +55,42 @@ void TcpServer::start() {
   }
 }
 
+void TcpServer::enableSSL(const std::string &certFile, const std::string &keyFile) {
+  if (started_) {
+    LOG_WARN("Cannot enable SSL after server has started");
+    return;
+  }
+
+  sslConfig_.enabled  = true;
+  sslConfig_.certFile = certFile;
+  sslConfig_.keyFile  = keyFile;
+
+  LOG_INFO("SSL enabled for server " + name_ + " with cert: " + certFile);
+}
+
+void TcpServer::disableSSL() {
+  if (started_) {
+    LOG_WARN("Cannot disable SSL after server has started");
+    return;
+  }
+
+  sslConfig_.enabled = false;
+  sslConfig_.certFile.clear();
+  sslConfig_.keyFile.clear();
+
+  LOG_INFO("SSL disabled for server " + name_);
+}
+
+size_t TcpServer::getSSLConnectionCount() const {
+  size_t count = 0;
+  for (const auto &[name, conn] : connections_) {
+    if (conn && conn->isSSLEnabled()) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
   LOG_DEBUG("處理新連接，sockfd=" + std::to_string(sockfd));
   loop_->assertInLoopThread();
@@ -85,8 +121,22 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
   conn->setCloseCallback([this](auto &&PH1) { removeConnection(std::forward<decltype(PH1)>(PH1)); }
   );
 
+  if (sslConfig_.enabled) {
+    initializeNewSSLConnection(conn);
+  }
+
   connections_[connName] = conn;
   ioLoop->runInLoop([conn] { conn->connectEstablished(); });
+}
+
+void TcpServer::initializeNewSSLConnection(const TcpConnectionPtr &conn) const {
+  try {
+    conn->enableSSL(sslConfig_.certFile, sslConfig_.keyFile);
+    conn->startSSLHandshake(true);
+  } catch (const std::exception &e) {
+    LOG_ERROR("Failed to initialize SSL for connection " + conn->name() + ": " + e.what());
+    conn->forceClose();
+  }
 }
 
 void TcpServer::setThreadNum(int numThreads) {

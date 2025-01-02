@@ -44,7 +44,7 @@ void createAutoConfig(const fs::path &projectRoot) {
   }
 
   autoConfig << "#pragma once\n";
-  autoConfig << "#define kPorjectRoot \"" << projectRoot.string() << "/\"\n";
+  autoConfig << "#define kProjectRoot \"" << projectRoot.string() << "/\"\n";
   autoConfig.close();
 
   LOG_INFO("Auto configuration created successfully");

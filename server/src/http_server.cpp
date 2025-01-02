@@ -6,11 +6,13 @@
 #include "include/http_request.h"
 #include "include/http_response.h"
 #include "include/inet_address.h"
+#include "include/log.h"
 #include "include/router.h"
 #include "include/tcp_connection.h"
 #include "include/tcp_server.h"
 #include "include/time_stamp.h"
 
+#include <algorithm>
 #include <any>
 #include <cctype>
 #include <cstdlib>
@@ -144,39 +146,60 @@ void HttpServer::handleSetListen(
   auto *ctx  = static_cast<ServerContext *>(serverContext);
   auto *conf = ctx->conf;
 
-  std::string_view str = value[0];
-  size_t con           = str.find(':');
-
-  if (con == std::string_view::npos) {
-    if (str.empty() || str == "*") {
-      return;
-    }
-
-    bool isPort = true;
-    for (char c : str) {
-      if (std::isdigit(static_cast<unsigned char>(c)) == 0) {
-        isPort = false;
-        break;
-      }
-    }
-
-    if (isPort) {
-      conf->port = std::atoi(std::string(str).c_str());
-      return;
-    }
-
-    conf->address = str;
+  // 獲取並檢查輸入值
+  if (value.empty()) {
+    LOG_ERROR("Listen value is empty");
     return;
   }
 
-  std::string_view ip = str.substr(0, con);
-  if (!ip.empty() && ip != "*") {
-    conf->address = ip;
+  std::string_view str = value[0];
+  if (str.empty()) {
+    LOG_ERROR("Listen string is empty");
+    return;
   }
 
-  std::string_view port = str.substr(0, con);
-  if (!ip.empty()) {
-    conf->port = htons(std::atoi(std::string(port).c_str()));
+  size_t colonPos = str.find(':');
+
+  if (colonPos == std::string_view::npos) {
+    if (str == "*") {
+      conf->address = "0.0.0.0";
+      return;
+    }
+
+    bool isPort =
+        std::ranges::all_of(str, [](unsigned char c) { return std::isdigit(c); });
+
+    if (isPort) {
+      try {
+        conf->port = static_cast<in_port_t>(std::stoi(std::string(str)));
+      } catch (const std::exception &e) {
+        LOG_ERROR("Invalid port number: " + std::string(str));
+      }
+    } else {
+      conf->address = str;
+    }
+    return;
   }
+
+  std::string_view hostPart = str.substr(0, colonPos);
+  std::string_view portPart = str.substr(colonPos + 1);
+
+  if (!hostPart.empty() && hostPart != "*") {
+    conf->address = std::string(hostPart);
+  } else {
+    conf->address = "0.0.0.0";
+  }
+
+  if (!portPart.empty()) {
+    try {
+      conf->port = static_cast<in_port_t>(std::stoi(std::string(portPart)));
+    } catch (const std::exception &e) {
+      LOG_ERROR("Invalid port number: " + std::string(portPart));
+    }
+  }
+
+  LOG_DEBUG(
+      "Listen configured - Address: " + conf->address + ", Port: " + std::to_string(conf->port)
+  );
 }
 } // namespace server

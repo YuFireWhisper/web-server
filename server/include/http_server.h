@@ -38,7 +38,7 @@ public:
   [[nodiscard]] const std::string &name() const { return server_.getName(); }
   [[nodiscard]] EventLoop *getLoop() const { return server_.getLoop(); }
 
-  void handleSetListen(
+  static void handleSetListen(
       const std::vector<std::string> &value,
       void *serverContext,
       size_t offset [[maybe_unused]]

@@ -5,6 +5,7 @@
 #include "include/http_server.h"
 #include "include/inet_address.h"
 #include "include/router.h"
+#include "include/ssl_manager.h"
 #include "include/types.h"
 
 #include <cctype>
@@ -354,5 +355,7 @@ void ConfigManager::handleServerEnd(ServerContext *ctx) {
   loop.loop();
 
   *ctx->conf = ServerConfig();
+
+  SSLManager::getInstance().addServer(*conf);
 }
 } // namespace server

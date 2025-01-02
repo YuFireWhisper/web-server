@@ -265,11 +265,16 @@ SSLManager &SSLManager::getInstance() {
 SSLManager::SSLManager() {
   OpenSSL_add_all_algorithms();
   curl_global_init(CURL_GLOBAL_DEFAULT);
+  SSL_library_init();
+  SSL_load_error_strings();
+  OpenSSL_add_all_algorithms();
 }
 
 SSLManager::~SSLManager() {
   curl_global_cleanup();
   EVP_cleanup();
+  CRYPTO_cleanup_all_ex_data();
+  ERR_free_strings();
 }
 
 void SSLManager::addServer(ServerConfig &config) {

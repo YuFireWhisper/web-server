@@ -1,7 +1,10 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <netinet/tcp.h>
+#include <openssl/ssl.h>
+#include <openssl/types.h>
 #include <stdexcept>
 #include <string>
 
@@ -11,6 +14,7 @@ class SocketException : public std::runtime_error {
 public:
   explicit SocketException(const std::string &operation);
   explicit SocketException(const std::string &operation, int errorCode);
+  explicit SocketException(const std::string &operation, unsigned long sslError);
 };
 
 class Buffer;
@@ -63,13 +67,38 @@ public:
   void attachFd(int fd);
   int detachFd();
 
+  void initializeSSL(const std::string &certFile, const std::string &keyFile);
+  void acceptSSL();
+  void connectSSL();
+  void shutdownSSL();
+
+  [[nodiscard]] bool isSSLEnabled() const { return ssl_ != nullptr; }
+  [[nodiscard]] SSL *getSSL() const { return ssl_.get(); }
+  [[nodiscard]] bool isSSLConnected() const;
+
 private:
   int socketFd_;
+
+  struct SSLDeleter {
+    void operator()(SSL *ssl) const {
+      if (ssl != nullptr) {
+        SSL_free(ssl);
+      }
+    }
+  };
+
+  std::unique_ptr<SSL, SSLDeleter> ssl_;
+  static SSL_CTX *sslContext_;
 
   static int createTcpSocket();
   void setSocketFlag(int level, int flag, bool enabled) const;
   void configureBlockingMode(bool shouldBlock) const;
   [[nodiscard]] int getLastError() const;
+  static void initializeSSLContext();
+  void handleSSLError(const std::string &operation, int result) const;
+  [[nodiscard]] bool waitForSSLOperation(int result, const std::string &operation) const;
+  size_t handleSSLRead(Buffer &targetBuffer) const;
+  size_t handleSSLWrite(const void *dataPtr, size_t dataLength) const;
 };
 
 } // namespace server
