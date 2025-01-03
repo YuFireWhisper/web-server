@@ -146,7 +146,6 @@ void HttpServer::handleSetListen(
   auto *ctx  = static_cast<ServerContext *>(serverContext);
   auto *conf = ctx->conf;
 
-  // 獲取並檢查輸入值
   if (value.empty()) {
     LOG_ERROR("Listen value is empty");
     return;
@@ -158,6 +157,8 @@ void HttpServer::handleSetListen(
     return;
   }
 
+  LOG_DEBUG("Parsing listen value: " + std::string(str));
+
   size_t colonPos = str.find(':');
 
   if (colonPos == std::string_view::npos) {
@@ -166,17 +167,28 @@ void HttpServer::handleSetListen(
       return;
     }
 
-    bool isPort =
-        std::ranges::all_of(str, [](unsigned char c) { return std::isdigit(c); });
+    bool isPort = std::ranges::all_of(str, [](unsigned char c) { return std::isdigit(c); });
 
     if (isPort) {
       try {
-        conf->port = static_cast<in_port_t>(std::stoi(std::string(str)));
+        int port = std::stoi(std::string(str));
+        if (port <= 0 || port > 65535) {
+          LOG_ERROR("Port number out of range (1-65535): " + std::string(str));
+          return;
+        }
+        conf->port = static_cast<in_port_t>(port);
+        LOG_DEBUG("Port set to: " + std::to_string(conf->port));
       } catch (const std::exception &e) {
-        LOG_ERROR("Invalid port number: " + std::string(str));
+        LOG_ERROR("Invalid port number: " + std::string(str) + " (Error: " + e.what() + ")");
       }
     } else {
-      conf->address = str;
+      InetAddress resolved_addr(conf->AddressFamily, "0.0.0.0", conf->port);
+      if (!InetAddress::resolveHostname(std::string(str), &resolved_addr)) {
+        LOG_ERROR("Failed to resolve hostname: " + std::string(str));
+        return;
+      }
+      conf->address = resolved_addr.getIp();
+      LOG_DEBUG("Hostname " + std::string(str) + " resolved to: " + conf->address);
     }
     return;
   }
@@ -184,17 +196,33 @@ void HttpServer::handleSetListen(
   std::string_view hostPart = str.substr(0, colonPos);
   std::string_view portPart = str.substr(colonPos + 1);
 
+  LOG_DEBUG(
+      "Split into host: '" + std::string(hostPart) + "' and port: '" + std::string(portPart) + "'"
+  );
+
   if (!hostPart.empty() && hostPart != "*") {
-    conf->address = std::string(hostPart);
+    InetAddress resolved_addr(conf->AddressFamily, "0.0.0.0", conf->port);
+    if (!InetAddress::resolveHostname(std::string(hostPart), &resolved_addr)) {
+      LOG_ERROR("Failed to resolve hostname: " + std::string(hostPart));
+      return;
+    }
+    conf->address = resolved_addr.getIp();
+    LOG_DEBUG("Hostname " + std::string(hostPart) + " resolved to: " + conf->address);
   } else {
     conf->address = "0.0.0.0";
   }
 
   if (!portPart.empty()) {
     try {
-      conf->port = static_cast<in_port_t>(std::stoi(std::string(portPart)));
+      int port = std::stoi(std::string(portPart));
+      if (port <= 0 || port > 65535) {
+        LOG_ERROR("Port number out of range (1-65535): " + std::string(portPart));
+        return;
+      }
+      conf->port = static_cast<in_port_t>(port);
+      LOG_DEBUG("Port set to: " + std::to_string(conf->port));
     } catch (const std::exception &e) {
-      LOG_ERROR("Invalid port number: " + std::string(portPart));
+      LOG_ERROR("Invalid port number '" + std::string(portPart) + "' (Error: " + e.what() + ")");
     }
   }
 

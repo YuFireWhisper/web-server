@@ -40,22 +40,24 @@ struct HttpConfig {
 };
 
 struct ServerConfig {
-  short AddressFamily          = AF_INET;
-  std::string address          = "0.0.0.0";
-  in_port_t port               = 8080;
-  bool reusePort               = false;
-  bool tcpNoDelay              = true;
-  bool keepAlive               = true;
-  int keepAliveIdle            = 60;
-  int keepAliveInterval        = 30;
-  int keepAliveCount           = 3;
-  bool sslEnable               = false;
-  bool sslEnableAutoGen        = true;
-  std::string sslKeyType       = "ED25519";
-  int sslKeyParam              = 0;
-  std::string sslApiUrl        = "https://acme-v02.api.letsencrypt.org/directory";
-  std::string sslCertFile      = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_.crt";
-  std::string sslPublicKeyFile = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_public.key";
+  short AddressFamily     = AF_INET;
+  std::string address     = "0.0.0.0";
+  std::string serverName  = "example.com";
+  in_port_t port          = 8080;
+  bool reusePort          = false;
+  bool tcpNoDelay         = true;
+  bool keepAlive          = true;
+  int keepAliveIdle       = 60;
+  int keepAliveInterval   = 30;
+  int keepAliveCount      = 3;
+  bool sslEnable          = false;
+  bool sslEnableAutoGen   = true;
+  std::string sslKeyType  = "ED25519";
+  int sslKeyParam         = 0;
+  std::string sslApiUrl   = "https://acme-staging-v02.api.letsencrypt.org/directory"; // staging
+  std::string sslCertFile = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_.crt";
+  std::string sslPublicKeyFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_public.key";
   std::string sslPrivateKeyFile =
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_private.key";
   std::string sslAccountUrlFile =

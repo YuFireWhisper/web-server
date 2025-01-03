@@ -137,7 +137,7 @@ enum class CommandType : uint32_t {
   configNumber = 0x00000200,
   configString = 0x00000400,
   configSizeT  = 0x00000800,
-  configany    = 0x00000800,
+  configany    = 0x00001000,
   global       = 0x00010000,
   http         = 0x00020000,
   server       = 0x00040000,

@@ -58,7 +58,7 @@ private:
       const std::string &url,
       const std::string &token
   ) const;
-  static nlohmann::json
+  static std::string
   signJwt(const nlohmann::json &header, const nlohmann::json &payload, EVP_PKEY *key);
   static std::vector<uint8_t> calculateSha256(const std::string &input);
   static std::string calculateKeyAuthorization(const std::string &token, EVP_PKEY *key);
@@ -69,6 +69,7 @@ private:
   static std::string loadUrlFromFile(std::string_view path);
   static std::string base64UrlEncode(const std::vector<uint8_t> &data);
   static std::string base64UrlEncode(const std::string &data);
+  static bool verifyJwtFormat(const nlohmann::json &jwt);
   static std::string getAlgorithmName(const EVP_PKEY *key);
   static std::string getAlgorithmName(int32_t id);
   static int32_t getAlgorithmId(std::string_view algorithm);

@@ -1,5 +1,7 @@
 #include "include/inet_address.h"
 
+#include "include/log.h"
+
 #include <arpa/inet.h>
 #include <array>
 #include <netdb.h>
@@ -16,6 +18,7 @@ InetAddress::InetAddress(sa_family_t addressFamily, const std::string &ip, in_po
   addr_.sin_port   = htons(port);
 
   if (!parseIpAddress(addressFamily, ip, addr_.sin_addr)) {
+    LOG_ERROR("Invalid IP address: " + ip);
     throw std::invalid_argument("Invalid IP address");
   }
 }

@@ -283,6 +283,8 @@ void SSLManager::addServer(ServerConfig &config) {
   currentConfig_                              = &config;
   serverConfigs_[std::string(config.address)] = config;
 
+  LOG_DEBUG("config email: " + config.sslEmail);
+
   const auto &apiUrl        = currentConfig_->sslApiUrl;
   const auto [it, inserted] = acmeUrlCache_.try_emplace(config.sslApiUrl);
   if (inserted) {
@@ -449,51 +451,73 @@ bool SSLManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privat
 
     static constexpr std::string_view TEST_DATA = "Test Message";
 
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdCtx(
-        EVP_MD_CTX_new(),
-        EVP_MD_CTX_free
-    );
+    EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
+    if (md_ctx == nullptr) {
+      LOG_ERROR("Failed to create message digest context");
+      return false;
+    }
 
-    if (!mdCtx
-        || EVP_DigestSignInit(
-               mdCtx.get(),
-               nullptr,
-               nullptr,
-               nullptr,
-               const_cast<EVP_PKEY *>(privateKey)
-           ) <= 0) {
+    if (EVP_DigestSignInit(md_ctx, nullptr, nullptr, nullptr, const_cast<EVP_PKEY *>(privateKey))
+        <= 0) {
+      LOG_ERROR("Failed to initialize signing");
+      EVP_MD_CTX_free(md_ctx);
       return false;
     }
 
     size_t sigLen = 0;
-    if (EVP_DigestSignUpdate(mdCtx.get(), TEST_DATA.data(), TEST_DATA.size()) <= 0
-        || EVP_DigestSignFinal(mdCtx.get(), nullptr, &sigLen) <= 0) {
+    if (EVP_DigestSign(
+            md_ctx,
+            nullptr,
+            &sigLen,
+            reinterpret_cast<const unsigned char *>(TEST_DATA.data()),
+            TEST_DATA.size()
+        )
+        <= 0) {
+      LOG_ERROR("Failed to determine signature length");
+      EVP_MD_CTX_free(md_ctx);
       return false;
     }
 
-    std::vector<uint8_t> signature(sigLen);
-    if (EVP_DigestSignFinal(mdCtx.get(), signature.data(), &sigLen) <= 0) {
+    std::vector<unsigned char> signature(sigLen);
+    if (EVP_DigestSign(
+            md_ctx,
+            signature.data(),
+            &sigLen,
+            reinterpret_cast<const unsigned char *>(TEST_DATA.data()),
+            TEST_DATA.size()
+        )
+        <= 0) {
+      LOG_ERROR("Failed to create signature");
+      EVP_MD_CTX_free(md_ctx);
       return false;
     }
 
-    std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> verifyCtx(
-        EVP_MD_CTX_new(),
-        EVP_MD_CTX_free
+    EVP_MD_CTX_free(md_ctx);
+
+    md_ctx = EVP_MD_CTX_new();
+    if (md_ctx == nullptr) {
+      LOG_ERROR("Failed to create verify context");
+      return false;
+    }
+
+    if (EVP_DigestVerifyInit(md_ctx, nullptr, nullptr, nullptr, const_cast<EVP_PKEY *>(publicKey))
+        <= 0) {
+      LOG_ERROR("Failed to initialize verification");
+      EVP_MD_CTX_free(md_ctx);
+      return false;
+    }
+
+    int verify_result = EVP_DigestVerify(
+        md_ctx,
+        signature.data(),
+        sigLen,
+        reinterpret_cast<const unsigned char *>(TEST_DATA.data()),
+        TEST_DATA.size()
     );
 
-    if (!verifyCtx
-        || EVP_DigestVerifyInit(
-               verifyCtx.get(),
-               nullptr,
-               nullptr,
-               nullptr,
-               const_cast<EVP_PKEY *>(publicKey)
-           ) <= 0) {
-      return false;
-    }
+    EVP_MD_CTX_free(md_ctx);
+    return verify_result > 0;
 
-    return EVP_DigestVerifyUpdate(verifyCtx.get(), TEST_DATA.data(), TEST_DATA.size()) > 0
-           && EVP_DigestVerifyFinal(verifyCtx.get(), signature.data(), sigLen) > 0;
   } catch (const std::exception &e) {
     LOG_ERROR("Failed to verify key pair: " + std::string(e.what()));
     throw std::runtime_error("Failed to verify key pair: " + std::string(e.what()));
@@ -554,7 +578,9 @@ std::string SSLManager::base64UrlEncode(const std::vector<uint8_t> &data) {
     std::string result(encodedData, encodedLength);
     std::ranges::replace(result, '+', '-');
     std::ranges::replace(result, '/', '_');
-    result.erase(std::remove(result.end() - 2, result.end(), '='), result.end());
+    while (!result.empty() && result.back() == '=') {
+      result.pop_back();
+    }
 
     return result;
   } catch (const std::exception &e) {
@@ -564,49 +590,7 @@ std::string SSLManager::base64UrlEncode(const std::vector<uint8_t> &data) {
 }
 
 std::string SSLManager::base64UrlEncode(const std::string &data) {
-  try {
-    static const char base64_chars[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    std::string result;
-    result.reserve(((data.size() + 2) / 3) * 4);
-
-    size_t i = 0;
-    for (; i + 2 < data.size(); i += 3) {
-      uint32_t b = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-      result.push_back(base64_chars[(b >> 18) & 0x3F]);
-      result.push_back(base64_chars[(b >> 12) & 0x3F]);
-      result.push_back(base64_chars[(b >> 6) & 0x3F]);
-      result.push_back(base64_chars[b & 0x3F]);
-    }
-
-    if (i < data.size()) {
-      uint32_t b = data[i] << 16;
-      if (i + 1 < data.size()) {
-        b |= data[i + 1] << 8;
-      }
-
-      result.push_back(base64_chars[(b >> 18) & 0x3F]);
-      result.push_back(base64_chars[(b >> 12) & 0x3F]);
-      if (i + 1 < data.size()) {
-        result.push_back(base64_chars[(b >> 6) & 0x3F]);
-      }
-    }
-
-    for (char &c : result) {
-      if (c == '+') {
-        c = '-';
-      }
-      if (c == '/') {
-        c = '_';
-      }
-    }
-
-    return result;
-  } catch (const std::exception &e) {
-    LOG_ERROR("Failed to encode data: " + std::string(e.what()));
-    throw std::runtime_error("Failed to encode data: " + std::string(e.what()));
-  }
+  return base64UrlEncode(std::vector<uint8_t>(data.begin(), data.end()));
 }
 
 void SSLManager::ensureValidCertificate() const {
@@ -751,15 +735,25 @@ void SSLManager::requestToNewOrderAndSaveLocation() const {
     nlohmann::json payload = {
       { "identifiers",
         nlohmann::json::array({ { { "type", "dns" },
-                                  { "value", std::string(currentConfig_->address) } } }) }
+                                  { "value", std::string(currentConfig_->serverName) } } }) }
     };
 
-    const auto jws =
+    const auto jwtToken =
         signJwt(protectedHeader, payload, loadPrivateKey(currentConfig_->sslPrivateKeyFile).get());
+
+    nlohmann::json requestBody = {
+      { "protected", jwtToken.substr(0, jwtToken.find_first_of('.')) },
+      { "payload",
+        jwtToken.substr(
+            jwtToken.find_first_of('.') + 1,
+            jwtToken.find_last_of('.') - jwtToken.find_first_of('.') - 1
+        ) },
+      { "signature", jwtToken.substr(jwtToken.find_last_of('.') + 1) }
+    };
 
     const auto response = sendRequestReturnPair(
         acmeUrlCache_.at(currentConfig_->sslApiUrl).newOrder,
-        jws.dump(),
+        requestBody.dump(),
         { "Content-Type: application/jose+json" }
     );
 
@@ -850,7 +844,7 @@ void SSLManager::requestToFinalizeUrlAndSaveCertificate() const {
       throw std::runtime_error("Failed to create X509_NAME");
     }
 
-    const auto *cn = reinterpret_cast<const unsigned char *>(currentConfig_->address.c_str());
+    const auto *cn = reinterpret_cast<const unsigned char *>(currentConfig_->serverName.c_str());
     if (X509_NAME_add_entry_by_txt(name.get(), "CN", MBSTRING_UTF8, cn, -1, -1, 0) != 1) {
       throw std::runtime_error("Failed to add CN to subject name");
     }
@@ -875,7 +869,7 @@ void SSLManager::requestToFinalizeUrlAndSaveCertificate() const {
       throw std::runtime_error("Failed to create extensions stack");
     }
 
-    std::string san_str = "DNS:" + currentConfig_->address;
+    std::string san_str = "DNS:" + currentConfig_->serverName;
     auto *raw_ext       = X509V3_EXT_conf_nid(nullptr, &ctx, NID_subject_alt_name, san_str.c_str());
     if (raw_ext == nullptr) {
       throw std::runtime_error("Failed to create SAN extension");
@@ -923,9 +917,18 @@ void SSLManager::requestToFinalizeUrlAndSaveCertificate() const {
 
     nlohmann::json payload = { { "csr", base64UrlEncode(der_vec) } };
 
-    const auto jwt = signJwt(header, payload, privateKey.get());
+    const auto jwtToken        = signJwt(header, payload, privateKey.get());
+    nlohmann::json requestBody = {
+      { "protected", jwtToken.substr(0, jwtToken.find_first_of('.')) },
+      { "payload",
+        jwtToken.substr(
+            jwtToken.find_first_of('.') + 1,
+            jwtToken.find_last_of('.') - jwtToken.find_first_of('.') - 1
+        ) },
+      { "signature", jwtToken.substr(jwtToken.find_last_of('.') + 1) }
+    };
     const auto response =
-        sendRequest(finalizeUrl, jwt.dump(), { "Content-Type: application/jose+json" });
+        sendRequest(finalizeUrl, requestBody.dump(), { "Content-Type: application/jose+json" });
 
     auto responseJson  = nlohmann::json::parse(response);
     std::string status = responseJson.value("status", "");
@@ -966,9 +969,13 @@ void SSLManager::downloadCertificate(const std::string &certUrl) const {
   }
 }
 
-nlohmann::json
+std::string
 SSLManager::signJwt(const nlohmann::json &header, const nlohmann::json &payload, EVP_PKEY *key) {
   try {
+    if (key == nullptr) {
+      throw std::runtime_error("Invalid key provided");
+    }
+
     std::string headerStr  = header.dump();
     std::string payloadStr = payload.dump();
 
@@ -979,26 +986,54 @@ SSLManager::signJwt(const nlohmann::json &header, const nlohmann::json &payload,
 
     std::string signingInput = encodedHeader + "." + encodedPayload;
 
-    std::unique_ptr<EVP_MD_CTX, void (*)(EVP_MD_CTX *)> mdCtx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-
-    if (!mdCtx || EVP_DigestSignInit(mdCtx.get(), nullptr, EVP_sha256(), nullptr, key) != 1) {
-      throw std::runtime_error("Failed to initialize signing context");
-    }
-
+    int32_t algId = getAlgorithmId(key);
+    std::vector<uint8_t> signature;
     size_t sigLen = 0;
-    if (EVP_DigestSignUpdate(mdCtx.get(), signingInput.data(), signingInput.size()) != 1
-        || EVP_DigestSignFinal(mdCtx.get(), nullptr, &sigLen) != 1) {
-      throw std::runtime_error("Failed to calculate signature length");
+
+    if (algId == EVP_PKEY_ED25519) {
+      std::unique_ptr<EVP_MD_CTX, void (*)(EVP_MD_CTX *)> mdCtx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+
+      if (!mdCtx || EVP_DigestSignInit(mdCtx.get(), nullptr, nullptr, nullptr, key) != 1) {
+        throw std::runtime_error("Failed to initialize ED25519 signing context");
+      }
+
+      const auto *const input = reinterpret_cast<const unsigned char *>(signingInput.data());
+
+      if (EVP_DigestSign(mdCtx.get(), nullptr, &sigLen, input, signingInput.size()) != 1) {
+        throw std::runtime_error("Failed to calculate signature length");
+      }
+
+      signature.resize(sigLen);
+      if (EVP_DigestSign(mdCtx.get(), signature.data(), &sigLen, input, signingInput.size()) != 1) {
+        throw std::runtime_error("Failed to create signature");
+      }
     }
 
-    std::vector<uint8_t> signature(sigLen);
-    if (EVP_DigestSignFinal(mdCtx.get(), signature.data(), &sigLen) != 1) {
-      throw std::runtime_error("Failed to create signature");
+    if (algId == EVP_PKEY_RSA) {
+      const EVP_MD *md = EVP_sha256();
+
+      std::unique_ptr<EVP_MD_CTX, void (*)(EVP_MD_CTX *)> mdCtx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+
+      if (!mdCtx || EVP_DigestSignInit(mdCtx.get(), nullptr, md, nullptr, key) != 1) {
+        throw std::runtime_error("Failed to initialize signing context");
+      }
+
+      if (EVP_DigestSignUpdate(mdCtx.get(), signingInput.data(), signingInput.size()) != 1) {
+        throw std::runtime_error("Failed to update signing context");
+      }
+
+      if (EVP_DigestSignFinal(mdCtx.get(), nullptr, &sigLen) != 1) {
+        throw std::runtime_error("Failed to calculate signature length");
+      }
+
+      signature.resize(sigLen);
+      if (EVP_DigestSignFinal(mdCtx.get(), signature.data(), &sigLen) != 1) {
+        throw std::runtime_error("Failed to create signature");
+      }
     }
 
-    return { { "protected", encodedHeader },
-             { "payload", encodedPayload },
-             { "signature", base64UrlEncode(signature) } };
+    return encodedHeader + "." + encodedPayload + "." + base64UrlEncode(signature);
+
   } catch (const std::exception &e) {
     LOG_ERROR("Failed to sign JWT: " + std::string(e.what()));
     throw std::runtime_error("Failed to sign JWT: " + std::string(e.what()));
@@ -1021,6 +1056,10 @@ void SSLManager::registerAccountWithAcme() const {
     auto key   = loadPrivateKey(currentConfig_->sslPrivateKeyFile);
     auto jwk   = getJwk(key.get());
 
+    if (currentConfig_->sslEmail.empty()) {
+      throw std::runtime_error("Email address is required for registration");
+    }
+
     nlohmann::json header = { { "alg", getAlgorithmName(key.get()) },
                               { "jwk", jwk },
                               { "nonce", std::string(nonce) },
@@ -1029,16 +1068,51 @@ void SSLManager::registerAccountWithAcme() const {
     nlohmann::json payload = { { "contact", { "mailto:" + currentConfig_->sslEmail } },
                                { "termsOfServiceAgreed", true } };
 
-    const auto signature = signJwt(header, payload, key.get());
-    const auto response  = sendRequestWithHeader(
+    LOG_DEBUG("ACME Directory URL: " + currentConfig_->sslApiUrl);
+    LOG_DEBUG("New Account URL: " + it->second.newAccount);
+    LOG_DEBUG("Generated JWK: " + jwk.dump());
+    LOG_DEBUG("Request Header: " + header.dump());
+    LOG_DEBUG("Request Payload: " + payload.dump());
+
+    const auto jwtToken = signJwt(header, payload, key.get());
+    LOG_DEBUG("JWT Token: " + jwtToken);
+
+    nlohmann::json requestBody = {
+      { "protected", jwtToken.substr(0, jwtToken.find_first_of('.')) },
+      { "payload",
+        jwtToken.substr(
+            jwtToken.find_first_of('.') + 1,
+            jwtToken.find_last_of('.') - jwtToken.find_first_of('.') - 1
+        ) },
+      { "signature", jwtToken.substr(jwtToken.find_last_of('.') + 1) }
+    };
+
+    if (!verifyJwtFormat(requestBody)) {
+      throw std::runtime_error("Invalid JWT format");
+    }
+
+    std::string requestString = requestBody.dump();
+    requestString.erase(
+        std::ranges::remove_if(requestString, ::isspace).begin(),
+        requestString.end()
+    );
+    LOG_DEBUG("Request Body: " + requestString);
+
+    const auto response = sendRequestWithHeader(
         it->second.newAccount,
-        signature.dump(),
+        requestString,
         { "Content-Type: application/jose+json" }
     );
+
+    LOG_DEBUG("Full ACME Response: " + response);
 
     std::string accountUrl = getHeader(response, "Location: ");
     LOG_DEBUG("Raw response: " + response);
     LOG_DEBUG("Account URL: " + accountUrl);
+
+    if (accountUrl.empty()) {
+      throw std::runtime_error("Failed to get account URL from response");
+    }
 
     std::ofstream file(currentConfig_->sslAccountUrlFile);
     if (!file) {
@@ -1049,6 +1123,31 @@ void SSLManager::registerAccountWithAcme() const {
     LOG_ERROR("Failed to register account with ACME: " + std::string(e.what()));
     throw std::runtime_error("Failed to register account with ACME: " + std::string(e.what()));
   }
+}
+
+bool SSLManager::verifyJwtFormat(const nlohmann::json &jwt) {
+  if (!jwt.contains("protected") || !jwt.contains("payload") || !jwt.contains("signature")) {
+    LOG_ERROR("JWT missing required fields");
+    return false;
+  }
+
+  auto checkBase64Url = [](const std::string &str) {
+    return str.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_="
+           )
+           == std::string::npos;
+  };
+
+  const std::string &protected_str = jwt["protected"];
+  const std::string &payload_str   = jwt["payload"];
+  const std::string &signature_str = jwt["signature"];
+
+  if (!checkBase64Url(protected_str) || !checkBase64Url(payload_str)
+      || !checkBase64Url(signature_str)) {
+    LOG_ERROR("Invalid base64url encoding");
+    return false;
+  }
+
+  return true;
 }
 
 std::string SSLManager::getNonce(std::string_view nonceUrl) {
@@ -1198,7 +1297,7 @@ void SSLManager::displayChallengeInstructions(
       LOG_INFO("1. Create a file at: /.well-known/acme-challenge/" + token);
       LOG_INFO("2. File content should be: " + keyAuth);
       LOG_INFO(
-          "3. Make sure the file is accessible at: http://" + currentConfig_->address
+          "3. Make sure the file is accessible at: http://" + currentConfig_->serverName
           + "/.well-known/acme-challenge/" + token
       );
       LOG_INFO("4. The file should be served with Content-Type: text/plain");
@@ -1209,10 +1308,10 @@ void SSLManager::displayChallengeInstructions(
       std::string dnsValue = base64UrlEncode(digest);
 
       LOG_INFO("DNS Challenge Steps:");
-      LOG_INFO("1. Add TXT record for: _acme-challenge." + currentConfig_->address);
+      LOG_INFO("1. Add TXT record for: _acme-challenge." + currentConfig_->serverName);
       LOG_INFO("2. TXT record content should be: " + dnsValue);
       LOG_INFO("3. Command to verify DNS propagation:");
-      LOG_INFO("   dig -t txt _acme-challenge." + currentConfig_->address);
+      LOG_INFO("   dig -t txt _acme-challenge." + currentConfig_->serverName);
       LOG_INFO("4. Wait for DNS propagation (usually 5-15 minutes)");
       LOG_INFO("5. Validation URL: " + url);
       LOG_INFO("6. Let's Encrypt will query DNS to validate");
@@ -1321,11 +1420,20 @@ bool SSLManager::validateAndUpdateChallenge() {
 
     nlohmann::json payload = {};
 
-    const auto jwt = signJwt(header, payload, key.get());
-    LOG_DEBUG("Request payload: " + jwt.dump());
+    const auto jwtToken        = signJwt(header, payload, key.get());
+    nlohmann::json requestBody = {
+      { "protected", jwtToken.substr(0, jwtToken.find_first_of('.')) },
+      { "payload",
+        jwtToken.substr(
+            jwtToken.find_first_of('.') + 1,
+            jwtToken.find_last_of('.') - jwtToken.find_first_of('.') - 1
+        ) },
+      { "signature", jwtToken.substr(jwtToken.find_last_of('.') + 1) }
+    };
+    LOG_DEBUG("Request payload: " + requestBody.dump());
 
     const auto response =
-        sendRequest(finalizeUrl, jwt.dump(), { "Content-Type: application/jose+json" });
+        sendRequest(finalizeUrl, requestBody.dump(), { "Content-Type: application/jose+json" });
     LOG_DEBUG("Full response: " + response);
 
     auto responseJson = nlohmann::json::parse(response);

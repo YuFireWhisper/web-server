@@ -80,7 +80,10 @@ http {
         # ---- 基本連線設置 ----
         # 監聽配置（地址:端口）
         # 格式：listen [address:]port;
-        listen 80;
+        listen 8080;
+
+        # 伺服器名稱
+        server_name xiuzhe.xyz;
 
         # ---- TCP 選項 ----
         # 埠口重用
@@ -111,11 +114,11 @@ http {
         # ---- SSL 設置 ----
         # 啟用 SSL
         # 預設值：off
-        #ssl off;
+        ssl on;
 
         # 啟用自動生成 SSL 證書
         # 預設值：off
-        #ssl_auto_gen off;
+        ssl_auto_gen on;
 
         # SSL 證書設置
         #ssl_cert_file cert.pem;
@@ -130,7 +133,7 @@ http {
 
         # SSL 自動更新設置
         #ssl_renew_days 30;
-        #ssl_email admin@example.com;
+        ssl_email yu.whisper.personal@gmail.com;
 
         # SSL API 設置
         #ssl_api_url https://acme-v02.api.letsencrypt.org/directory;
@@ -142,14 +145,14 @@ http {
         # ---- 路由配置 ----
         # 根目錄配置
         location / {
-            root /var/www/html;
-            #static_file /path/to/index.html;
+            #root /var/www/html;
+            static_file index.html;
         }
 
         # API 反向代理示例
         #location /api {
         #    proxy_pass http://backend;
-        }
+        #}
 
         # 靜態文件配置示例
         #location /static {

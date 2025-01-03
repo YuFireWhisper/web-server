@@ -4,6 +4,7 @@
 #include "include/event_loop.h"
 #include "include/http_server.h"
 #include "include/inet_address.h"
+#include "include/log.h"
 #include "include/router.h"
 #include "include/ssl_manager.h"
 #include "include/types.h"
@@ -210,6 +211,11 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
     throw std::invalid_argument("Unknown command: " + field[0]);
   }
 
+  LOG_DEBUG("Processing command: " + cmdIt->first);
+  for (const auto &arg : field) {
+    LOG_DEBUG("Argument: " + arg);
+  }
+
   field.erase(field.begin());
   const auto &cmd = cmdIt->second;
 
@@ -222,6 +228,7 @@ void ConfigManager::handleCommand(std::vector<std::string> field) {
   }
 
   if (cmd.confOffset != 0) {
+    LOG_DEBUG("Setting configuration context: " + std::to_string(cmd.confOffset));
     context_.now = cmd.confOffset;
   }
 
@@ -234,6 +241,7 @@ void ConfigManager::processCommandField(
 ) const {
   if (cmd.set != nullptr) {
     cmd.set(field, getContextByOffset(context_.now), cmd.offset);
+    return;
   }
 
   const uint32_t valueType = static_cast<uint32_t>(cmd.type) & typeMask;
@@ -271,6 +279,7 @@ void ConfigManager::updateConfigValue(
     case static_cast<uint32_t>(CommandType::configString): {
       auto *target = reinterpret_cast<std::string *>(base + cmd.offset);
       *target      = value;
+      LOG_DEBUG("Setting string value: " + *target);
       break;
     }
     case static_cast<uint32_t>(CommandType::configSizeT): {
@@ -347,15 +356,14 @@ void ConfigManager::handleLocationEnd(LocationContext *ctx) {
 
 void ConfigManager::handleServerEnd(ServerContext *ctx) {
   auto *conf = ctx->conf;
-  EventLoop loop;
-  InetAddress addr(conf->AddressFamily, conf->address, conf->port);
-
-  HttpServer server(&loop, addr, conf->address, conf->reusePort);
-  server.start();
-  loop.loop();
-
-  *ctx->conf = ServerConfig();
 
   SSLManager::getInstance().addServer(*conf);
+
+  EventLoop loop;
+  InetAddress addr(conf->AddressFamily, conf->address, conf->port);
+  HttpServer server(&loop, addr, conf->address, conf->reusePort);
+  *ctx->conf = ServerConfig();
+  server.start();
+  loop.loop();
 }
 } // namespace server
