@@ -1,11 +1,12 @@
 #include "include/config_defaults.h"
-#include "include/log.h"
 #include "include/ssl_manager.h"
 
 #include <filesystem>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <string>
 
-namespace server {
+namespace server::test {
 
 class SSLManagerTest : public ::testing::Test {
 protected:
@@ -16,115 +17,162 @@ protected:
 
   void TearDown() override { cleanupTestFiles(); }
 
-  static void cleanupTestFiles() {
-    std::filesystem::path dir = std::string(kProjectRoot) + "server/auto/ssl";
-    if (!std::filesystem::exists(dir)) {
-      return;
-    }
-
-    for (const auto &file : std::filesystem::directory_iterator(dir)) {
-      std::filesystem::remove_all(file.path());
-    }
-  }
-
   void setupTestConfig() {
-    config_.address          = "test.com";
-    config_.sslApiUrl        = "https://acme-staging-v02.api.letsencrypt.org/directory"; // staging
-    config_.sslEmail         = "ddyu.whisper.personal@gmail.com";
-    config_.sslKeyType       = "rsaEncryption";
-    config_.sslKeyParam      = 2048;
-    config_.sslRenewDays     = 30;
-    config_.sslEnableAutoGen = true;
+    config.address          = "127.0.0.1";
+    config.serverName       = "test.domain.com";
+    config.sslEnable        = true;
+    config.sslEnableAutoGen = true;
+    config.sslKeyType       = "ED25519";
+    config.sslKeyParam      = 0;
+    config.sslApiUrl        = "https://acme-staging-v02.api.letsencrypt.org/directory";
+    config.sslEmail         = "test@domain.com";
+    config.sslRenewDays     = 30;
 
-    setupTestDirectories();
+    const std::string testDir = std::string(kProjectRoot) + "server/auto/ssl/";
+    std::filesystem::create_directories(testDir);
+
+    config.sslCertFile         = testDir + config.address + "_.crt";
+    config.sslPublicKeyFile    = testDir + config.address + "_public.key";
+    config.sslPrivateKeyFile   = testDir + config.address + "_private.key";
+    config.sslAccountUrlFile   = testDir + config.address + "_account.url";
+    config.sslLocationUrlFile  = testDir + config.address + "_location.url";
+    config.sslFinalizeUrlFile  = testDir + config.address + "_finalize.url";
+    config.sslChallengeUrlFile = testDir + config.address + "_challenge.url";
   }
 
-  static void setupTestDirectories() {
-    std::filesystem::path sslDir = std::string(kProjectRoot) + "server/auto/ssl";
-    std::filesystem::create_directories(sslDir);
-
-    std::filesystem::permissions(
-        sslDir,
-        std::filesystem::perms::owner_read | std::filesystem::perms::owner_write
-            | std::filesystem::perms::owner_exec,
-        std::filesystem::perm_options::replace
-    );
+  static void cleanupTestFiles() {
+    const std::string testDir = std::string(kProjectRoot) + "server/auto/ssl/";
+    if (std::filesystem::exists(testDir)) {
+      std::filesystem::remove_all(testDir);
+    }
   }
 
-  ServerConfig config_;
+  ServerConfig config;
 };
 
-TEST_F(SSLManagerTest, TestInitialConfiguration) {
-  auto &manager = SSLManager::getInstance();
-  EXPECT_NO_THROW(manager.addServer(config_));
-  EXPECT_EQ(manager.getCertificatePath(config_.address), config_.sslCertFile);
-  EXPECT_EQ(manager.getPrivateKeyPath(config_.address), config_.sslPrivateKeyFile);
+TEST_F(SSLManagerTest, GetInstanceReturnsSameInstance) {
+  auto &instance1 = SSLManager::getInstance();
+  auto &instance2 = SSLManager::getInstance();
+  EXPECT_EQ(&instance1, &instance2);
 }
 
-TEST_F(SSLManagerTest, TestKeyPairGeneration) {
-  try {
-    auto &manager = SSLManager::getInstance();
-    LOG_INFO("Starting key pair generation test");
+TEST_F(SSLManagerTest, AddServerWithValidConfigSucceeds) {
+  auto &manager = SSLManager::getInstance();
+  EXPECT_NO_THROW(manager.addServer(config));
+}
 
-    manager.addServer(config_);
-    LOG_INFO("Server configuration added");
+TEST_F(SSLManagerTest, AddServerWithDuplicateAddressFails) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
 
-    EXPECT_TRUE(std::filesystem::exists(config_.sslPrivateKeyFile))
-        << "Private key file does not exist: " << config_.sslPrivateKeyFile;
-    EXPECT_TRUE(std::filesystem::exists(config_.sslPublicKeyFile))
-        << "Public key file does not exist: " << config_.sslPublicKeyFile;
+  ServerConfig duplicateConfig = config;
+  EXPECT_THROW(manager.addServer(duplicateConfig), std::runtime_error);
+}
 
-    auto privateKeyPerms = std::filesystem::status(config_.sslPrivateKeyFile).permissions();
-    EXPECT_TRUE(
-        (privateKeyPerms & std::filesystem::perms::group_all) == std::filesystem::perms::none
-    ) << "Private key has incorrect group permissions";
-    EXPECT_TRUE(
-        (privateKeyPerms & std::filesystem::perms::others_all) == std::filesystem::perms::none
-    ) << "Private key has incorrect other permissions";
+TEST_F(SSLManagerTest, GetCertificatePathReturnsCorrectPath) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
 
-    LOG_INFO("Key pair generation test completed successfully");
-  } catch (const std::exception &e) {
-    FAIL() << "Exception occurred: " << e.what();
+  EXPECT_EQ(manager.getCertificatePath(config.address), config.sslCertFile);
+}
+
+TEST_F(SSLManagerTest, GetPrivateKeyPathReturnsCorrectPath) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
+
+  EXPECT_EQ(manager.getPrivateKeyPath(config.address), config.sslPrivateKeyFile);
+}
+
+TEST_F(SSLManagerTest, GetCertificatePathWithInvalidAddressFails) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
+
+  EXPECT_THROW(manager.getCertificatePath("invalid.address"), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, GetPrivateKeyPathWithInvalidAddressFails) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
+
+  EXPECT_THROW(manager.getPrivateKeyPath("invalid.address"), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, ValidateAndUpdateChallengeWithNoActiveConfigFails) {
+  auto &manager = SSLManager::getInstance();
+  EXPECT_THROW(manager.validateAndUpdateChallenge(), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, AddServerWithDisabledAutoGenAndMissingCertificateFails) {
+  config.sslEnableAutoGen = false;
+  auto &manager           = SSLManager::getInstance();
+  EXPECT_THROW(manager.addServer(config), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, AddServerWithInvalidKeyTypeFails) {
+  config.sslKeyType = "INVALID_KEY_TYPE";
+  auto &manager     = SSLManager::getInstance();
+  EXPECT_THROW(manager.addServer(config), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, AddServerWithEmptyEmailFails) {
+  config.sslEmail = "";
+  auto &manager   = SSLManager::getInstance();
+  EXPECT_THROW(manager.addServer(config), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, AddServerWithInvalidApiUrlFails) {
+  config.sslApiUrl = "invalid_url";
+  auto &manager    = SSLManager::getInstance();
+  EXPECT_THROW(manager.addServer(config), std::runtime_error);
+}
+
+TEST_F(SSLManagerTest, AddServerCreatesRequiredDirectories) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
+
+  const std::string sslDir = std::string(kProjectRoot) + "server/auto/ssl/";
+  EXPECT_TRUE(std::filesystem::exists(sslDir));
+  EXPECT_TRUE(std::filesystem::is_directory(sslDir));
+}
+
+TEST_F(SSLManagerTest, AddServerGeneratesKeyPair) {
+  auto &manager = SSLManager::getInstance();
+  manager.addServer(config);
+
+  EXPECT_TRUE(std::filesystem::exists(config.sslPublicKeyFile));
+  EXPECT_TRUE(std::filesystem::exists(config.sslPrivateKeyFile));
+}
+
+TEST_F(SSLManagerTest, AddServerWithRSAKeyTypeSucceeds) {
+  config.sslKeyType  = "RSA";
+  config.sslKeyParam = 2048;
+  auto &manager      = SSLManager::getInstance();
+  EXPECT_NO_THROW(manager.addServer(config));
+}
+
+class SSLManagerIntegrationTest : public SSLManagerTest {
+protected:
+  void SetUp() override {
+    SSLManagerTest::SetUp();
+    config.sslApiUrl = "https://acme-staging-v02.api.letsencrypt.org/directory";
+  }
+};
+
+TEST_F(SSLManagerIntegrationTest, FullCertificateLifecycleTest) {
+  auto &manager = SSLManager::getInstance();
+  ASSERT_NO_THROW(manager.addServer(config));
+
+  EXPECT_TRUE(std::filesystem::exists(config.sslPublicKeyFile));
+  EXPECT_TRUE(std::filesystem::exists(config.sslPrivateKeyFile));
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+
+  bool challengeResult = manager.validateAndUpdateChallenge();
+  EXPECT_TRUE(challengeResult);
+
+  if (challengeResult) {
+    EXPECT_TRUE(std::filesystem::exists(config.sslCertFile));
   }
 }
 
-TEST_F(SSLManagerTest, TestACMERegistration) {
-  auto &manager = SSLManager::getInstance();
-  EXPECT_NO_THROW({
-    manager.addServer(config_);
-    EXPECT_TRUE(std::filesystem::exists(config_.sslAccountUrlFile));
-  });
-}
-
-TEST_F(SSLManagerTest, TestMultiDomainSupport) {
-  auto &manager = SSLManager::getInstance();
-
-  ServerConfig config2 = config_;
-  config2.address      = "test2.xiuzhe.xyz";
-
-  EXPECT_NO_THROW({
-    manager.addServer(config_);
-    manager.addServer(config2);
-
-    EXPECT_EQ(manager.getCertificatePath(config_.address), config_.sslCertFile);
-    EXPECT_EQ(manager.getCertificatePath(config2.address), config2.sslCertFile);
-  });
-}
-
-TEST_F(SSLManagerTest, TestErrorHandling) {
-  auto &manager = SSLManager::getInstance();
-
-  ServerConfig invalidConfig = config_;
-  invalidConfig.sslApiUrl    = "https://invalid.acme.server/directory";
-  EXPECT_THROW(manager.addServer(invalidConfig), std::runtime_error);
-
-  invalidConfig          = config_;
-  invalidConfig.sslEmail = "";
-  EXPECT_THROW(manager.addServer(invalidConfig), std::runtime_error);
-
-  invalidConfig             = config_;
-  invalidConfig.sslKeyParam = -1;
-  EXPECT_THROW(manager.addServer(invalidConfig), std::runtime_error);
-}
-
-} // namespace server
+} // namespace server::test

@@ -6,3 +6,4 @@ compile_commands.json
 CMakePresets.json
 logs/
 conf/
+server/auto/ssl/

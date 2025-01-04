@@ -1,4 +1,5 @@
 #include "include/config_commands.h"
+#include "include/ssl_manager.h"
 #include "server/include/config_manager.h"
 #include "server/include/log.h"
 #include "server/include/router.h"
@@ -80,6 +81,15 @@ void loadConfig(const fs::path &configPath) {
   }
 }
 
+void printUsage(const char *programName) {
+  LOG_INFO("Usage:");
+  LOG_INFO(programName + std::string(" [config_path]"));
+  LOG_INFO(programName + std::string(" --finalize"));
+  LOG_INFO("Options:");
+  LOG_INFO("[config_path]  : Path to configuration file (optional)");
+  LOG_INFO("--finalize     : Execute ACME certificate finalization");
+}
+
 int main(int argc, char *argv[]) {
   try {
     LOG_INFO("Server starting up");
@@ -92,6 +102,23 @@ int main(int argc, char *argv[]) {
 
     LOG_INFO("Initializing Router MIME types");
     server::Router::initializeMime();
+
+    if (argc > 1 && std::string(argv[1]) == "--finalize") {
+      LOG_INFO("Executing ACME certificate finalization");
+      loadConfig(projectRoot / "conf" / "config");
+
+      try {
+        if (SSLManager::getInstance().validateAndUpdateChallenge()) {
+          LOG_INFO("Certificate finalization completed successfully");
+        } else {
+          LOG_INFO("Certificate finalization failed");
+        }
+        return 0;
+      } catch (const std::exception &e) {
+        LOG_ERROR("Certificate finalization failed: " + std::string(e.what()));
+        return 1;
+      }
+    }
 
     fs::path configPath;
     if (argc > 1) {

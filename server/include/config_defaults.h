@@ -52,14 +52,16 @@ struct ServerConfig {
   int keepAliveCount      = 3;
   bool sslEnable          = false;
   bool sslEnableAutoGen   = true;
-  std::string sslKeyType  = "ED25519";
-  int sslKeyParam         = 0;
+  std::string sslKeyType  = "rsaEncryption";
+  int sslKeyParam         = 2048;
   std::string sslApiUrl   = "https://acme-staging-v02.api.letsencrypt.org/directory"; // staging
   std::string sslCertFile = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_.crt";
   std::string sslPublicKeyFile =
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_public.key";
   std::string sslPrivateKeyFile =
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_private.key";
+  std::string sslCertKeyFile =
+      std::string(kProjectRoot) + "server/auto/ssl/" + address + "_cert.key";
   std::string sslAccountUrlFile =
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_account.url";
   std::string sslLocationUrlFile =

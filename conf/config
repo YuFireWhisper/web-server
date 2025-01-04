@@ -126,7 +126,8 @@ http {
         #ssl_public_key public.key;
 
         # SSL 金鑰類型
-        #ssl_key_type RSA;
+        # 預設值：rsaEncryption
+        ssl_key_type rsaEncryption;
 
         # SSL 金鑰參數
         #ssl_key_param 2048;
