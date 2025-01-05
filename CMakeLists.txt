@@ -51,6 +51,9 @@ add_library(server
     server/src/router.cpp
     server/src/ssl_manager.cpp
     server/src/file_system.cpp
+    server/src/key_pair_manager.cpp
+    server/src/certificate_manager.cpp
+    server/src/acme_client.cpp
 )
 
 add_executable(web_server main.cpp)

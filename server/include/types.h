@@ -1,13 +1,17 @@
 #pragma once
 
 #include <cstdint>
+#include <curl/curl.h>
 #include <functional>
+#include <memory>
+#include <openssl/x509.h>
 #include <poll.h>
 #include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <openssl/evp.h>
 
 #include <sys/epoll.h>
 
@@ -175,5 +179,55 @@ inline bool operator&(CommandType first, CommandType second) {
       static_cast<std::underlying_type_t<CommandType>>(first)
       & static_cast<std::underlying_type_t<CommandType>>(second)
   );
+}
+
+inline void freeExtensionStack(STACK_OF(X509_EXTENSION) * stack) {
+  if (stack != nullptr) {
+    sk_X509_EXTENSION_pop_free(stack, X509_EXTENSION_free);
+  }
+}
+
+// struct evp_pkey_st;
+// using EVP_PKEY = evp_pkey_st;
+//
+// struct x509_st;
+// using X509 = x509_st;
+
+template <typename T, typename Deleter>
+using UniqueResource = std::unique_ptr<T, Deleter>;
+
+using UniqueBio       = UniqueResource<BIO, decltype(&BIO_free_all)>;
+using UniqueEvpKey    = UniqueResource<EVP_PKEY, decltype(&EVP_PKEY_free)>;
+using UniqueEvpKeyCtx = UniqueResource<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)>;
+using UniqueMdCtx     = UniqueResource<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>;
+using UniqueX509Req   = UniqueResource<X509_REQ, decltype(&X509_REQ_free)>;
+using UniqueX509Name  = UniqueResource<X509_NAME, decltype(&X509_NAME_free)>;
+using UniqueExtension = UniqueResource<X509_EXTENSION, decltype(&X509_EXTENSION_free)>;
+using UniqueExtensionStack =
+    UniqueResource<STACK_OF(X509_EXTENSION), decltype(&freeExtensionStack)>;
+using UniqueCurl     = UniqueResource<CURL, decltype(&curl_easy_cleanup)>;
+using UniqueCurlList = UniqueResource<curl_slist, decltype(&curl_slist_free_all)>;
+struct StoreDeleter {
+  void operator()(X509_STORE *store) { X509_STORE_free(store); }
+};
+
+struct StoreCtxDeleter {
+  void operator()(X509_STORE_CTX *ctx) { X509_STORE_CTX_free(ctx); }
+};
+
+using UniqueStore    = std::unique_ptr<X509_STORE, StoreDeleter>;
+using UniqueStoreCtx = std::unique_ptr<X509_STORE_CTX, StoreCtxDeleter>;
+
+inline UniqueBio createBioFile(const std::string &path, const char *mode) {
+  BIO *bio = BIO_new_file(path.c_str(), mode);
+  if (bio == nullptr) {
+    throw std::runtime_error("Failed to create BIO for file: " + path);
+  }
+  return { bio, BIO_free_all };
+}
+
+inline size_t writeCallback(void *contents, size_t size, size_t nmemb, std::string *userp) {
+  userp->append(static_cast<char *>(contents), size * nmemb);
+  return size * nmemb;
 }
 } // namespace server
