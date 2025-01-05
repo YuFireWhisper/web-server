@@ -1,6 +1,6 @@
 #include "include/key_pair_manager.h"
-#include "include/acme_client.h"
 
+#include "include/acme_client.h"
 #include "include/log.h"
 #include "include/types.h"
 
@@ -13,8 +13,30 @@ namespace server {
 KeyPairManager::KeyPairManager(const ServerConfig &config)
     : config_(config) {}
 
-std::unique_ptr<EVP_PKEY, void (*)(EVP_PKEY *)>
-KeyPairManager::generateKeyPair(std::string_view algorithm, int32_t parameter) {
+UniqueEvpKey KeyPairManager::generateKeyPair(int nid, int32_t parameter) {
+  auto ctx = UniqueEvpKeyCtx(EVP_PKEY_CTX_new_id(nid, nullptr), EVP_PKEY_CTX_free);
+
+  if (!ctx || EVP_PKEY_keygen_init(ctx.get()) <= 0) {
+    throw std::runtime_error("Failed to initialize key generation context");
+  }
+
+  if (nid == EVP_PKEY_RSA && parameter > 0) {
+    if (parameter < 2048) {
+      throw std::runtime_error("RSA key size must be at least 2048 bits");
+    }
+
+    EVP_PKEY_CTX_set_rsa_keygen_bits(ctx.get(), parameter);
+  }
+
+  EVP_PKEY *key = nullptr;
+  if (EVP_PKEY_keygen(ctx.get(), &key) <= 0) {
+    throw std::runtime_error("Failed to generate key pair");
+  }
+
+  return { key, EVP_PKEY_free };
+}
+
+UniqueEvpKey KeyPairManager::generateKeyPair(std::string_view algorithm, int32_t parameter) {
   auto ctx = UniqueEvpKeyCtx(
       EVP_PKEY_CTX_new_from_name(nullptr, std::string(algorithm).data(), nullptr),
       EVP_PKEY_CTX_free
@@ -75,6 +97,45 @@ void KeyPairManager::saveKeyPair(const EVP_PKEY *keyPair) const {
   }
 }
 
+void KeyPairManager::savePublicKey(const EVP_PKEY *keyPair, const std::string &path) {
+  if (std::filesystem::exists(path)) {
+    throw std::runtime_error("Public key file already exists");
+  }
+
+  const auto bio = createBioFile(path, "w");
+
+  if (PEM_write_bio_PUBKEY(bio.get(), const_cast<EVP_PKEY *>(keyPair)) != 1) {
+    throw std::runtime_error("Failed to write public key");
+  }
+}
+
+void KeyPairManager::savePrivateKey(const EVP_PKEY *keyPair, const std::string &path) {
+  if (std::filesystem::exists(path)) {
+    throw std::runtime_error("Private key file already exists");
+  }
+
+  const auto bio = createBioFile(path, "w");
+
+  std::filesystem::permissions(
+      path,
+      std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+      std::filesystem::perm_options::replace
+  );
+
+  if (PEM_write_bio_PrivateKey(
+          bio.get(),
+          const_cast<EVP_PKEY *>(keyPair),
+          nullptr,
+          nullptr,
+          0,
+          nullptr,
+          nullptr
+      )
+      != 1) {
+    throw std::runtime_error("Failed to write private key");
+  }
+}
+
 void KeyPairManager::saveCertificatePrivateKey(const EVP_PKEY *keyPair, const std::string &path) {
   LOG_DEBUG("Saving private key to: " + path);
 
@@ -104,6 +165,10 @@ void KeyPairManager::saveCertificatePrivateKey(const EVP_PKEY *keyPair, const st
       == 0) {
     throw std::runtime_error("Failed to write private key");
   }
+}
+
+bool KeyPairManager::verifyKeyPair(const std::string &pubPath, const std::string &priPath) {
+  return verifyKeyPair(loadPublicKey(pubPath).get(), loadPrivateKey(priPath).get());
 }
 
 bool KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey) {
@@ -167,7 +232,7 @@ bool KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *pr
          > 0;
 }
 
-std::unique_ptr<EVP_PKEY, void (*)(EVP_PKEY *)> KeyPairManager::loadPublicKey(std::string_view path
+UniqueEvpKey KeyPairManager::loadPublicKey(std::string_view path
 ) {
   auto bio      = createBioFile(std::string(path), "r");
   EVP_PKEY *key = PEM_read_bio_PUBKEY(bio.get(), nullptr, nullptr, nullptr);
@@ -177,7 +242,7 @@ std::unique_ptr<EVP_PKEY, void (*)(EVP_PKEY *)> KeyPairManager::loadPublicKey(st
   return { key, EVP_PKEY_free };
 }
 
-std::unique_ptr<EVP_PKEY, void (*)(EVP_PKEY *)> KeyPairManager::loadPrivateKey(std::string_view path
+UniqueEvpKey KeyPairManager::loadPrivateKey(std::string_view path
 ) {
   auto bio      = createBioFile(std::string(path), "r");
   EVP_PKEY *key = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);

@@ -187,12 +187,6 @@ inline void freeExtensionStack(STACK_OF(X509_EXTENSION) * stack) {
   }
 }
 
-// struct evp_pkey_st;
-// using EVP_PKEY = evp_pkey_st;
-//
-// struct x509_st;
-// using X509 = x509_st;
-
 template <typename T, typename Deleter>
 using UniqueResource = std::unique_ptr<T, Deleter>;
 
