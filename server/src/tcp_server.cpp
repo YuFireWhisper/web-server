@@ -122,7 +122,8 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
   );
 
   if (sslConfig_.enabled) {
-    initializeNewSSLConnection(conn);
+    LOG_DEBUG("SSL enabled for connection " + connName);
+    ioLoop->runInLoop([this, conn]() { initializeNewSSLConnection(conn); });
   }
 
   connections_[connName] = conn;
@@ -130,6 +131,12 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
 }
 
 void TcpServer::initializeNewSSLConnection(const TcpConnectionPtr &conn) const {
+  EventLoop *ioLoop = conn->getLoop();
+  if (!ioLoop->isInLoopThread()) {
+    ioLoop->runInLoop([this, conn]() { initializeNewSSLConnection(conn); });
+    return;
+  }
+
   try {
     conn->enableSSL(sslConfig_.certFile, sslConfig_.keyFile);
     conn->startSSLHandshake(true);

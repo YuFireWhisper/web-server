@@ -3,6 +3,7 @@
 #include "buffer.h"
 #include "channel.h"
 #include "event_loop.h"
+#include "include/log.h"
 #include "inet_address.h"
 #include "socket.h"
 #include "types.h"
@@ -94,7 +95,13 @@ private:
   void shutdownInLoop();
   void forceCloseInLoop();
 
-  void setState(State state) { state_ = state; }
+  void setState(State state) {
+    LOG_DEBUG(
+        "TcpConnection " + name_ + " state change from " + std::to_string(static_cast<int>(state_))
+        + " to " + std::to_string(static_cast<int>(state))
+    );
+    state_ = state;
+  }
 
   void handleSSLHandshake();
   void continueSSLHandshake();

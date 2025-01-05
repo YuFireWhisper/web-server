@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <openssl/err.h>
 #include <string_view>
 #include <unistd.h>
 
@@ -67,15 +68,18 @@ void TcpConnection::enableSSL(const std::string &certFile, const std::string &ke
 void TcpConnection::startSSLHandshake(bool isServer) {
   loop_->assertInLoopThread();
   if (!socket_ || !socket_->isSSLEnabled()) {
+    LOG_ERROR("SSL not properly initialized for connection " + name_);
     return;
   }
 
+  LOG_INFO(
+      "Starting SSL handshake for connection " + name_ + (isServer ? " (server)" : " (client)")
+  );
   isServer_             = isServer;
   state_                = State::kSSLHandshaking;
   sslHandshakeComplete_ = false;
 
   channel_->enableReading();
-  channel_->enableWriting();
 
   loop_->queueInLoop([this] { handleSSLHandshake(); });
 }
@@ -84,16 +88,33 @@ void TcpConnection::handleSSLHandshake() {
   loop_->assertInLoopThread();
 
   try {
+    int ret;
     if (isServer_) {
-      socket_->acceptSSL();
+      ret = SSL_accept(socket_->getSSL());
     } else {
-      socket_->connectSSL();
+      ret = SSL_connect(socket_->getSSL());
     }
+
+    if (ret <= 0) {
+      int err = SSL_get_error(socket_->getSSL(), ret);
+      if (err == SSL_ERROR_WANT_READ) {
+        channel_->enableReading();
+        channel_->disableWriting();
+        return;
+      }
+      if (err == SSL_ERROR_WANT_WRITE) {
+        channel_->enableWriting();
+        channel_->disableReading();
+        return;
+      }
+      throw SocketException("SSL handshake", ERR_get_error());
+    }
+
     sslHandshakeComplete_ = true;
     state_                = State::kConnected;
 
-    channel_->disableWriting();
     channel_->enableReading();
+    channel_->disableWriting();
 
     if (connectionCallback_) {
       connectionCallback_(shared_from_this());
@@ -262,7 +283,6 @@ void TcpConnection::handleClose() {
     setState(State::kDisconnected);
     channel_->disableAll();
 
-    // 保存 shared_ptr 以確保在回調期間 TcpConnection 不會被銷毀
     auto guardThis = shared_from_this();
 
     if (connectionCallback_) {
@@ -273,7 +293,6 @@ void TcpConnection::handleClose() {
       channel_->remove();
     }
 
-    // 將 closeCallback_ 延遲到下一個事件循環執行
     if (closeCallback_) {
       loop_->queueInLoop([guardThis, cb = closeCallback_]() { cb(guardThis); });
     }
@@ -351,6 +370,7 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
 }
 
 void TcpConnection::connectEstablished() {
+  LOG_DEBUG("Entering connectEstablished for " + name_);
   loop_->assertInLoopThread();
   assert(state_ == State::kConnecting);
   setState(State::kConnected);

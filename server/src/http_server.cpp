@@ -45,6 +45,13 @@ HttpServer::HttpServer(
   Router::initializeMime();
 }
 
+HttpServer::HttpServer(EventLoop* loop, const InetAddress& listenAddr, const ServerConfig& config)
+  : HttpServer(loop, listenAddr, config.address, config.reusePort) {
+  if (config.sslEnable) {
+    server_.enableSSL(config.sslCertFile, config.sslCertKeyFile);
+  }
+}
+
 void HttpServer::onConnection(const TcpConnectionPtr &conn) {
   if (conn->connected()) {
     auto context     = std::make_shared<HttpSessionContext>();

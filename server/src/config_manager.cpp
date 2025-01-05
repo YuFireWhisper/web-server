@@ -361,7 +361,7 @@ void ConfigManager::handleServerEnd(ServerContext *ctx) {
 
   EventLoop loop;
   InetAddress addr(conf->AddressFamily, conf->address, conf->port);
-  HttpServer server(&loop, addr, conf->address, conf->reusePort);
+  HttpServer server(&loop, addr, *conf);
   *ctx->conf = ServerConfig();
   server.start();
   loop.loop();

@@ -122,6 +122,37 @@ void KeyPairManager::saveKeyPair(const EVP_PKEY *keyPair) const {
   }
 }
 
+void KeyPairManager::saveCertificatePrivateKey(const EVP_PKEY *keyPair, const std::string &path) {
+  LOG_DEBUG("Saving private key to: " + path);
+
+  if (std::filesystem::exists(path)) {
+    throw std::runtime_error("Private key file already exists");
+  }
+
+  std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+
+  auto bio = createBioFile(path, "w");
+
+  std::filesystem::permissions(
+      path,
+      std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+      std::filesystem::perm_options::replace
+  );
+
+  if (PEM_write_bio_PrivateKey(
+          bio.get(),
+          const_cast<EVP_PKEY *>(keyPair),
+          nullptr,
+          nullptr,
+          0,
+          nullptr,
+          nullptr
+      )
+      == 0) {
+    throw std::runtime_error("Failed to write private key");
+  }
+}
+
 bool KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey) {
   static constexpr std::string_view TEST_MESSAGE = "TestMessage";
 
@@ -572,94 +603,94 @@ void AcmeClient::storeUrls(
   finalizeFile << finalize;
 }
 
-bool AcmeClient::requestChallengeCompletion() const {
-  LOG_DEBUG("Requesting challenge completion");
+bool AcmeClient::requestChallengeCompletion(const std::string &type) const {
+  LOG_DEBUG("Requesting challenge completion for type: " + type);
 
   auto key        = KeyPairManager::loadPrivateKey(config_.sslPrivateKeyFile);
   auto accountUrl = loadUrlFromFile(config_.sslAccountUrlFile);
-  auto authzUrl   = loadUrlFromFile(config_.sslChallengeUrlFile);
+  auto locationUrl   = loadUrlFromFile(config_.sslLocationUrlFile);
 
-  std::set<std::string> triedTypes;
-  const int MAX_CHALLENGE_TYPES = 2;
-  const int MAX_STATUS_CHECKS   = 10;
-  const int STATUS_CHECK_DELAY  = 3;
+  auto locationJson =
+      nlohmann::json::parse(sendRequest(locationUrl, {}, { "Content-Type: application/jose+json" }));
 
-  while (triedTypes.size() < MAX_CHALLENGE_TYPES) {
-    auto authzJson =
-        nlohmann::json::parse(sendRequest(authzUrl, {}, { "Content-Type: application/jose+json" }));
+  if (!locationJson.contains("status") || locationJson.at("status").get<std::string>() == "valid") {
+    LOG_DEBUG("Location is already valid");
+    return true;
+  }
 
-    if (!authzJson.contains("challenges")) {
-      return false;
-    }
+  const auto &authUrls = locationJson.at("authorizations");
+  if (authUrls.empty()) {
+    LOG_DEBUG("No authorization URLs found");
+    return false;
+  }
+  LOG_DEBUG("Authorization URL: " + authUrls[0].get<std::string>());
 
-    const auto &challenges = authzJson.at("challenges");
-    auto challengeIt       = std::ranges::find_if(challenges, [&triedTypes](const auto &challenge) {
-      const auto &type = challenge.at("type").template get<std::string>();
-      return triedTypes.find(type) == triedTypes.end();
-    });
+  auto authzJson = nlohmann::json::parse(
+    sendRequest(std::string(authUrls[0]), {}, { "Content-Type: application/jose+json" })
+  );
 
-    if (challengeIt == challenges.end()) {
-      break;
-    }
+  if (!authzJson.contains("challenges")) {
+    LOG_DEBUG("No challenges found in authorization response");
+    return false;
+  }
 
-    const auto &challenge    = *challengeIt;
-    const auto challengeType = challenge.at("type").get<std::string>();
-    const auto challengeUrl  = challenge.at("url").get<std::string>();
-    triedTypes.insert(challengeType);
+  const auto &challenges = authzJson.at("challenges");
 
-    if (challengeType == "tls-alpn-01") {
-      continue;
-    }
+  auto matchingChallenge = std::ranges::find_if(challenges, [&type](const auto &challenge) {
+    return challenge.at("type").template get<std::string>() == type;
+  });
 
-    LOG_DEBUG("Trying challenge type: " + challengeType);
+  if (matchingChallenge == challenges.end()) {
+    LOG_DEBUG("Challenge type " + type + " not found");
+    return false;
+  }
 
-    if (challenge.at("status").get<std::string>() == "valid") {
-      LOG_DEBUG("Challenge " + challengeType + " is already valid");
+  if (matchingChallenge->at("status").get<std::string>() == "valid") {
+    LOG_DEBUG("Challenge " + type + " is already valid");
+    return true;
+  }
+
+  try {
+    const auto challengeUrl = matchingChallenge->at("url").get<std::string>();
+    auto nonce              = getNonce(urlCache_.at(config_.sslApiUrl).newNonce);
+    const auto header =
+        createHeaderWithKid(getAlgorithmId(config_.sslKeyType), accountUrl, nonce, challengeUrl);
+
+    auto jwtToken = signJwt(header, nlohmann::json::object(), key.get());
+    sendRequest(
+        challengeUrl,
+        createRequestBody(jwtToken).dump(),
+        { "Content-Type: application/jose+json" }
+    );
+
+    auto statusJson = nlohmann::json::parse(
+        sendRequest(challengeUrl, {}, { "Content-Type: application/jose+json" })
+    );
+
+    const auto status = statusJson.at("status").get<std::string>();
+    if (status == "valid") {
+      LOG_DEBUG("Challenge " + type + " completed successfully");
       return true;
     }
 
-    try {
-      auto nonce = getNonce(urlCache_.at(config_.sslApiUrl).newNonce);
-      const auto header =
-          createHeaderWithKid(getAlgorithmId(config_.sslKeyType), accountUrl, nonce, challengeUrl);
-
-      auto jwtToken = signJwt(header, nlohmann::json::object(), key.get());
-      sendRequest(
-          challengeUrl,
-          createRequestBody(jwtToken).dump(),
-          { "Content-Type: application/jose+json" }
-      );
-
-      for (int i = 0; i < MAX_STATUS_CHECKS; i++) {
-        auto statusJson = nlohmann::json::parse(
-            sendRequest(challengeUrl, {}, { "Content-Type: application/jose+json" })
+    if (status == "invalid") {
+      if (statusJson.contains("error")) {
+        LOG_DEBUG(
+            "Challenge " + type
+            + " failed: " + statusJson.at("error").at("detail").get<std::string>()
         );
-
-        const auto status = statusJson.at("status").get<std::string>();
-        if (status == "valid") {
-          LOG_DEBUG("Challenge " + challengeType + " completed successfully");
-          return true;
-        }
-
-        if (status == "invalid") {
-          if (statusJson.contains("error")) {
-            LOG_DEBUG(
-                "Challenge " + challengeType
-                + " failed: " + statusJson.at("error").at("detail").get<std::string>()
-            );
-          }
-          break;
-        }
-
-        std::this_thread::sleep_for(std::chrono::seconds(STATUS_CHECK_DELAY));
       }
-    } catch (const std::exception &e) {
-      LOG_DEBUG("Challenge " + challengeType + " failed: " + std::string(e.what()));
+      return false;
     }
+
+  } catch (const std::exception &e) {
+    LOG_DEBUG("Challenge " + type + " failed: " + std::string(e.what()));
+    return false;
   }
 
   return false;
 }
+
 void AcmeClient::requestFinalization() const {
   LOG_DEBUG("Requesting finalization");
 
@@ -675,6 +706,8 @@ void AcmeClient::requestFinalization() const {
   std::string certificateUrl;
   if (status != "valid") {
     auto certificateKey = KeyPairManager::generateKeyPair(config_.sslKeyType, config_.sslKeyParam);
+
+    KeyPairManager::saveCertificatePrivateKey(certificateKey.get(), config_.sslCertKeyFile);
 
     auto accountKey  = KeyPairManager::loadPrivateKey(config_.sslPrivateKeyFile);
     auto accountUrl  = loadUrlFromFile(config_.sslAccountUrlFile);
@@ -699,6 +732,9 @@ void AcmeClient::requestFinalization() const {
   }
 
   downloadCertificate(certificateUrl);
+  if (!CertificateManager::verifyCertificate(config_.sslCertFile, config_.sslCertKeyFile)) {
+    throw std::runtime_error("Certificate verification failed");
+  }
 }
 
 nlohmann::json AcmeClient::createHeaderWithKid(
@@ -1118,6 +1154,14 @@ void AcmeClient::displayChallengeInstructions(const std::string &type, const std
   LOG_INFO("=====================================================\n");
 }
 
+std::string AcmeClient::getOrderStatus() {
+  nlohmann::json responseJson = nlohmann::json::parse(
+      sendRequest(loadUrlFromFile(config_.sslLocationUrlFile), {}, { "Content-Type: application/jose+json" })
+  );
+
+  return responseJson.at("status").get<std::string>();
+}
+
 SSLManager &SSLManager::getInstance() {
   static SSLManager instance;
   return instance;
@@ -1192,13 +1236,17 @@ std::string SSLManager::getPrivateKeyPath(std::string_view address) const {
   return it->second.sslPrivateKeyFile;
 }
 
-bool SSLManager::validateAndUpdateChallenge() {
-  if (!acmeClient_->requestChallengeCompletion()) {
+bool SSLManager::validateAndUpdateChallenge(const std::string &type) {
+  LOG_DEBUG("Validating and updating challenge for type: " + type);
+  if (!acmeClient_->requestChallengeCompletion(type)) {
     return false;
   }
 
   try {
     acmeClient_->requestFinalization();
+    std::filesystem::remove(currentConfig_->sslLocationUrlFile);
+    std::filesystem::remove(currentConfig_->sslChallengeUrlFile);
+    std::filesystem::remove(currentConfig_->sslFinalizeUrlFile);
     return true;
   } catch (const std::exception &e) {
     return false;
@@ -1225,12 +1273,19 @@ CertificateManager::CertificateManager(const ServerConfig &config)
 
 void CertificateManager::ensureValidCertificate() const {
   if (!std::filesystem::exists(config_.sslCertFile)) {
+    LOG_DEBUG("Certificate file not found");
     requestNewCertificate();
     return;
   }
+  LOG_DEBUG("Certificate file found");
 
   auto cert = loadCertificate(config_.sslCertFile);
-  if (!verifyCertificate(config_.sslCertFile, config_.sslPrivateKeyFile)
+
+  if (!verifyCertificate(config_.sslCertFile, config_.sslCertKeyFile)) {
+    LOG_DEBUG("Certificate verification failed");
+  }
+
+  if (!verifyCertificate(config_.sslCertFile, config_.sslCertKeyFile)
       || !verifyCertificateExpiration(cert.get(), config_.sslRenewDays)) {
     if (!config_.sslEnableAutoGen) {
       throw std::runtime_error("Invalid or expired certificate and auto-generation is disabled");
@@ -1304,13 +1359,25 @@ void CertificateManager::requestNewCertificate() const {
     acmeClient.registerAccount();
   }
 
-  if (std::filesystem::exists(config_.sslChallengeUrlFile)) {
-    if (acmeClient.requestChallengeCompletion()) {
-      acmeClient.requestFinalization();
-    }
-  } else {
+  if (!std::filesystem::exists(config_.sslLocationUrlFile)) {
     acmeClient.requestNewOrder();
   }
-}
 
+  std::string status = acmeClient.getOrderStatus();
+  if (status == "valid") {
+    return;
+  }
+
+  if (status == "processing") {
+    LOG_INFO("Certificate request is still processing");
+    return;
+  }
+
+  if (status == "pending") {
+    LOG_INFO("Certificate request is pending");
+    return;
+  }
+
+  throw std::runtime_error("Invalid order status: " + status);
+}
 } // namespace server

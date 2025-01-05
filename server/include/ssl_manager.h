@@ -34,7 +34,7 @@ public:
   void addServer(ServerConfig &config);
   std::string getCertificatePath(std::string_view address) const;
   std::string getPrivateKeyPath(std::string_view address) const;
-  bool validateAndUpdateChallenge();
+  bool validateAndUpdateChallenge(const std::string &type);
 
 private:
   SSLManager();
@@ -58,6 +58,7 @@ public:
   static std::unique_ptr<EVP_PKEY, void (*)(EVP_PKEY *)>
   generateKeyPair(std::string_view algorithm, int32_t parameter);
   void saveKeyPair(const EVP_PKEY *keyPair) const;
+  static void saveCertificatePrivateKey(const EVP_PKEY *keyPair, const std::string &path);
   static bool verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey);
 
   static std::unique_ptr<EVP_PKEY, void (*)(EVP_PKEY *)> loadPublicKey(std::string_view path);
@@ -99,7 +100,7 @@ public:
 
   void registerAccount() const;
   void requestNewOrder() const;
-  [[nodiscard]] bool requestChallengeCompletion() const;
+  [[nodiscard]] bool requestChallengeCompletion(const std::string &type) const;
   void requestFinalization() const;
 
   static int32_t getAlgorithmId(std::string_view algorithm);
@@ -115,6 +116,7 @@ public:
       const std::vector<std::string> &headers
   );
   static std::string sendHeadRequest(std::string_view url, const std::vector<std::string> &headers);
+  std::string getOrderStatus();
 
   static inline std::unordered_map<std::string, AcmeUrls> urlCache_;
 

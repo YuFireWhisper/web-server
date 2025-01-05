@@ -104,11 +104,23 @@ int main(int argc, char *argv[]) {
     server::Router::initializeMime();
 
     if (argc > 1 && std::string(argv[1]) == "--finalize") {
-      LOG_INFO("Executing ACME certificate finalization");
+      if (argc < 3) {
+        LOG_ERROR("Usage: " + std::string(argv[0]) + " --finalize <challenge-type>");
+        return 1;
+      }
+
+      std::string challengeType = argv[2];
+
+      if (challengeType != "dns-01" && challengeType != "http-01") {
+        LOG_ERROR("Invalid challenge type. Supported types: dns-01, http-01");
+        return 1;
+      }
+
+      LOG_INFO("Executing ACME certificate finalization with " + challengeType);
       loadConfig(projectRoot / "conf" / "config");
 
       try {
-        if (SSLManager::getInstance().validateAndUpdateChallenge()) {
+        if (SSLManager::getInstance().validateAndUpdateChallenge(challengeType)) {
           LOG_INFO("Certificate finalization completed successfully");
         } else {
           LOG_INFO("Certificate finalization failed");

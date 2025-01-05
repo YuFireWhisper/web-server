@@ -1,5 +1,6 @@
 #pragma once
 
+#include "include/config_defaults.h"
 #include "include/http_request.h"
 #include "include/router.h"
 #include "include/tcp_connection.h"
@@ -23,6 +24,8 @@ public:
     const std::string &name,
     bool reusePort
   );
+
+  HttpServer(EventLoop* loop, const InetAddress& listenAddr, const ServerConfig& config);
 
   ~HttpServer() = default;
 
