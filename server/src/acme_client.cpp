@@ -536,7 +536,7 @@ int AcmeClient::verfiyChallenge(const std::string &type) {
 }
 
 void AcmeClient::handleOrderPending(const std::string &authzUrl, const std::string &type) {
-  auto authzResponse = sendRequest_(authzUrl, {}, { "Content-Type: application/jose+json" });
+  auto authzResponse = sendRequest(authzUrl);
   auto authzJson     = nlohmann::json::parse(authzResponse);
 
   if (!authzJson.contains("challenges")) {
@@ -556,11 +556,7 @@ void AcmeClient::handleOrderPending(const std::string &authzUrl, const std::stri
   const std::string challengeUrl = matchingChallenge->at("url").get<std::string>();
   const auto header              = createHeaderWithKid(challengeUrl);
   const auto jwtToken            = signJwt(header, nlohmann::json::object(), accountPriKey_.get());
-  sendRequest_(
-      challengeUrl,
-      createRequestBody(jwtToken).dump(),
-      { "Content-Type: application/jose+json" }
-  );
+  sendRequest(challengeUrl, createRequestBody(jwtToken).dump());
 }
 
 void AcmeClient::handleOrderReady(const std::string &finalizeUrl) {
@@ -571,11 +567,7 @@ void AcmeClient::handleOrderReady(const std::string &finalizeUrl) {
   const auto payload = createFinalizationRequestPayload(certificateKey.get());
   auto jwtToken      = signJwt(header, payload, accountPriKey_.get());
 
-  sendRequest_(
-      finalizeUrl,
-      createRequestBody(jwtToken).dump(),
-      { "Content-Type: application/jose+json" }
-  );
+  sendRequest(finalizeUrl, createRequestBody(jwtToken).dump());
 }
 
 bool AcmeClient::requestChallengeCompletion(const std::string &type) {
@@ -584,8 +576,7 @@ bool AcmeClient::requestChallengeCompletion(const std::string &type) {
   auto accountUrl = FileSystem::readLineFromFile(config_.sslUrlsFile, ACCOUNT_URL_INDEX);
   auto orderUrl   = FileSystem::readLineFromFile(config_.sslUrlsFile, ORDER_URL_INDEX);
 
-  auto orderJson =
-      nlohmann::json::parse(sendRequest_(orderUrl, {}, { "Content-Type: application/jose+json" }));
+  auto orderJson = nlohmann::json::parse(sendRequest(orderUrl));
 
   if (!orderJson.contains("status")) {
     throw std::runtime_error("Invalid order response");
@@ -610,9 +601,7 @@ bool AcmeClient::requestChallengeCompletion(const std::string &type) {
 
   LOG_DEBUG("Authorization URL: " + authUrls[0].get<std::string>());
 
-  auto authzJson = nlohmann::json::parse(
-      sendRequest_(std::string(authUrls[0]), {}, { "Content-Type: application/jose+json" })
-  );
+  auto authzJson = nlohmann::json::parse(sendRequest(std::string(authUrls[0])));
 
   if (!authzJson.contains("challenges")) {
     LOG_DEBUG("No challenges found in authorization response");
@@ -640,15 +629,9 @@ bool AcmeClient::requestChallengeCompletion(const std::string &type) {
     const auto header              = createHeaderWithKid(accountUrl);
 
     auto jwtToken = signJwt(header, nlohmann::json::object(), accountPriKey_.get());
-    sendRequest_(
-        challengeUrl,
-        createRequestBody(jwtToken).dump(),
-        { "Content-Type: application/jose+json" }
-    );
+    sendRequest(challengeUrl, createRequestBody(jwtToken).dump());
 
-    auto statusJson = nlohmann::json::parse(
-        sendRequest_(challengeUrl, {}, { "Content-Type: application/jose+json" })
-    );
+    auto statusJson = nlohmann::json::parse(sendRequest(challengeUrl));
 
     const auto status = statusJson.at("status").get<std::string>();
     if (status == "valid") {
@@ -674,14 +657,10 @@ bool AcmeClient::requestChallengeCompletion(const std::string &type) {
   return false;
 }
 
-void AcmeClient::requestFinalization() const {
+void AcmeClient::requestFinalization() {
   LOG_DEBUG("Requesting finalization");
 
-  auto reqeust = sendRequest_(
-      loadUrlFromFile(config_.sslLocationUrlFile),
-      {},
-      { "Content-Type: application/jose+json" }
-  );
+  auto reqeust = sendRequest(loadUrlFromFile(config_.sslLocationUrlFile));
 
   auto requestJson  = nlohmann::json::parse(reqeust);
   const auto status = requestJson.at("status").get<std::string>();
@@ -690,15 +669,12 @@ void AcmeClient::requestFinalization() const {
   if (status != "valid") {
     auto certificateKey = KeyPairManager::generateKeyPair(config_.sslKeyType, config_.sslKeyParam);
 
-    KeyPairManager::saveCertificatePrivateKey(certificateKey.get(), config_.sslCertKeyFile);
+    KeyPairManager::savePrivateKey(certificateKey.get(), config_.sslCertKeyFile);
 
     auto accountKey  = KeyPairManager::loadPrivateKey(config_.sslPrivateKeyFile);
-    auto accountUrl  = loadUrlFromFile(config_.sslAccountUrlFile);
     auto finalizeUrl = loadUrlFromFile(config_.sslFinalizeUrlFile);
-    auto nonce       = getNonce(urlCache_.at(config_.sslApiUrl).newNonce);
 
-    const auto header =
-        createHeaderWithKid_(getAlgorithmId(config_.sslKeyType), accountUrl, nonce, finalizeUrl);
+    const auto header  = createHeaderWithKid(finalizeUrl);
     const auto payload = createFinalizationRequestPayload(certificateKey.get());
     auto jwtToken      = signJwt(header, payload, accountKey.get());
 
@@ -715,7 +691,12 @@ void AcmeClient::requestFinalization() const {
   }
 
   downloadCertificate(certificateUrl);
-  if (!CertificateManager::verifyCertificate(config_.sslCertFile, config_.sslCertKeyFile)) {
+  if (CertificateManager::verifyCertificate(
+          config_.sslCertFile,
+          config_.sslCertKeyFile,
+          config_.sslRenewDays
+      )
+      == 0) {
     throw std::runtime_error("Certificate verification failed");
   }
 }
@@ -1262,11 +1243,4 @@ void AcmeClient::displayChallengeInstructions(const std::string &type, const std
   LOG_INFO("=====================================================\n");
 }
 
-std::string AcmeClient::getOrderStatus() {
-  nlohmann::json responseJson = nlohmann::json::parse(
-      sendRequest(FileSystem::readLineFromFile(config_.sslUrlsFile, ORDER_URL_INDEX))
-  );
-
-  return responseJson.at("status").get<std::string>();
-}
 } // namespace server

@@ -141,30 +141,7 @@ UniqueX509 CertificateManager::loadCertificate(std::string_view path) {
 void CertificateManager::requestNewCertificate() const {
   AcmeClient acmeClient(config_);
 
-  if (!std::filesystem::exists(config_.sslAccountUrlFile)) {
-    acmeClient.registerAccount();
-  }
-
-  if (!std::filesystem::exists(config_.sslLocationUrlFile)) {
-    acmeClient.requestNewOrder();
-  }
-
-  std::string status = acmeClient.getOrderStatus();
-  if (status == "valid") {
-    return;
-  }
-
-  if (status == "processing") {
-    LOG_INFO("Certificate request is still processing");
-    return;
-  }
-
-  if (status == "pending") {
-    LOG_INFO("Certificate request is pending");
-    return;
-  }
-
-  throw std::runtime_error("Invalid order status: " + status);
+  acmeClient.createCertificate();
 }
 
 } // namespace server

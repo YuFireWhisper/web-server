@@ -42,7 +42,7 @@ public:
   [[deprecated]] void registerAccount();
   [[deprecated]] void requestNewOrder();
   bool requestChallengeCompletion(const std::string &type);
-  void requestFinalization() const;
+  void requestFinalization();
 
   static int32_t getAlgorithmId(std::string_view algorithm);
   static int32_t getAlgorithmId(const EVP_PKEY *key);
@@ -71,8 +71,6 @@ public:
 
   static AcmeUrls getUrls(const std::string &apiUrl);
   [[deprecated]] static inline std::unordered_map<std::string, AcmeUrls> urlCache_;
-
-  std::string getOrderStatus();
 
 private:
   std::string getAccountUrl();
