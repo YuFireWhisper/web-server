@@ -12,6 +12,54 @@ namespace server {
 CertificateManager::CertificateManager(const ServerConfig &config)
     : config_(config) {}
 
+int CertificateManager::verifyCertificate(
+    const std::string &certPath,
+    const std::string &keyPath,
+    int renewDay
+) {
+  auto store    = UniqueStore(X509_STORE_new());
+  auto storeCtx = UniqueStoreCtx(X509_STORE_CTX_new());
+
+  if (!store || !storeCtx) {
+    return CERTIFICATE_INVALID;
+  }
+
+  auto cert = loadCertificate(certPath);
+  if (X509_STORE_CTX_init(storeCtx.get(), store.get(), cert.get(), nullptr) != 1) {
+    return CERTIFICATE_INVALID;
+  }
+
+  if (X509_verify_cert(storeCtx.get()) != 1) {
+    return CERTIFICATE_INVALID;
+  }
+
+  auto key    = KeyPairManager::loadPrivateKey(keyPath);
+  auto pubKey = UniqueEvpKey(X509_get_pubkey(cert.get()), EVP_PKEY_free);
+  if (!key || !pubKey || !KeyPairManager::verifyKeyPair(pubKey.get(), key.get())) {
+    return KEY_PAIR_INVALID;
+  }
+
+  const ASN1_TIME *notAfter = X509_get0_notAfter(cert.get());
+  if (notAfter == nullptr) {
+    return CERTIFICATE_INVALID;
+  }
+
+  int days;
+  int seconds;
+  if (ASN1_TIME_diff(&days, &seconds, nullptr, notAfter) == 0) {
+    return CERTIFICATE_INVALID;
+  }
+  if (days < 0) {
+    return CERTIFICATE_INVALID;
+  }
+
+  if (days <= renewDay) {
+    return CERTIFICATE_NEED_UPDATE;
+  }
+
+  return CERTIFICATE_VALID;
+}
+
 void CertificateManager::ensureValidCertificate() const {
   if (!std::filesystem::exists(config_.sslCertFile)) {
     LOG_DEBUG("Certificate file not found");
@@ -79,11 +127,8 @@ bool CertificateManager::verifyCertificateExpiration(
   return days > static_cast<int>(renewBeforeDays);
 }
 
-std::unique_ptr<X509, void (*)(X509 *)> CertificateManager::loadCertificate(std::string_view path) {
-  auto bio = UniqueBio(BIO_new_file(std::string(path).c_str(), "r"), BIO_free_all);
-  if (!bio) {
-    throw std::runtime_error("Failed to open certificate file: " + std::string(path));
-  }
+UniqueX509 CertificateManager::loadCertificate(std::string_view path) {
+  auto bio = createBioFile(std::string(path), "r");
 
   X509 *cert = PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr);
   if (cert == nullptr) {

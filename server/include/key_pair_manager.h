@@ -6,7 +6,7 @@ namespace server {
 
 class KeyPairManager {
 public:
-  explicit KeyPairManager(const ServerConfig &config);
+  [[deprecated]]explicit KeyPairManager(const ServerConfig &config);
 
   static UniqueEvpKey generateKeyPair(int nid, int32_t parameter);
   static UniqueEvpKey generateKeyPair(std::string_view algorithm, int32_t parameter);

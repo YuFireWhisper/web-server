@@ -62,6 +62,7 @@ struct ServerConfig {
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_private.key";
   std::string sslCertKeyFile =
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_cert.key";
+  std::string sslUrlsFile = std::string(kProjectRoot) + "server/auto/ssl/" + address + "_urls.url";
   std::string sslAccountUrlFile =
       std::string(kProjectRoot) + "server/auto/ssl/" + address + "_account.url";
   std::string sslLocationUrlFile =

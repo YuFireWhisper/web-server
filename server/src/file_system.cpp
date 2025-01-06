@@ -1,6 +1,7 @@
 #include "include/file_system.h"
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 namespace server {
@@ -19,5 +20,72 @@ std::string FileSystem::toAbsolutePath(const std::string &path) {
   }
 
   return std::filesystem::absolute(path);
+}
+
+void FileSystem::addLineToFile(const std::string &path, const std::string &line, size_t index) {
+  if (isNoneExist(path)) {
+    throw std::runtime_error("File not exist: " + path);
+  }
+
+  std::fstream file(path, std::ios::in | std::ios::out);
+  if (!file) {
+    throw std::runtime_error("Failed to open file: " + path);
+  }
+
+  long position = static_cast<long>(index * LINE_LENGTH);
+  if (position < 0) {
+    throw std::runtime_error("Invalid index: negative position");
+  }
+
+  file.seekp(position);
+  if (file.fail()) {
+    throw std::runtime_error("Failed to seek to position: " + std::to_string(position));
+  }
+
+  std::string paddedUrl = line;
+  paddedUrl.resize(LINE_LENGTH - 1, ' ');
+
+  file << paddedUrl << '\n';
+  if (file.fail()) {
+    throw std::runtime_error("Failed to write line at index: " + std::to_string(index));
+  }
+
+  file.close();
+}
+
+std::string FileSystem::readLineFromFile(const std::string &path, size_t index) {
+  if (isNoneExist(path)) {
+    throw std::runtime_error("File not exist: " + path);
+  }
+
+  std::fstream file(path, std::ios::in);
+  if (!file) {
+    throw std::runtime_error("Failed to open file: " + path);
+  }
+
+  long position = static_cast<long>(index * LINE_LENGTH);
+  if (position < 0) {
+    throw std::runtime_error("Invalid index: negative position");
+  }
+
+  file.seekg(position);
+  if (file.fail()) {
+    throw std::runtime_error("Failed to seek to position: " + std::to_string(position));
+  }
+
+  std::string line;
+  if (!std::getline(file, line)) {
+    return "";
+  }
+
+  if (!line.empty()) {
+    auto last = line.find_last_not_of(" \n\r\t");
+    if (last != std::string::npos) {
+      line.erase(last + 1);
+    }
+  }
+
+  file.close();
+  return line;
 }
 } // namespace server

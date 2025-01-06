@@ -16,11 +16,11 @@ class KeyPairManager;
 class CertificateManager;
 class AcmeClient;
 
-struct evp_pkey_st;
-using EVP_PKEY = evp_pkey_st;
-
-struct x509_st;
-using X509 = x509_st;
+// struct evp_pkey_st;
+// using EVP_PKEY = evp_pkey_st;
+//
+// struct x509_st;
+// using X509 = x509_st;
 
 class SSLManager {
 public:

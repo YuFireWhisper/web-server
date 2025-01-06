@@ -194,6 +194,7 @@ using UniqueBio       = UniqueResource<BIO, decltype(&BIO_free_all)>;
 using UniqueEvpKey    = UniqueResource<EVP_PKEY, decltype(&EVP_PKEY_free)>;
 using UniqueEvpKeyCtx = UniqueResource<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)>;
 using UniqueMdCtx     = UniqueResource<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>;
+using UniqueX509      = UniqueResource<X509, decltype(&X509_free)>;
 using UniqueX509Req   = UniqueResource<X509_REQ, decltype(&X509_REQ_free)>;
 using UniqueX509Name  = UniqueResource<X509_NAME, decltype(&X509_NAME_free)>;
 using UniqueExtension = UniqueResource<X509_EXTENSION, decltype(&X509_EXTENSION_free)>;

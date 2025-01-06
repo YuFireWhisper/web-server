@@ -3,6 +3,8 @@
 
 namespace server {
 
+inline static constexpr size_t LINE_LENGTH = 256;
+
 class FileSystem {
 public:
   static std::string toAbsolutePath(const std::string &path);
@@ -34,6 +36,9 @@ public:
   }
 
   static bool isNoneExist() { return true; }
+
+  static void addLineToFile(const std::string &path, const std::string &line, size_t index);
+  static std::string readLineFromFile(const std::string &path, size_t index);
 };
 
 } // namespace server
