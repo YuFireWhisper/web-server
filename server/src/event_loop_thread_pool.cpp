@@ -84,4 +84,10 @@ std::vector<EventLoop *> EventLoopThreadPool::getAllLoops() {
   return loops_;
 }
 
+void EventLoopThreadPool::stop() {
+  for (auto &thread : threads_) {
+    thread->stop();
+  }
+}
+
 } // namespace server

@@ -14,11 +14,12 @@ public:
   EventLoopThreadPool(EventLoop *baseLoop, std::string nameArg = std::string());
   ~EventLoopThreadPool() = default;
 
-  EventLoopThreadPool(const EventLoopThreadPool &) = delete;
+  EventLoopThreadPool(const EventLoopThreadPool &)            = delete;
   EventLoopThreadPool &operator=(const EventLoopThreadPool &) = delete;
 
   void setThreadNum(int numThreads) { numThreads_ = numThreads; }
   void start(const ThreadInitCallback &cb = ThreadInitCallback());
+  void stop();
 
   EventLoop *getNextLoop();
   EventLoop *getLoopForHash(size_t hashCode);

@@ -42,6 +42,7 @@ public:
   void setThreadNum(int numThreads);
 
   void start();
+  void stop();
 
   void setConnectionCallback(const TcpConnection::ConnectionCallback &cb) {
     connectionCallback_ = cb;

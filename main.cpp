@@ -1,9 +1,12 @@
+#include "include/acme_client.h"
 #include "include/config_commands.h"
+#include "include/main_application.h"
 #include "include/ssl_manager.h"
 #include "server/include/config_manager.h"
 #include "server/include/log.h"
 #include "server/include/router.h"
 
+#include <csignal>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -51,13 +54,13 @@ void createAutoConfig(const fs::path &projectRoot) {
   LOG_INFO("Auto configuration created successfully");
 }
 
-void loadConfig(const fs::path &configPath) {
+std::string loadConfig(const fs::path &configPath) {
   LOG_INFO("Attempting to load configuration from: " + configPath.string());
 
   std::ifstream configFile(configPath, std::ios::binary);
   if (!configFile) {
     LOG_INFO("No configuration file found, using default settings");
-    return;
+    return "";
   }
 
   LOG_INFO("Reading configuration file contents");
@@ -69,16 +72,7 @@ void loadConfig(const fs::path &configPath) {
 
   LOG_INFO("Configuration file size: " + std::to_string(content.length()) + " bytes");
 
-  try {
-    LOG_INFO("Parsing configuration file");
-    auto &configManager = server::ConfigManager::getInstance();
-    configManager.registerCommands(getAllCommands());
-    configManager.configParse(content.c_str(), content.length());
-    LOG_INFO("Configuration parsed successfully");
-  } catch (const std::exception &e) {
-    LOG_ERROR("Configuration parsing failed: " + std::string(e.what()));
-    throw;
-  }
+  return content;
 }
 
 void printUsage(const char *programName) {
@@ -88,6 +82,20 @@ void printUsage(const char *programName) {
   LOG_INFO("Options:");
   LOG_INFO("[config_path]  : Path to configuration file (optional)");
   LOG_INFO("--finalize     : Execute ACME certificate finalization");
+}
+
+void handleSignal(int sig, EventLoop *mainLoop, const std::shared_ptr<MainApplication> &app) {
+  LOG_INFO("Received signal: " + std::to_string(sig));
+
+  if (app) {
+    LOG_INFO("Stopping all servers...");
+    app->stopAll();
+  }
+
+  if (mainLoop != nullptr) {
+    LOG_INFO("Quitting main event loop...");
+    mainLoop->quit();
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -103,45 +111,87 @@ int main(int argc, char *argv[]) {
     LOG_INFO("Initializing Router MIME types");
     server::Router::initializeMime();
 
+    fs::path configPath = projectRoot / "conf" / "config";
+
+    EventLoop mainLoop;
+    auto mainApplication = std::make_shared<MainApplication>();
+
+    mainApplication->initSignalHandlers(&mainLoop);
+
+    ConfigManager &configManager = ConfigManager::getInstance();
+    configManager.registerCommands(getAllCommands());
+    server::ConfigManager::setServerCallback([mainApplication](const ServerConfig &conf) {
+      mainApplication->addServer(conf);
+    });
+
+    std::string context = loadConfig(configPath);
+    configManager.configParse(context.c_str(), context.length());
+
+    if (argc > 1 && std::string(argv[1]) != "--finalize") {
+      LOG_INFO("Loading configuration from command line argument");
+      context = loadConfig(argv[1]);
+      configManager.configParse(context.c_str(), context.length());
+    }
+
     if (argc > 1 && std::string(argv[1]) == "--finalize") {
-      if (argc < 3) {
-        LOG_ERROR("Usage: " + std::string(argv[0]) + " --finalize <challenge-type>");
-        return 1;
-      }
+      int result = 0;
 
-      std::string challengeType = argv[2];
+      if (argc < 4) {
+        LOG_ERROR("Usage: " + std::string(argv[0]) + " --finalize <server-name> <challenge-type>");
+        result = 1;
+      } else {
+        std::string serverName    = argv[2];
+        std::string challengeType = argv[3];
 
-      if (challengeType != "dns-01" && challengeType != "http-01") {
-        LOG_ERROR("Invalid challenge type. Supported types: dns-01, http-01");
-        return 1;
-      }
-
-      LOG_INFO("Executing ACME certificate finalization with " + challengeType);
-      loadConfig(projectRoot / "conf" / "config");
-
-      try {
-        if (SSLManager::getInstance().validateAndUpdateChallenge(challengeType)) {
-          LOG_INFO("Certificate finalization completed successfully");
+        if (challengeType != "dns-01" && challengeType != "http-01") {
+          LOG_ERROR("Invalid challenge type. Supported types: dns-01, http-01");
+          result = 1;
         } else {
-          LOG_INFO("Certificate finalization failed");
+          LOG_INFO("Executing ACME certificate finalization with " + challengeType);
+          loadConfig(projectRoot / "conf" / "config");
+
+          try {
+            int validationResult =
+                SSLManager::getInstance().validateChallenge(serverName, challengeType);
+
+            switch (validationResult) {
+              case NEED_RECREATE_CERTIFICATE:
+                LOG_INFO("Certificate needs to be recreated");
+                LOG_INFO("Please restart program, it will automatically recreate the certificate");
+                result = 0;
+                break;
+
+              case CERTIFICATE_PROCESSING:
+                LOG_INFO("Certificate is still processing");
+                result = 0;
+                break;
+
+              case CERTIFICATE_CREATE_SUCCESS:
+                LOG_INFO("Certificate created successfully");
+                LOG_INFO("Please restart program to use the new certificate");
+                result = 0;
+                break;
+
+              default:
+                LOG_ERROR("Unknown validation result");
+                result = 1;
+                break;
+            }
+          } catch (const std::exception &e) {
+            LOG_ERROR("Certificate finalization failed: " + std::string(e.what()));
+            result = 1;
+          }
         }
-        return 0;
-      } catch (const std::exception &e) {
-        LOG_ERROR("Certificate finalization failed: " + std::string(e.what()));
-        return 1;
       }
+
+      return result;
     }
 
-    fs::path configPath;
-    if (argc > 1) {
-      configPath = argv[1];
-      LOG_INFO("Using custom config path: " + std::string(argv[1]));
-    } else {
-      configPath = projectRoot / "conf" / "config";
-      LOG_INFO("Using default config path: " + configPath.string());
-    }
+    LOG_INFO("Starting all servers...");
+    mainApplication->startAllServers();
+    mainLoop.loop();
+    mainApplication->stopAll();
 
-    loadConfig(configPath);
     return 0;
   } catch (const std::exception &e) {
     LOG_FATAL("Fatal error occurred: " + std::string(e.what()));

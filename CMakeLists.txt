@@ -26,6 +26,15 @@ find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
+include(ProcessorCount)
+ProcessorCount(CPU_CORES)
+set(CMAKE_BUILD_PARALLEL_LEVEL ${CPU_CORES})
+
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+endif()
+
 add_library(server
     server/src/thread.cpp
     server/src/poller.cpp
@@ -33,7 +42,6 @@ add_library(server
     server/src/time_stamp.cpp
     server/src/buffer.cpp
     server/src/log.cpp
-    server/src/time_stamp.cpp
     server/src/event_loop.cpp
     server/src/channel.cpp
     server/src/timer_queue.cpp
@@ -54,6 +62,7 @@ add_library(server
     server/src/key_pair_manager.cpp
     server/src/certificate_manager.cpp
     server/src/acme_client.cpp
+    server/src/main_application.cpp
 )
 
 add_executable(web_server main.cpp)

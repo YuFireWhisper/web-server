@@ -86,42 +86,125 @@ void TcpConnection::startSSLHandshake(bool isServer) {
 
 void TcpConnection::handleSSLHandshake() {
   loop_->assertInLoopThread();
+  LOG_DEBUG("Entering handleSSLHandshake for " + name_);
 
-  try {
-    int ret;
-    if (isServer_) {
-      ret = SSL_accept(socket_->getSSL());
-    } else {
-      ret = SSL_connect(socket_->getSSL());
-    }
+  int ret = SSL_accept(socket_->getSSL());
+  LOG_DEBUG("SSL_accept returned " + std::to_string(ret));
 
-    if (ret <= 0) {
-      int err = SSL_get_error(socket_->getSSL(), ret);
-      if (err == SSL_ERROR_WANT_READ) {
+  if (ret <= 0) {
+    int err = SSL_get_error(socket_->getSSL(), ret);
+    LOG_DEBUG("SSL_get_error returned " + std::to_string(err));
+
+    switch (err) {
+      case SSL_ERROR_WANT_READ:
+        LOG_DEBUG(name_ + " SSL handshake needs more data (want read)");
         channel_->enableReading();
-        channel_->disableWriting();
         return;
-      }
-      if (err == SSL_ERROR_WANT_WRITE) {
+
+      case SSL_ERROR_WANT_WRITE:
+        LOG_DEBUG(name_ + " SSL handshake needs to write");
         channel_->enableWriting();
-        channel_->disableReading();
+        return;
+
+      case SSL_ERROR_SYSCALL:
+        if (ret == 0) {
+          LOG_ERROR(name_ + " SSL handshake failed: EOF in violation of protocol");
+          handleClose();
+          return;
+        }
+        if (errno != 0) {
+          LOG_ERROR(name_ + " SSL handshake syscall error: " + std::string(strerror(errno)));
+        }
+        handleClose();
+        return;
+
+      case SSL_ERROR_SSL: {
+        unsigned long e = ERR_get_error();
+        char err_buf[256];
+        ERR_error_string_n(e, err_buf, sizeof(err_buf));
+        LOG_ERROR(name_ + " SSL handshake protocol error: " + std::string(err_buf));
+        handleClose();
         return;
       }
-      throw SocketException("SSL handshake", ERR_get_error());
+
+      case SSL_ERROR_ZERO_RETURN:
+        LOG_ERROR(name_ + " SSL handshake failed: connection closed by peer");
+        handleClose();
+        return;
+
+      default:
+        LOG_ERROR(name_ + " SSL handshake failed with unknown error: " + std::to_string(err));
+        handleClose();
+        return;
+    }
+  }
+
+  LOG_INFO("SSL handshake completed successfully for " + name_);
+  setState(State::kConnected);
+  sslHandshakeComplete_ = true;
+
+  channel_->enableReading();
+
+  if (connectionCallback_) {
+    connectionCallback_(shared_from_this());
+  }
+}
+
+void TcpConnection::continueSSLHandshake() {
+  loop_->assertInLoopThread();
+  if (state_ != State::kSSLHandshaking) {
+    return;
+  }
+
+  handleSSLHandshake();
+}
+
+bool TcpConnection::processSSLHandshakeResult(int result) {
+  if (result == 1) {
+    return true; // Handshake completed successfully
+  }
+
+  int err = SSL_get_error(socket_->getSSL(), result);
+  switch (err) {
+    case SSL_ERROR_WANT_READ:
+      LOG_DEBUG(name_ + " SSL handshake needs more data (want read)");
+      channel_->enableReading();
+      channel_->disableWriting();
+      return false;
+
+    case SSL_ERROR_WANT_WRITE:
+      LOG_DEBUG(name_ + " SSL handshake needs to write");
+      channel_->enableWriting();
+      channel_->enableReading();
+      return false;
+
+    case SSL_ERROR_ZERO_RETURN:
+      LOG_ERROR(name_ + " SSL handshake failed: connection closed by peer");
+      handleClose();
+      return false;
+
+    case SSL_ERROR_SYSCALL:
+      if (result == 0) {
+        LOG_ERROR(name_ + " SSL handshake failed: EOF in violation of protocol");
+      } else if (errno != 0) {
+        LOG_ERROR(name_ + " SSL handshake syscall error: " + std::string(strerror(errno)));
+      }
+      handleClose();
+      return false;
+
+    case SSL_ERROR_SSL: {
+      unsigned long e = ERR_get_error();
+      char err_buf[256];
+      ERR_error_string_n(e, err_buf, sizeof(err_buf));
+      LOG_ERROR(name_ + " SSL handshake protocol error: " + std::string(err_buf));
+      handleClose();
+      return false;
     }
 
-    sslHandshakeComplete_ = true;
-    state_                = State::kConnected;
-
-    channel_->enableReading();
-    channel_->disableWriting();
-
-    if (connectionCallback_) {
-      connectionCallback_(shared_from_this());
-    }
-  } catch (const SocketException &e) {
-    LOG_ERROR("SSL handshake failed: " + std::string(e.what()));
-    handleError();
+    default:
+      LOG_ERROR(name_ + " SSL handshake failed with unknown error: " + std::to_string(err));
+      handleClose();
+      return false;
   }
 }
 
@@ -254,6 +337,11 @@ void TcpConnection::forceCloseInLoop() {
 void TcpConnection::handleWrite() {
   loop_->assertInLoopThread();
 
+  if (state_ == State::kSSLHandshaking) {
+    continueSSLHandshake();
+    return;
+  }
+
   if (channel_->isWriting()) {
     auto context   = outputBuffer_.preview(outputBuffer_.readableSize());
     ssize_t result = ::write(channel_->fd(), context.data(), outputBuffer_.readableSize());
@@ -272,6 +360,34 @@ void TcpConnection::handleWrite() {
         }
       }
     }
+  }
+}
+
+void TcpConnection::handleRead(TimeStamp receiveTime) {
+  loop_->assertInLoopThread();
+
+  if (state_ == State::kDisconnected) {
+    return;
+  }
+
+  if (state_ == State::kSSLHandshaking) {
+    LOG_DEBUG(name_ + " Received data during SSL handshake");
+    continueSSLHandshake();
+    return;
+  }
+
+  auto guardThis = shared_from_this();
+
+  try {
+    auto n = static_cast<ssize_t>(socket_->readData(inputBuffer_));
+    if (n > 0) {
+      messageCallback_(guardThis, &inputBuffer_, receiveTime);
+    } else if (n == 0) {
+      loop_->queueInLoop([guardThis] { guardThis->handleClose(); });
+    }
+  } catch (const SocketException &e) {
+    LOG_ERROR("Read error: " + std::string(e.what()));
+    handleError();
   }
 }
 
@@ -306,6 +422,10 @@ void TcpConnection::handleError() {
   socklen_t errlen = sizeof(err);
 
   if (::getsockopt(channel_->fd(), SOL_SOCKET, SO_ERROR, &err, &errlen) == 0) {
+    if (err == 0) {
+      return;
+    }
+
     std::string errMsg = strerror(err);
 
     switch (err) {
@@ -339,33 +459,6 @@ void TcpConnection::handleError() {
     }
   } else {
     LOG_ERROR(name_ + ": Failed to get socket error");
-  }
-}
-
-void TcpConnection::handleRead(TimeStamp receiveTime) {
-  loop_->assertInLoopThread();
-
-  if (state_ == State::kDisconnected) {
-    return;
-  }
-
-  if (state_ == State::kSSLHandshaking) {
-    handleSSLHandshake();
-    return;
-  }
-
-  auto guardThis = shared_from_this();
-
-  try {
-    auto n = static_cast<ssize_t>(socket_->readData(inputBuffer_));
-    if (n > 0) {
-      messageCallback_(guardThis, &inputBuffer_, receiveTime);
-    } else if (n == 0) {
-      loop_->queueInLoop([guardThis] { guardThis->handleClose(); });
-    }
-  } catch (const SocketException &e) {
-    LOG_ERROR("Read error: " + std::string(e.what()));
-    handleError();
   }
 }
 

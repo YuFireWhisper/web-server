@@ -36,6 +36,8 @@ void Acceptor::startListen() {
 }
 
 void Acceptor::handleConnection() {
+  LOG_DEBUG("Acceptor::handleConnection");
+
   try {
     Socket newConnection    = serverSocket_->acceptNewConnection();
     InetAddress peerAddress = newConnection.getRemoteAddress();
@@ -67,6 +69,15 @@ void Acceptor::enablePortReuse() {
 
 InetAddress Acceptor::getLocalAddress() const {
   return serverSocket_->getLocalAddress();
+}
+
+void Acceptor::stop() {
+  if (serverChannel_) {
+    serverChannel_->disableAll();
+    serverChannel_->remove();
+  }
+
+  isListening_ = false;
 }
 
 } // namespace server

@@ -10,15 +10,10 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <openssl/err.h>
-#include <thread>
 #include <unistd.h>
 
 #include <sys/socket.h>
 #include <sys/uio.h>
-
-namespace {
-constexpr int TEMPORARY_SLEEP_MS = 100;
-} // namespace
 
 namespace server {
 
@@ -40,168 +35,18 @@ Socket::Socket()
 
 Socket::Socket(int socketFd)
     : socketFd_(socketFd) {
-  LOG_DEBUG("創建新的 Socket，fd=" + std::to_string(socketFd_));
+  LOG_DEBUG("Creating new Socket, fd=" + std::to_string(socketFd_));
   if (socketFd_ < 0) {
     throw SocketException("Socket creation");
   }
 }
 
-SSL_CTX *Socket::sslContext_ = nullptr;
-
 Socket::~Socket() {
   if (ssl_) {
     SSL_shutdown(ssl_.get());
   }
-  LOG_DEBUG("關閉 Socket，fd=" + std::to_string(socketFd_));
+  LOG_DEBUG("Closing socket " + std::to_string(socketFd_));
   ::close(socketFd_);
-}
-
-void Socket::initializeSSLContext() {
-  if (sslContext_ != nullptr) {
-    return;
-  }
-
-  const SSL_METHOD *method = TLS_method();
-  if (method == nullptr) {
-    throw SocketException("SSL method initialization", ERR_get_error());
-  }
-
-  sslContext_ = SSL_CTX_new(method);
-  if (sslContext_ == nullptr) {
-    throw SocketException("SSL context initialization", ERR_get_error());
-  }
-
-  SSL_CTX_set_mode(sslContext_, SSL_MODE_AUTO_RETRY);
-  SSL_CTX_set_options(sslContext_, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
-}
-
-void Socket::handleSSLError(const std::string &operation, int result) const {
-  int sslError          = SSL_get_error(ssl_.get(), result);
-  unsigned long errCode = ERR_get_error();
-
-  std::string errorMsg = operation + " failed: ";
-  if (errCode != 0) {
-    char errBuf[256];
-    ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
-    errorMsg += errBuf;
-  } else {
-    switch (sslError) {
-      case SSL_ERROR_WANT_READ:
-        errorMsg += "需要更多數據讀取";
-        break;
-      case SSL_ERROR_WANT_WRITE:
-        errorMsg += "需要更多數據寫入";
-        break;
-      case SSL_ERROR_SYSCALL:
-        errorMsg += "系統錯誤: " + std::string(strerror(errno));
-        break;
-      case SSL_ERROR_SSL:
-        errorMsg += "協議錯誤";
-        break;
-      default:
-        errorMsg += "未知錯誤";
-        break;
-    }
-  }
-
-  throw SocketException(errorMsg, errCode);
-}
-
-size_t Socket::handleSSLRead(Buffer &buffer) const {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
-  }
-
-  size_t totalBytes = 0;
-  char tempBuffer[4096];
-
-  while (true) {
-    int bytes = SSL_read(ssl_.get(), tempBuffer, sizeof(tempBuffer));
-    if (bytes <= 0) {
-      int err = SSL_get_error(ssl_.get(), bytes);
-      if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) {
-        break; // 需要更多數據
-      }
-      if (bytes < 0) {
-        handleSSLError("SSL read", bytes);
-      }
-      break;
-    }
-
-    buffer.write(tempBuffer, bytes);
-    totalBytes += bytes;
-  }
-
-  return totalBytes;
-}
-
-size_t Socket::handleSSLWrite(const void *dataPtr, size_t dataLength) const {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
-  }
-
-  size_t totalWritten = 0;
-  const char *ptr     = static_cast<const char *>(dataPtr);
-
-  while (totalWritten < dataLength) {
-    int written =
-        SSL_write(ssl_.get(), ptr + totalWritten, static_cast<int>(dataLength - totalWritten));
-    if (written <= 0) {
-      int err = SSL_get_error(ssl_.get(), written);
-      if (err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_WANT_READ) {
-        break;
-      }
-      handleSSLError("SSL write", written);
-    }
-    totalWritten += written;
-  }
-
-  return totalWritten;
-}
-
-void Socket::initializeSSL(const std::string &certFile, const std::string &keyFile) {
-  if (sslContext_ == nullptr) {
-    initializeSSLContext();
-  }
-
-  ssl_.reset(SSL_new(sslContext_));
-  if (!ssl_) {
-    throw SocketException("SSL initialization", ERR_get_error());
-  }
-
-  if (SSL_use_certificate_file(ssl_.get(), certFile.c_str(), SSL_FILETYPE_PEM) != 1) {
-    throw SocketException("SSL certificate loading", ERR_get_error());
-  }
-
-  if (SSL_use_PrivateKey_file(ssl_.get(), keyFile.c_str(), SSL_FILETYPE_PEM) != 1) {
-    throw SocketException("SSL private key loading", ERR_get_error());
-  }
-
-  if (SSL_set_fd(ssl_.get(), socketFd_) != 1) {
-    throw SocketException("SSL fd setting", ERR_get_error());
-  }
-}
-
-void Socket::acceptSSL() {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
-  }
-
-  int result = SSL_accept(ssl_.get());
-  if (result != 1) {
-    handleSSLError("SSL accept", result);
-  }
-}
-
-void Socket::connectSSL() {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
-  }
-
-  int result = SSL_connect(ssl_.get());
-  if (result != 1) {
-    handleSSLError("SSL connect", result);
-  }
 }
 
 int Socket::createTcpSocket() {
@@ -240,7 +85,6 @@ Socket Socket::acceptNewConnection() const {
     }
 
     if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(TEMPORARY_SLEEP_MS));
       continue;
     }
 
@@ -412,13 +256,238 @@ void Socket::attachFd(int fd) {
     ::close(socketFd_);
   }
   socketFd_ = fd;
-  LOG_DEBUG("Socket 附加到 fd=" + std::to_string(fd));
+  LOG_DEBUG("Socket attached to fd=" + std::to_string(socketFd_));
 }
 
 int Socket::detachFd() {
   int fd    = socketFd_;
   socketFd_ = -1;
   return fd;
+}
+
+void Socket::initializeSSLContext() {
+  if (sslContext_ != nullptr) {
+    return;
+  }
+
+  LOG_INFO("Creating new SSL context");
+  const SSL_METHOD *method = TLS_method();
+  if (method == nullptr) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Failed to get TLS method");
+    throw SocketException("SSL method initialization", err);
+  }
+
+  sslContext_ = SSL_CTX_new(method);
+  if (sslContext_ == nullptr) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Failed to create SSL context");
+    throw SocketException("SSL context initialization", err);
+  }
+
+  SSL_CTX_set_min_proto_version(sslContext_, TLS1_2_VERSION);
+  SSL_CTX_set_mode(sslContext_, SSL_MODE_AUTO_RETRY);
+  SSL_CTX_set_cipher_list(sslContext_, "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH");
+
+  SSL_CTX_set_options(
+      sslContext_,
+      SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION
+          | SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION | SSL_OP_CIPHER_SERVER_PREFERENCE
+  );
+
+  LOG_INFO("SSL context initialized successfully with TLS 1.2+ and strong ciphers");
+}
+
+void Socket::initializeSSL(const std::string &certFile, const std::string &keyFile) {
+  LOG_INFO(
+      "Initializing SSL for socket " + std::to_string(socketFd_) + " with cert: " + certFile
+      + " and key: " + keyFile
+  );
+
+  if (sslContext_ == nullptr) {
+    initializeSSLContext();
+    LOG_INFO("SSL context initialized");
+  }
+
+  if (!loadCertificateAndKey(certFile, keyFile)) {
+    throw SocketException("Failed to load certificate and key");
+  }
+
+  ssl_.reset(SSL_new(sslContext_));
+  if (!ssl_) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Failed to create new SSL");
+    throw SocketException("SSL initialization", err);
+  }
+
+  if (SSL_set_fd(ssl_.get(), socketFd_) != 1) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Failed to set SSL fd");
+    throw SocketException("SSL fd setting", err);
+  }
+
+  setupSSLInfoCallback();
+
+  LOG_DEBUG("Supported protocols: " + std::string(SSL_get_version(ssl_.get())));
+  LOG_DEBUG("Cipher list: " + std::string(SSL_get_cipher_list(ssl_.get(), 0)));
+  LOG_INFO("SSL initialization completed successfully");
+}
+
+bool Socket::trySSLAccept() {
+  if (!ssl_) {
+    throw SocketException("SSL not initialized");
+  }
+
+  int result = SSL_accept(ssl_.get());
+  if (result == 1) {
+    LOG_INFO("SSL accept successful");
+    return true;
+  }
+
+  int ssl_err = SSL_get_error(ssl_.get(), result);
+  LOG_DEBUG("SSL accept result: " + std::to_string(result) + " error: " + std::to_string(ssl_err));
+
+  if (ssl_err == SSL_ERROR_WANT_READ || ssl_err == SSL_ERROR_WANT_WRITE) {
+    return false;
+  }
+
+  handleSSLError("SSL accept", result);
+  return false;
+}
+
+size_t Socket::handleSSLWrite(const void *dataPtr, size_t dataLength) const {
+  if (!ssl_) {
+    throw SocketException("SSL not initialized");
+  }
+
+  size_t totalWritten = 0;
+  const char *ptr     = static_cast<const char *>(dataPtr);
+
+  while (totalWritten < dataLength) {
+    int written =
+        SSL_write(ssl_.get(), ptr + totalWritten, static_cast<int>(dataLength - totalWritten));
+    if (written <= 0) {
+      int err = SSL_get_error(ssl_.get(), written);
+      if (err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_WANT_READ) {
+        break;
+      }
+      handleSSLError("SSL write", written);
+    }
+    totalWritten += written;
+  }
+
+  return totalWritten;
+}
+
+size_t Socket::handleSSLRead(Buffer &buffer) const {
+  if (!ssl_) {
+    throw SocketException("SSL not initialized");
+  }
+
+  size_t totalBytes = 0;
+  char tempBuffer[4096];
+
+  while (true) {
+    int bytes = SSL_read(ssl_.get(), tempBuffer, sizeof(tempBuffer));
+    if (bytes <= 0) {
+      int err = SSL_get_error(ssl_.get(), bytes);
+      if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) {
+        break;
+      }
+      if (bytes < 0) {
+        handleSSLError("SSL read", bytes);
+      }
+      break;
+    }
+
+    buffer.write(tempBuffer, bytes);
+    totalBytes += bytes;
+  }
+
+  return totalBytes;
+}
+
+void Socket::handleSSLError(const std::string &operation, int result) const {
+  int sslError          = SSL_get_error(ssl_.get(), result);
+  unsigned long errCode = ERR_get_error();
+
+  if (sslError == SSL_ERROR_SYSCALL && result == 0) {
+    throw SocketException(operation + ": EOF occurred in violation of protocol");
+  }
+
+  char errBuf[256];
+  ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
+  std::string errorDetails = errBuf;
+
+  while ((errCode = ERR_get_error()) != 0) {
+    ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
+    errorDetails += ", " + std::string(errBuf);
+  }
+
+  throw SocketException(operation + ": " + errorDetails);
+}
+
+void Socket::connectSSL() {
+  if (!ssl_) {
+    throw SocketException("SSL not initialized");
+  }
+
+  int result = SSL_connect(ssl_.get());
+  if (result != 1) {
+    handleSSLError("SSL connect", result);
+  }
+}
+
+void Socket::setupSSLInfoCallback() {
+  SSL_CTX_set_info_callback(sslContext_, [](const SSL *ssl, int where, int ret) {
+    const char *str;
+    int w = where & ~SSL_ST_MASK;
+    if (w & SSL_ST_CONNECT) {
+      str = "SSL_connect";
+    } else if (w & SSL_ST_ACCEPT) {
+      str = "SSL_accept";
+    } else {
+      str = "undefined";
+    }
+
+    if (where & SSL_CB_LOOP) {
+      LOG_DEBUG(std::string(str) + ":" + SSL_state_string_long(ssl));
+    } else if (where & SSL_CB_ALERT) {
+      str = (where & SSL_CB_READ) ? "read" : "write";
+      LOG_DEBUG(
+          "SSL3 alert " + std::string(str) + ":" + SSL_alert_type_string_long(ret) + ":"
+          + SSL_alert_desc_string_long(ret)
+      );
+    }
+  });
+}
+
+bool Socket::loadCertificateAndKey(const std::string &certFile, const std::string &keyFile) {
+  LOG_INFO("Loading certificate chain from: " + certFile);
+  if (SSL_CTX_use_certificate_chain_file(sslContext_, certFile.c_str()) != 1) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Failed to load certificate chain" + std::to_string(err));
+    return false;
+  }
+  LOG_INFO("Certificate chain loaded successfully");
+
+  LOG_INFO("Loading private key from: " + keyFile);
+  if (SSL_CTX_use_PrivateKey_file(sslContext_, keyFile.c_str(), SSL_FILETYPE_PEM) != 1) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Failed to load private key" + std::to_string(err));
+    return false;
+  }
+  LOG_INFO("Private key loaded successfully");
+
+  LOG_INFO("Verifying private key");
+  if (SSL_CTX_check_private_key(sslContext_) != 1) {
+    unsigned long err = ERR_get_error();
+    LOG_ERROR("Private key verification failed" + std::to_string(err));
+    return false;
+  }
+  LOG_INFO("Private key verified successfully");
+
+  return true;
 }
 
 } // namespace server

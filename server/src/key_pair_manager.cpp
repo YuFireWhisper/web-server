@@ -3,6 +3,7 @@
 #include "include/acme_client.h"
 #include "include/log.h"
 #include "include/types.h"
+#include "include/file_system.h"
 
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -168,6 +169,14 @@ void KeyPairManager::saveCertificatePrivateKey(const EVP_PKEY *keyPair, const st
 }
 
 bool KeyPairManager::verifyKeyPair(const std::string &pubPath, const std::string &priPath) {
+  if (!FileSystem::isAllExist(pubPath, priPath)) {
+    return false;
+  }
+
+  if (FileSystem::isPartialExist(pubPath, priPath)) {
+    throw std::runtime_error("Key pair files are incomplete");
+  }
+
   return verifyKeyPair(loadPublicKey(pubPath).get(), loadPrivateKey(priPath).get());
 }
 

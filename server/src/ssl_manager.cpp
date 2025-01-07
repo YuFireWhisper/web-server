@@ -5,6 +5,7 @@
 #include "include/log.h"
 #include "include/acme_client.h"
 #include "include/certificate_manager.h"
+#include "include/file_system.h"
 
 #include <curl/curl.h>
 #include <filesystem>
@@ -41,41 +42,89 @@ SSLManager::~SSLManager() {
 }
 
 void SSLManager::addServer(ServerConfig &config) {
-  if (serverConfigs_.contains(config.address)) {
-    throw std::runtime_error("Server already exists: " + config.address);
+  LOG_DEBUG("Adding server: " + config.serverName);
+
+  if (serverConfigs_.contains(config.serverName)) {
+    throw std::runtime_error("Server already exists: " + config.serverName);
   }
 
-  serverConfigs_.emplace(config.address, config);
-  currentConfig_ = &serverConfigs_.at(config.address);
+  serverConfigs_[config.serverName] = config;
 
-  auto &urlsEntry = AcmeClient::urlCache_[config.sslApiUrl];
-  if (urlsEntry.isValid()) {
-    AcmeClient::urlCache_[config.sslApiUrl] = urlsEntry;
-  } else {
-    auto response = AcmeClient::sendRequest(config.sslApiUrl);
-    auto json     = nlohmann::json::parse(response);
+  const std::string priPath = config.sslPrivateKeyFile; 
+  const std::string pubPath = config.sslPublicKeyFile;
 
-    std::string newAccount = json.value("newAccount", "");
-    std::string newNonce   = json.value("newNonce", "");
-    std::string newOrder   = json.value("newOrder", "");
-    std::string keyChange  = json.value("keyChange", "");
-    std::string revokeCert = json.value("revokeCert", "");
+  const std::string certKeyPath = config.sslCertKeyFile;
+  const std::string certPath = config.sslCertFile;
 
-    urlsEntry = AcmeUrls{ newAccount, newNonce, newOrder, keyChange, revokeCert };
-
-    if (!urlsEntry.isValid()) {
-      throw std::runtime_error("Invalid ACME directory response");
+  if (!KeyPairManager::verifyKeyPair(pubPath, priPath)) {
+    if (!config.sslEnableAutoGen) {
+      throw std::runtime_error("Invalid key pair and auto-generation is disabled");
     }
 
-    AcmeClient::urlCache_[config.sslApiUrl] = urlsEntry;
+    auto newKey = KeyPairManager::generateKeyPair(config.sslKeyType, config.sslKeyParam);
+    
+    LOG_DEBUG("Saving key pair for server: " + config.address);
+    KeyPairManager::savePublicKey(newKey.get(), pubPath);
+    KeyPairManager::savePrivateKey(newKey.get(), priPath);
   }
 
-  keyPairManager_     = std::make_unique<KeyPairManager>(config);
-  certificateManager_ = std::make_unique<CertificateManager>(config);
-  acmeClient_         = std::make_unique<AcmeClient>(config);
+  int certStatus = CertificateManager::verifyCertificate(certPath, certKeyPath, config.sslRenewDays);
+  LOG_DEBUG("Certificate status: " + std::to_string(certStatus));
 
-  keyPairManager_->ensureValidKeyPair();
-  certificateManager_->ensureValidCertificate();
+  const int INIT_VALUE = 100;
+  int acmeStatus = INIT_VALUE;
+
+  if (certStatus == CERTIFICATE_VALID) {
+    isNotInitializedOne = false;
+    return;
+  }
+
+  if (certStatus == CERTIFICATE_INVALID) {
+    if (!config.sslEnableAutoGen) {
+      throw std::runtime_error("Invalid certificate and auto-generation is disabled");
+    }
+
+    AcmeClient acmeClient(config);
+    acmeStatus = acmeClient.createCertificate();
+  }
+
+  if (certStatus == CERTIFICATE_NEED_UPDATE) {
+    AcmeClient acmeClient(config);
+    acmeStatus = acmeClient.createCertificate();
+  }
+
+  if (acmeStatus != INIT_VALUE) {
+    if (acmeStatus == CERTIFICATE_PENDING) {
+      LOG_WARN("Certificate is pending, server will not start");
+      LOG_WARN("Please validate the challenge for server: " + config.address);
+      return;
+    }
+
+    if (acmeStatus == CERTIFICATE_PROCESSING) {
+      LOG_WARN("Certificate is processing, server will not start");
+      LOG_WARN("Please wait, it will take some time");
+      return;
+    }
+
+    if (acmeStatus == CERTIFICATE_CREATE_SUCCESS) {
+      LOG_INFO("Certificate created successfully");
+      return;
+    }
+  }
+
+  throw std::runtime_error("Failed to create certificate for server: " + config.address);
+}
+
+int SSLManager::validateChallenge(const std::string &serverName, const std::string &type) {
+  LOG_DEBUG("Validating challenge for server: " + serverName + " and type: " + type);
+
+  const auto it = serverConfigs_.find(serverName);
+  if (it == serverConfigs_.end()) {
+    throw std::runtime_error("Server not found: " + serverName);
+  }
+
+  AcmeClient acmeClient(it->second);
+  return acmeClient.validateChallenge(type);
 }
 
 std::string SSLManager::getCertificatePath(std::string_view address) const {

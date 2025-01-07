@@ -92,7 +92,7 @@ size_t TcpServer::getSSLConnectionCount() const {
 }
 
 void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
-  LOG_DEBUG("處理新連接，sockfd=" + std::to_string(sockfd));
+  LOG_DEBUG("TcpServer::newConnection - Handling new connection" + std::to_string(sockfd));
   loop_->assertInLoopThread();
 
   EventLoop *ioLoop = threadPool_->getNextLoop();
@@ -121,13 +121,13 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
   conn->setCloseCallback([this](auto &&PH1) { removeConnection(std::forward<decltype(PH1)>(PH1)); }
   );
 
+  connections_[connName] = conn;
+  ioLoop->runInLoop([conn] { conn->connectEstablished(); });
+
   if (sslConfig_.enabled) {
     LOG_DEBUG("SSL enabled for connection " + connName);
     ioLoop->runInLoop([this, conn]() { initializeNewSSLConnection(conn); });
   }
-
-  connections_[connName] = conn;
-  ioLoop->runInLoop([conn] { conn->connectEstablished(); });
 }
 
 void TcpServer::initializeNewSSLConnection(const TcpConnectionPtr &conn) const {
@@ -161,6 +161,24 @@ void TcpServer::removeConnectionInLoop(const TcpConnectionPtr &conn) {
   assert(result == 1);
   EventLoop *ioLoop = conn->getLoop();
   ioLoop->queueInLoop([conn]() { conn->connectDestroyed(); });
+}
+
+void TcpServer::stop() {
+  if (!started_) {
+    return;
+  }
+
+  started_ = false;
+  acceptor_->stop();
+  for (auto &[name, conn] : connections_) {
+    conn->getLoop()->runInLoop([conn] { conn->shutdown(); });
+  }
+
+  if (threadPool_) {
+    threadPool_->stop();
+  }
+
+  loop_->quit();
 }
 
 } // namespace server

@@ -45,11 +45,9 @@ HttpServer::HttpServer(
   Router::initializeMime();
 }
 
-HttpServer::HttpServer(EventLoop* loop, const InetAddress& listenAddr, const ServerConfig& config)
-  : HttpServer(loop, listenAddr, config.address, config.reusePort) {
-  if (config.sslEnable) {
-    server_.enableSSL(config.sslCertFile, config.sslCertKeyFile);
-  }
+HttpServer::HttpServer(EventLoop *loop, const InetAddress &listenAddr, const ServerConfig &config)
+    : HttpServer(loop, listenAddr, config.address, config.reusePort) {
+      server_.enableSSL(config.sslCertFile, config.sslCertKeyFile);
 }
 
 void HttpServer::onConnection(const TcpConnectionPtr &conn) {
@@ -153,61 +151,41 @@ void HttpServer::handleSetListen(
   auto *ctx  = static_cast<ServerContext *>(serverContext);
   auto *conf = ctx->conf;
 
-  if (value.empty()) {
+  if (value.empty() || value[0].empty()) {
     LOG_ERROR("Listen value is empty");
     return;
   }
 
   std::string_view str = value[0];
-  if (str.empty()) {
-    LOG_ERROR("Listen string is empty");
+  LOG_DEBUG("Parsing listen value: " + std::string(str));
+
+  if (str == "*") {
+    conf->address = "0.0.0.0";
     return;
   }
 
-  LOG_DEBUG("Parsing listen value: " + std::string(str));
-
+  std::string_view hostPart;
+  std::string_view portPart;
   size_t colonPos = str.find(':');
 
   if (colonPos == std::string_view::npos) {
-    if (str == "*") {
-      conf->address = "0.0.0.0";
-      return;
-    }
-
     bool isPort = std::ranges::all_of(str, [](unsigned char c) { return std::isdigit(c); });
-
     if (isPort) {
-      try {
-        int port = std::stoi(std::string(str));
-        if (port <= 0 || port > 65535) {
-          LOG_ERROR("Port number out of range (1-65535): " + std::string(str));
-          return;
-        }
-        conf->port = static_cast<in_port_t>(port);
-        LOG_DEBUG("Port set to: " + std::to_string(conf->port));
-      } catch (const std::exception &e) {
-        LOG_ERROR("Invalid port number: " + std::string(str) + " (Error: " + e.what() + ")");
-      }
+      portPart = str;
     } else {
-      InetAddress resolved_addr(conf->AddressFamily, "0.0.0.0", conf->port);
-      if (!InetAddress::resolveHostname(std::string(str), &resolved_addr)) {
-        LOG_ERROR("Failed to resolve hostname: " + std::string(str));
-        return;
-      }
-      conf->address = resolved_addr.getIp();
-      LOG_DEBUG("Hostname " + std::string(str) + " resolved to: " + conf->address);
+      hostPart = str;
     }
-    return;
+  } else {
+    hostPart = str.substr(0, colonPos);
+    portPart = str.substr(colonPos + 1);
+    LOG_DEBUG(
+        "Split into host: '" + std::string(hostPart) + "' and port: '" + std::string(portPart) + "'"
+    );
   }
 
-  std::string_view hostPart = str.substr(0, colonPos);
-  std::string_view portPart = str.substr(colonPos + 1);
-
-  LOG_DEBUG(
-      "Split into host: '" + std::string(hostPart) + "' and port: '" + std::string(portPart) + "'"
-  );
-
-  if (!hostPart.empty() && hostPart != "*") {
+  if (hostPart.empty() || hostPart == "*") {
+    conf->address = "0.0.0.0";
+  } else {
     InetAddress resolved_addr(conf->AddressFamily, "0.0.0.0", conf->port);
     if (!InetAddress::resolveHostname(std::string(hostPart), &resolved_addr)) {
       LOG_ERROR("Failed to resolve hostname: " + std::string(hostPart));
@@ -215,8 +193,6 @@ void HttpServer::handleSetListen(
     }
     conf->address = resolved_addr.getIp();
     LOG_DEBUG("Hostname " + std::string(hostPart) + " resolved to: " + conf->address);
-  } else {
-    conf->address = "0.0.0.0";
   }
 
   if (!portPart.empty()) {
@@ -229,7 +205,8 @@ void HttpServer::handleSetListen(
       conf->port = static_cast<in_port_t>(port);
       LOG_DEBUG("Port set to: " + std::to_string(conf->port));
     } catch (const std::exception &e) {
-      LOG_ERROR("Invalid port number '" + std::string(portPart) + "' (Error: " + e.what() + ")");
+      LOG_ERROR("Invalid port number: " + std::string(portPart) + " (Error: " + e.what() + ")");
+      return;
     }
   }
 
@@ -237,4 +214,5 @@ void HttpServer::handleSetListen(
       "Listen configured - Address: " + conf->address + ", Port: " + std::to_string(conf->port)
   );
 }
+
 } // namespace server

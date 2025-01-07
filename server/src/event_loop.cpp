@@ -73,6 +73,9 @@ void EventLoop::loop() {
 }
 
 void EventLoop::quit() {
+  if (quit_) {
+    return;
+  }
   quit_ = true;
   if (!isInLoopThread() || callingPendingFunctors_) {
     writeToWakeupFd();

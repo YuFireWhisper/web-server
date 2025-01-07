@@ -4,6 +4,8 @@
 #include <curl/curl.h>
 #include <functional>
 #include <memory>
+#include <openssl/evp.h>
+#include <openssl/stack.h>
 #include <openssl/x509.h>
 #include <poll.h>
 #include <set>
@@ -11,7 +13,6 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <openssl/evp.h>
 
 #include <sys/epoll.h>
 
@@ -187,6 +188,12 @@ inline void freeExtensionStack(STACK_OF(X509_EXTENSION) * stack) {
   }
 }
 
+inline void freeStack(STACK_OF(X509) * stack) {
+  if (stack != nullptr) {
+    sk_X509_pop_free(stack, X509_free);
+  }
+}
+
 template <typename T, typename Deleter>
 using UniqueResource = std::unique_ptr<T, Deleter>;
 
@@ -210,8 +217,17 @@ struct StoreCtxDeleter {
   void operator()(X509_STORE_CTX *ctx) { X509_STORE_CTX_free(ctx); }
 };
 
+struct X509StackDeleter {
+  void operator()(STACK_OF(X509) * stack) const {
+    if (stack != nullptr) {
+      sk_X509_pop_free(stack, X509_free);
+    }
+  }
+};
+
 using UniqueStore    = std::unique_ptr<X509_STORE, StoreDeleter>;
 using UniqueStoreCtx = std::unique_ptr<X509_STORE_CTX, StoreCtxDeleter>;
+using UniqueStack    = std::unique_ptr<STACK_OF(X509), X509StackDeleter>;
 
 inline UniqueBio createBioFile(const std::string &path, const char *mode) {
   BIO *bio = BIO_new_file(path.c_str(), mode);

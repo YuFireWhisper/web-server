@@ -10,36 +10,27 @@ EventLoopThread::EventLoopThread(ThreadInitCallback cb, std::string name)
     , name_(std::move(name)) {}
 
 EventLoopThread::~EventLoopThread() {
-  exiting_ = true;
-  if (loop_ != nullptr) {
-    loop_->quit();
-    thread_.join();
-  }
+  stop();
 }
 
 EventLoop *EventLoopThread::startLoop() {
   std::unique_lock<std::mutex> lock(mutex_);
 
   if (loop_ != nullptr) {
-    return loop_;
+    return loop_.get();
   }
 
   thread_ = std::thread(&EventLoopThread::threadFunc, this);
   cond_.wait(lock, [this]() { return loop_ != nullptr; });
 
-  return loop_;
+  return loop_.get();
 }
 
 void EventLoopThread::threadFunc() {
-  auto loop = std::make_unique<EventLoop>();
-
-  if (callback_) {
-    callback_(loop.get());
-  }
-
+  auto loop = std::make_shared<EventLoop>();
   {
     std::unique_lock<std::mutex> lock(mutex_);
-    loop_ = loop.get();
+    loop_ = loop;
     cond_.notify_one();
   }
 
@@ -47,13 +38,30 @@ void EventLoopThread::threadFunc() {
 
   {
     std::unique_lock<std::mutex> lock(mutex_);
-    loop_ = nullptr;
+    loop_.reset();
   }
 }
 
 bool EventLoopThread::isRunning() {
   std::unique_lock<std::mutex> lock(mutex_);
   return loop_ != nullptr;
+}
+
+void EventLoopThread::stop() {
+  std::shared_ptr<EventLoop> loop;
+  {
+    std::unique_lock<std::mutex> lock(mutex_);
+    loop = loop_;
+  }
+
+  if (loop) {
+    loop->quit();
+  }
+
+  if (thread_.joinable()) {
+    exiting_ = true;
+    thread_.join();
+  }
 }
 
 } // namespace server

@@ -13,23 +13,21 @@ class EventLoop;
 
 class EventLoopThread {
 public:
-  EventLoopThread(
-      ThreadInitCallback cb = ThreadInitCallback(),
-      std::string name = std::string()
-  );
+  EventLoopThread(ThreadInitCallback cb = ThreadInitCallback(), std::string name = std::string());
   ~EventLoopThread();
 
-  EventLoopThread(const EventLoopThread &) = delete;
+  EventLoopThread(const EventLoopThread &)            = delete;
   EventLoopThread &operator=(const EventLoopThread &) = delete;
 
   EventLoop *startLoop();
+  void stop();
 
   bool isRunning();
 
 private:
   void threadFunc();
 
-  EventLoop *loop_;
+  std::shared_ptr<EventLoop> loop_;
   std::atomic<bool> exiting_;
   std::thread thread_;
   std::mutex mutex_;

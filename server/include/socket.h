@@ -68,9 +68,11 @@ public:
   int detachFd();
 
   void initializeSSL(const std::string &certFile, const std::string &keyFile);
-  void acceptSSL();
+  bool trySSLAccept();
   void connectSSL();
   void shutdownSSL();
+  static void setupSSLInfoCallback();
+  static bool loadCertificateAndKey(const std::string &certFile, const std::string &keyFile);
 
   [[nodiscard]] bool isSSLEnabled() const { return ssl_ != nullptr; }
   [[nodiscard]] SSL *getSSL() const { return ssl_.get(); }
@@ -88,7 +90,7 @@ private:
   };
 
   std::unique_ptr<SSL, SSLDeleter> ssl_;
-  static SSL_CTX *sslContext_;
+  inline static SSL_CTX *sslContext_ = nullptr;
 
   static int createTcpSocket();
   void setSocketFlag(int level, int flag, bool enabled) const;

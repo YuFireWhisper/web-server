@@ -37,7 +37,7 @@ public:
   explicit AcmeClient(const ServerConfig &config);
 
   int createCertificate();
-  int verfiyChallenge(const std::string &type);
+  int validateChallenge(const std::string &type);
 
   [[deprecated]] void registerAccount();
   [[deprecated]] void requestNewOrder();

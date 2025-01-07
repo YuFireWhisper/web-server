@@ -19,20 +19,21 @@ public:
   using HttpRequestCallback = std::function<void(const HttpRequest &, HttpResponse *)>;
 
   HttpServer(
-    EventLoop *loop,
-    const InetAddress &listenAddr,
-    const std::string &name,
-    bool reusePort
+      EventLoop *loop,
+      const InetAddress &listenAddr,
+      const std::string &name,
+      bool reusePort
   );
 
-  HttpServer(EventLoop* loop, const InetAddress& listenAddr, const ServerConfig& config);
+  HttpServer(EventLoop *loop, const InetAddress &listenAddr, const ServerConfig &config);
 
   ~HttpServer() = default;
 
-  HttpServer(const HttpServer &)            = delete;
-  HttpServer &operator=(const HttpServer &) = delete;
+  // HttpServer(const HttpServer &)            = delete;
+  // HttpServer &operator=(const HttpServer &) = delete;
 
   void start() { server_.start(); }
+  void stop() { server_.stop(); }
   void setThreadNum(int numThreads) { server_.setThreadNum(numThreads); }
   void setHttpCallback(const HttpRequestCallback &cb) { httpCallback_ = cb; }
   void setNotFoundCallback(const HttpRequestCallback &cb) { notFoundCallback_ = cb; }

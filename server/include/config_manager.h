@@ -11,6 +11,8 @@ namespace server {
 
 class ConfigManager {
 public:
+  using ServerCallback = std::function<void(const ServerConfig &)>;
+
   static ConfigManager &getInstance();
   ~ConfigManager();
 
@@ -22,6 +24,8 @@ public:
   void setCurrentContext(const ConfigContext &context);
   void *getContextByOffset(size_t offset) const;
   void *getConfigByOffset(size_t offset) const;
+
+  static void setServerCallback(ServerCallback callback) { serverCallback_ = std::move(callback); }
 
 private:
   ConfigManager();
@@ -46,6 +50,7 @@ private:
 
   ConfigContext context_;
   std::unordered_map<std::string, ServerCommand> commands_;
+  inline static ServerCallback serverCallback_;
 };
 
 } // namespace server

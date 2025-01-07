@@ -1,9 +1,6 @@
 #include "include/config_manager.h"
 
 #include "include/config_defaults.h"
-#include "include/event_loop.h"
-#include "include/http_server.h"
-#include "include/inet_address.h"
 #include "include/log.h"
 #include "include/router.h"
 #include "include/ssl_manager.h"
@@ -356,14 +353,12 @@ void ConfigManager::handleLocationEnd(LocationContext *ctx) {
 
 void ConfigManager::handleServerEnd(ServerContext *ctx) {
   auto *conf = ctx->conf;
-
   SSLManager::getInstance().addServer(*conf);
 
-  EventLoop loop;
-  InetAddress addr(conf->AddressFamily, conf->address, conf->port);
-  HttpServer server(&loop, addr, *conf);
+  if (serverCallback_) {
+    serverCallback_(*conf);
+  }
+
   *ctx->conf = ServerConfig();
-  server.start();
-  loop.loop();
 }
 } // namespace server

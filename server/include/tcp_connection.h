@@ -81,6 +81,7 @@ public:
   void connectDestroyed();
 
   void enableSSL(const std::string &certFile, const std::string &keyFile);
+
   [[nodiscard]] bool isSSLEnabled() const { return socket_ && socket_->isSSLEnabled(); }
   void startSSLHandshake(bool isServer);
   [[nodiscard]] bool isSSLConnected() const { return socket_ && socket_->isSSLConnected(); }

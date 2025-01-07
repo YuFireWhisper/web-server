@@ -137,7 +137,7 @@ http {
         ssl_email yu.whisper.personal@gmail.com;
 
         # SSL API 設置
-        #ssl_api_url https://acme-v02.api.letsencrypt.org/directory;
+        ssl_api_url https://acme-v02.api.letsencrypt.org/directory;
         #ssl_account_url account.json;
         #ssl_location_url location.json;
         #ssl_finalize_url finalize.json;

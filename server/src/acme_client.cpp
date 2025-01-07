@@ -20,6 +20,8 @@ AcmeClient::AcmeClient(const ServerConfig &config)
     , accountUrl_(getAccountUrl()) {}
 
 int AcmeClient::createCertificate() {
+  LOG_DEBUG("Creating certificate for server: " + config_.serverName);
+
   if (CertificateManager::verifyCertificate(
           config_.sslCertFile,
           config_.sslCertKeyFile,
@@ -33,16 +35,25 @@ int AcmeClient::createCertificate() {
   std::string response        = sendRequest(orderUrl);
   nlohmann::json responseJson = nlohmann::json::parse(response);
 
+  FileSystem::addLineToFile(config_.sslUrlsFile, orderUrl, ORDER_URL_INDEX);
+
   if (!responseJson.contains("status")) {
     throw std::runtime_error("Invalid order response");
   }
 
   if (responseJson.at("status").get<std::string>() == "invalid") {
+    FileSystem::removeLineFromFile(config_.sslUrlsFile, ORDER_URL_INDEX);
+
     throw std::runtime_error("Invalid order status");
   }
 
   if (responseJson.at("status").get<std::string>() == "valid") {
     downloadCertificate(responseJson.at("certificate").get<std::string>());
+    return CERTIFICATE_CREATE_SUCCESS;
+  }
+
+  if (responseJson.at("status").get<std::string>() == "processing") {
+    return CERTIFICATE_PROCESSING;
   }
 
   std::string authzUrl = responseJson.at("authorizations")[0].get<std::string>();
@@ -71,8 +82,12 @@ std::string AcmeClient::getAccountUrl() {
       FileSystem::readLineFromFile(config_.sslUrlsFile, ACCOUNT_URL_INDEX);
 
   if (!accountUrlInFile.empty() && accountUrlInFile != accountUrl) {
+    LOG_DEBUG("Account URL in file: " + accountUrlInFile);
+    LOG_DEBUG("Account URL from server: " + accountUrl);
     throw std::runtime_error("Account URL mismatch");
   }
+
+  FileSystem::addLineToFile(config_.sslUrlsFile, accountUrl, ACCOUNT_URL_INDEX);
 
   return accountUrl;
 }
@@ -487,7 +502,7 @@ void AcmeClient::storeUrls(
   finalizeFile << finalize;
 }
 
-int AcmeClient::verfiyChallenge(const std::string &type) {
+int AcmeClient::validateChallenge(const std::string &type) {
   auto orderUrl = FileSystem::readLineFromFile(config_.sslUrlsFile, ORDER_URL_INDEX);
 
   if (orderUrl.empty()) {
@@ -510,6 +525,7 @@ int AcmeClient::verfiyChallenge(const std::string &type) {
 
     if (status == "invalid") {
       LOG_DEBUG("Order status is invalid");
+      FileSystem::removeLineFromFile(config_.sslUrlsFile, ORDER_URL_INDEX);
       return NEED_RECREATE_CERTIFICATE;
     }
 
@@ -1086,6 +1102,8 @@ void AcmeClient::downloadCertificate(const std::string &certUrl) const {
     throw std::runtime_error("Failed to open certificate file for writing");
   }
   file.write(response.data(), static_cast<std::streamsize>(response.size()));
+
+  FileSystem::removeLineFromFile(config_.sslUrlsFile, ORDER_URL_INDEX);
 }
 
 nlohmann::json AcmeClient::createRequestBody(const std::string &jwtToken) {

@@ -25,6 +25,8 @@ public:
 
   [[nodiscard]] InetAddress getLocalAddress() const;
 
+  void stop();
+
 private:
   void handleConnection();
   void processConnection(Socket &&connection, const InetAddress &peerAddress);
