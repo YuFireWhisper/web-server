@@ -11,9 +11,6 @@
 
 namespace server {
 
-KeyPairManager::KeyPairManager(const ServerConfig &config)
-    : config_(config) {}
-
 UniqueEvpKey KeyPairManager::generateKeyPair(int nid, int32_t parameter) {
   auto ctx = UniqueEvpKeyCtx(EVP_PKEY_CTX_new_id(nid, nullptr), EVP_PKEY_CTX_free);
 
@@ -64,40 +61,6 @@ UniqueEvpKey KeyPairManager::generateKeyPair(std::string_view algorithm, int32_t
   return { key, EVP_PKEY_free };
 }
 
-void KeyPairManager::saveKeyPair(const EVP_PKEY *keyPair) const {
-  const auto pubPath  = config_.sslPublicKeyFile;
-  const auto privPath = config_.sslPrivateKeyFile;
-
-  if (std::filesystem::exists(pubPath) || std::filesystem::exists(privPath)) {
-    throw std::runtime_error("Key pair files already exist");
-  }
-
-  std::filesystem::create_directories(std::filesystem::path(pubPath).parent_path());
-
-  auto pubBio  = createBioFile(pubPath, "w");
-  auto privBio = createBioFile(privPath, "w");
-
-  std::filesystem::permissions(
-      privPath,
-      std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-      std::filesystem::perm_options::replace
-  );
-
-  if ((PEM_write_bio_PUBKEY(pubBio.get(), const_cast<EVP_PKEY *>(keyPair)) == 0)
-      || (PEM_write_bio_PrivateKey(
-              privBio.get(),
-              const_cast<EVP_PKEY *>(keyPair),
-              nullptr,
-              nullptr,
-              0,
-              nullptr,
-              nullptr
-          )
-          == 0)) {
-    throw std::runtime_error("Failed to write key pair");
-  }
-}
-
 void KeyPairManager::savePublicKey(const EVP_PKEY *keyPair, const std::string &path) {
   if (std::filesystem::exists(path)) {
     throw std::runtime_error("Public key file already exists");
@@ -133,37 +96,6 @@ void KeyPairManager::savePrivateKey(const EVP_PKEY *keyPair, const std::string &
           nullptr
       )
       != 1) {
-    throw std::runtime_error("Failed to write private key");
-  }
-}
-
-void KeyPairManager::saveCertificatePrivateKey(const EVP_PKEY *keyPair, const std::string &path) {
-  LOG_DEBUG("Saving private key to: " + path);
-
-  if (std::filesystem::exists(path)) {
-    throw std::runtime_error("Private key file already exists");
-  }
-
-  std::filesystem::create_directories(std::filesystem::path(path).parent_path());
-
-  auto bio = createBioFile(path, "w");
-
-  std::filesystem::permissions(
-      path,
-      std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-      std::filesystem::perm_options::replace
-  );
-
-  if (PEM_write_bio_PrivateKey(
-          bio.get(),
-          const_cast<EVP_PKEY *>(keyPair),
-          nullptr,
-          nullptr,
-          0,
-          nullptr,
-          nullptr
-      )
-      == 0) {
     throw std::runtime_error("Failed to write private key");
   }
 }
@@ -259,21 +191,5 @@ UniqueEvpKey KeyPairManager::loadPrivateKey(std::string_view path
     throw std::runtime_error("Failed to load private key from: " + std::string(path));
   }
   return { key, EVP_PKEY_free };
-}
-
-void KeyPairManager::ensureValidKeyPair() const {
-  const auto pubPath  = config_.sslPublicKeyFile;
-  const auto privPath = config_.sslPrivateKeyFile;
-
-  if (std::filesystem::exists(pubPath) != std::filesystem::exists(privPath)) {
-    throw std::runtime_error("Key pair files are incomplete");
-  }
-
-  if (!std::filesystem::exists(pubPath) && !std::filesystem::exists(privPath)) {
-    auto newKey = generateKeyPair(config_.sslKeyType, config_.sslKeyParam);
-    saveKeyPair(newKey.get());
-  }
-
-  verifyKeyPair(loadPublicKey(pubPath).get(), loadPrivateKey(privPath).get());
 }
 } // namespace server
