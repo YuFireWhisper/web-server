@@ -19,12 +19,12 @@ namespace fs = std::filesystem;
 using namespace server;
 
 void createAutoConfig(const fs::path &projectRoot) {
-  LOG_INFO("Starting auto configuration creation");
+  LOG_TRACE("===== Creating auto configuration =====");
 
   fs::path autoDir = projectRoot / "server" / "auto";
   std::error_code ec;
 
-  LOG_INFO("Creating auto directory at: " + autoDir.string());
+  LOG_TRACE("Creating auto directory at: " + autoDir.string());
   fs::create_directories(autoDir, ec);
   if (ec) {
     LOG_ERROR("Failed to create auto directory: " + ec.message());
@@ -33,14 +33,14 @@ void createAutoConfig(const fs::path &projectRoot) {
 
   fs::path autoConfigPath = autoDir / "auto_config.h";
 
-  LOG_INFO("Removing existing auto_config if present");
+  LOG_TRACE("Removing existing auto_config if present");
   fs::remove(autoConfigPath, ec);
   if (ec) {
     LOG_ERROR("Failed to remove existing auto_config.h: " + ec.message());
     throw std::runtime_error("Failed to remove existing auto_config.h: " + ec.message());
   }
 
-  LOG_INFO("Creating new auto_config.h at: " + autoConfigPath.string());
+  LOG_TRACE("Creating new auto_config.h at: " + autoConfigPath.string());
   std::ofstream autoConfig(autoConfigPath);
   if (!autoConfig) {
     LOG_ERROR("Failed to create auto_config.h");
@@ -51,7 +51,7 @@ void createAutoConfig(const fs::path &projectRoot) {
   autoConfig << "#define kProjectRoot \"" << projectRoot.string() << "/\"\n";
   autoConfig.close();
 
-  LOG_INFO("Auto configuration created successfully");
+  LOG_TRACE("===== Auto configuration creation complete =====");
 }
 
 std::string loadConfig(const fs::path &configPath) {
@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
 
     createAutoConfig(projectRoot);
 
-    LOG_INFO("Initializing Router MIME types");
+    LOG_TRACE("Initializing Router MIME types");
     server::Router::initializeMime();
 
     fs::path configPath = projectRoot / "conf" / "config";
@@ -125,14 +125,10 @@ int main(int argc, char *argv[]) {
     });
 
     std::string context = loadConfig(configPath);
+
     configManager.configParse(context.c_str(), context.length());
 
-    if (argc > 1 && std::string(argv[1]) != "--finalize") {
-      LOG_INFO("Loading configuration from command line argument");
-      context = loadConfig(argv[1]);
-      configManager.configParse(context.c_str(), context.length());
-    }
-
+    LOG_TRACE("===== Starting parameter parsing =====");
     if (argc > 1 && std::string(argv[1]) == "--finalize") {
       int result = 0;
 
@@ -186,8 +182,9 @@ int main(int argc, char *argv[]) {
 
       return result;
     }
+    LOG_TRACE("No Parameter");
+    LOG_TRACE("===== Parameter parsing complete =====");
 
-    LOG_INFO("Starting all servers...");
     mainApplication->startAllServers();
     mainLoop.loop();
     mainApplication->stopAll();

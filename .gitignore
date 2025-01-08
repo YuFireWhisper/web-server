@@ -7,3 +7,7 @@ CMakePresets.json
 logs/
 conf/
 server/auto/ssl/
+Doxyfile
+static/
+latex/
+html/

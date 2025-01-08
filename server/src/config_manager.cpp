@@ -113,6 +113,7 @@ void ConfigManager::processCharacter(char c, std::string &word) {
 }
 
 void ConfigManager::configParse(const char *data, const size_t len) {
+  LOG_TRACE("===== Starting configuration parsing =====");
   if (len == 0) {
     throw std::invalid_argument("Empty configuration data");
   }
@@ -162,6 +163,8 @@ void ConfigManager::configParse(const char *data, const size_t len) {
         break;
     }
   }
+
+  LOG_TRACE("===== Configuration parsing complete =====");
 }
 
 uint32_t ConfigManager::getCommandArgBits(CommandType type) {
@@ -353,6 +356,12 @@ void ConfigManager::handleLocationEnd(LocationContext *ctx) {
 
 void ConfigManager::handleServerEnd(ServerContext *ctx) {
   auto *conf = ctx->conf;
+  
+  LOG_TRACE("===== Adding config to server =====");
+  LOG_TRACE("Server name: " + conf->serverName);
+  LOG_TRACE("Server address: " + conf->address);
+  LOG_TRACE("Server port: " + std::to_string(conf->port));
+
   SSLManager::getInstance().addServer(*conf);
 
   if (serverCallback_) {

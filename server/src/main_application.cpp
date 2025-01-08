@@ -54,6 +54,7 @@ void MainApplication::stopAll() {
 }
 
 void MainApplication::startAllServers() {
+  LOG_TRACE("===== Starting all servers =====");
   std::vector<ServerConfig> configs;
   {
     std::lock_guard lock(serverMutex_);
@@ -62,6 +63,8 @@ void MainApplication::startAllServers() {
   }
 
   for (const auto &config : configs) {
+    LOG_TRACE("Starting server: " + config.serverName);
+
     auto thread = std::make_shared<EventLoopThread>();
     auto *loop  = thread->startLoop();
 
@@ -79,6 +82,8 @@ void MainApplication::startAllServers() {
       threads_.emplace_back(std::move(thread));
     });
   }
+
+  LOG_TRACE("===== All servers started =====");
 }
 
 void MainApplication::initSignalHandlers(EventLoop *mainLoop) {

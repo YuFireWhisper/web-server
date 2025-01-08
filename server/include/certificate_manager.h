@@ -2,7 +2,6 @@
 
 namespace server {
 
-constexpr int KEY_PAIR_INVALID        = -2;
 constexpr int CERTIFICATE_INVALID     = -1;
 constexpr int CERTIFICATE_NEED_UPDATE = 0;
 constexpr int CERTIFICATE_VALID       = 1;

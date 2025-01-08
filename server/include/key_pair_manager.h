@@ -2,7 +2,27 @@
 
 #include "include/types.h"
 
+#include <string>
+
 namespace server {
+
+constexpr int KEY_PAIR_PRI_INVALID = -7;
+constexpr int KEY_PAIR_PUB_INVALID = -6;
+constexpr int KEY_PAIR_SYSERROR    = -5;
+constexpr int KEY_PAIR_INVALID     = -4;
+constexpr int KEY_PAIR_ONLY_PRI    = -3;
+constexpr int KEY_PAIR_ONLY_PUB    = -2;
+constexpr int KEY_PAIR_NOT_EXIST   = 0;
+constexpr int KEY_PAIR_VALID       = 1;
+
+struct KeyInfo {
+  std::string keyType       = "UNKNOWN";
+  std::string algorithmName = "UNKNOWN";
+  std::string keySize       = "UNKNOWN";
+  std::string isValid       = "UNKNOWN";
+
+  std::string rsa_e = "UNKNOWN";
+};
 
 class KeyPairManager {
 public:
@@ -12,8 +32,10 @@ public:
   static void savePublicKey(const EVP_PKEY *keyPair, const std::string &path);
   static void savePrivateKey(const EVP_PKEY *keyPair, const std::string &path);
 
-  static bool verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey);
-  static bool verifyKeyPair(const std::string &pubPath, const std::string &priPath);
+  static int verifyKeyPair(const std::string &pubPath, const std::string &priPath);
+  static int verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey);
+
+  static KeyInfo getKeyInfo(const EVP_PKEY *key);
 
   static UniqueEvpKey loadPublicKey(std::string_view path);
   static UniqueEvpKey loadPrivateKey(std::string_view path);

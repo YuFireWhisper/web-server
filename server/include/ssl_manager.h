@@ -1,11 +1,10 @@
 #pragma once
 
-#include <cstdint>
+#include "include/key_pair_manager.h"
 #include <nlohmann/json_fwd.hpp>
 #include <openssl/evp.h>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace server {
 
@@ -28,9 +27,9 @@ public:
 private:
   SSLManager();
 
+  static void logKeyInfo(const KeyInfo& info, const std::string& keyPath);
+
   std::unordered_map<std::string, ServerConfig> serverConfigs_;
-  inline static const std::unordered_set<int32_t> supportedAlgorithms_{ EVP_PKEY_RSA,
-                                                                        EVP_PKEY_ED25519 };
 };
 
 } // namespace server

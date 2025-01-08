@@ -1,11 +1,12 @@
 #include "include/key_pair_manager.h"
 
 #include "include/acme_client.h"
+#include "include/file_system.h"
 #include "include/log.h"
 #include "include/types.h"
-#include "include/file_system.h"
 
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
@@ -100,31 +101,33 @@ void KeyPairManager::savePrivateKey(const EVP_PKEY *keyPair, const std::string &
   }
 }
 
-bool KeyPairManager::verifyKeyPair(const std::string &pubPath, const std::string &priPath) {
-  if (!FileSystem::isAllExist(pubPath, priPath)) {
-    return false;
+int KeyPairManager::verifyKeyPair(const std::string &pubPath, const std::string &priPath) {
+  if (FileSystem::isPartialExist(pubPath, priPath)) {
+    if (FileSystem::isNoneExist(pubPath)) {
+      return KEY_PAIR_ONLY_PRI;
+    }
+
+    return KEY_PAIR_ONLY_PUB;
   }
 
-  if (FileSystem::isPartialExist(pubPath, priPath)) {
-    throw std::runtime_error("Key pair files are incomplete");
+  if (FileSystem::isNoneExist(pubPath, priPath)) {
+    return KEY_PAIR_NOT_EXIST;
   }
 
   return verifyKeyPair(loadPublicKey(pubPath).get(), loadPrivateKey(priPath).get());
 }
 
-bool KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey) {
+int KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey) {
   static constexpr std::string_view TEST_MESSAGE = "TestMessage";
 
   auto mdCtx = UniqueMdCtx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-  if (!mdCtx
-      || EVP_DigestSignInit(
-             mdCtx.get(),
-             nullptr,
-             nullptr,
-             nullptr,
-             const_cast<EVP_PKEY *>(privateKey)
-         ) <= 0) {
-    return false;
+  if (!mdCtx) {
+    return KEY_PAIR_SYSERROR;
+  }
+
+  if (EVP_DigestSignInit(mdCtx.get(), nullptr, nullptr, nullptr, const_cast<EVP_PKEY *>(privateKey))
+      <= 0) {
+    return KEY_PAIR_SYSERROR;
   }
 
   size_t sigLen = 0;
@@ -136,7 +139,7 @@ bool KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *pr
           TEST_MESSAGE.size()
       )
       <= 0) {
-    return false;
+    return KEY_PAIR_SYSERROR;
   }
 
   std::vector<unsigned char> signature(sigLen);
@@ -148,33 +151,90 @@ bool KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *pr
           TEST_MESSAGE.size()
       )
       <= 0) {
-    return false;
+    return KEY_PAIR_SYSERROR;
   }
 
   auto verifyCtx = UniqueMdCtx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-  if (!verifyCtx
-      || EVP_DigestVerifyInit(
-             verifyCtx.get(),
-             nullptr,
-             nullptr,
-             nullptr,
-             const_cast<EVP_PKEY *>(publicKey)
-         ) <= 0) {
-    return false;
+  if (!verifyCtx) {
+    return KEY_PAIR_SYSERROR;
   }
 
-  return EVP_DigestVerify(
-             verifyCtx.get(),
-             signature.data(),
-             sigLen,
-             reinterpret_cast<const unsigned char *>(TEST_MESSAGE.data()),
-             TEST_MESSAGE.size()
-         )
-         > 0;
+  if (EVP_DigestVerifyInit(
+          verifyCtx.get(),
+          nullptr,
+          nullptr,
+          nullptr,
+          const_cast<EVP_PKEY *>(publicKey)
+      )
+      <= 0) {
+    return KEY_PAIR_INVALID;
+  }
+
+  if (EVP_DigestVerify(
+          verifyCtx.get(),
+          signature.data(),
+          sigLen,
+          reinterpret_cast<const unsigned char *>(TEST_MESSAGE.data()),
+          TEST_MESSAGE.size()
+      )
+      <= 0) {
+    return KEY_PAIR_INVALID;
+  }
+
+  return KEY_PAIR_VALID;
 }
 
-UniqueEvpKey KeyPairManager::loadPublicKey(std::string_view path
-) {
+KeyInfo KeyPairManager::getKeyInfo(const EVP_PKEY *key) {
+  KeyInfo info;
+
+  if (key == nullptr) {
+    info.isValid = "FALSE";
+    return info;
+  }
+
+  int keyType = EVP_PKEY_base_id(key);
+  switch (keyType) {
+    case EVP_PKEY_RSA:
+      info.algorithmName = "RSA";
+      break;
+    case EVP_PKEY_EC:
+      info.algorithmName = "EC";
+      break;
+    case EVP_PKEY_DSA:
+      info.algorithmName = "DSA";
+      break;
+    default:
+      info.algorithmName = "UNKNOWN";
+      info.isValid       = "FALSE";
+      return info;
+  }
+
+  info.keySize = std::to_string(EVP_PKEY_bits(key));
+
+  unsigned char *buffer = nullptr;
+  int len               = i2d_PrivateKey(key, &buffer);
+  if (len > 0 && buffer != nullptr) {
+    OPENSSL_free(buffer);
+    info.keyType = "PRIVATE";
+  } else {
+    info.keyType = "PUBLIC";
+  }
+
+  if (keyType == EVP_PKEY_RSA) {
+    BIGNUM *e = nullptr;
+    EVP_PKEY_get_bn_param(const_cast<EVP_PKEY *>(key), "e", &e);
+    if (e != nullptr) {
+      info.rsa_e = std::to_string(BN_get_word(e));
+      BN_free(e);
+    }
+  }
+
+  info.isValid = "TRUE";
+
+  return info;
+}
+
+UniqueEvpKey KeyPairManager::loadPublicKey(std::string_view path) {
   auto bio      = createBioFile(std::string(path), "r");
   EVP_PKEY *key = PEM_read_bio_PUBKEY(bio.get(), nullptr, nullptr, nullptr);
   if (key == nullptr) {
@@ -183,8 +243,7 @@ UniqueEvpKey KeyPairManager::loadPublicKey(std::string_view path
   return { key, EVP_PKEY_free };
 }
 
-UniqueEvpKey KeyPairManager::loadPrivateKey(std::string_view path
-) {
+UniqueEvpKey KeyPairManager::loadPrivateKey(std::string_view path) {
   auto bio      = createBioFile(std::string(path), "r");
   EVP_PKEY *key = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);
   if (key == nullptr) {
