@@ -36,13 +36,15 @@ LogEntry::LogEntry(
     LogLevel level,
     std::string_view message,
     std::string_view file,
-    int line
+    int line,
+    std::string_view function
 ) noexcept
     : level_(level)
     , message_(message)
     , timestamp_(std::chrono::system_clock::now())
     , file_(file)
-    , line_(line) {}
+    , line_(line)
+    , function_(function) {}
 
 std::string LogFormatter::formatForFile(const LogEntry &entry) noexcept {
   const auto time       = std::chrono::system_clock::to_time_t(entry.getTimestamp());
@@ -53,11 +55,12 @@ std::string LogFormatter::formatForFile(const LogEntry &entry) noexcept {
   std::strftime(timestamp.data(), timestamp.size(), "%Y-%m-%d %H:%M:%S", localTime);
 
   return std::format(
-      "{} [{}] {}:{} - {}",
+      "{} [{}] {}:{} {} - {}",
       timestamp.data(),
       getLevelName(entry.getLevel()),
       entry.getFile(),
       entry.getLine(),
+      entry.getFunction(),
       entry.getMessage()
   );
 }
@@ -71,12 +74,13 @@ std::string LogFormatter::formatForConsole(const LogEntry &entry) noexcept {
   std::strftime(timestamp.data(), timestamp.size(), "%Y-%m-%d %H:%M:%S", localTime);
 
   return std::format(
-      "{}{} [{}] {}:{} - {}\033[0m",
+      "{}{} [{}] {}:{} - {} - {}\033[0m",
       getLevelColor(entry.getLevel()),
       timestamp.data(),
       getLevelName(entry.getLevel()),
       entry.getFile(),
       entry.getLine(),
+      entry.getFunction(),
       entry.getMessage()
   );
 }
@@ -85,7 +89,25 @@ FileHandle::FileHandle(const std::filesystem::path &path)
     : path_(path) {
   const auto expandedPath = expandTilde(path);
   std::filesystem::create_directories(expandedPath.parent_path());
-  file_ = std::fopen(expandedPath.c_str(), "a");
+
+  const auto &systemLogPath = getSystemLogPath();
+  if (expandedPath == systemLogPath) {
+    const auto& backupPath = systemLogPath + ".bak"; 
+
+    if (std::filesystem::exists(systemLogPath)) {
+      try {
+        if (std::filesystem::exists(backupPath)) {
+          std::filesystem::remove(backupPath);
+        }
+
+        std::filesystem::rename(systemLogPath, backupPath);
+      } catch (const std::exception &e) {
+        std::cerr << "Failed to handle backup: " << e.what() << '\n';
+      }
+    }
+  }
+
+  file_ = std::fopen(expandedPath.c_str(), "w");
   if (file_ == nullptr) {
     throw std::runtime_error("Failed to open log file: " + expandedPath.string());
   }
@@ -147,13 +169,14 @@ void Logger::log(
     LogLevel level,
     std::string_view message,
     std::string_view file,
-    int line
+    int line,
+    std::string_view function
 ) noexcept {
   if (systemLogPath_.empty()) {
     systemLogPath_ = getSystemLogPath();
   }
 
-  LogEntry entry(level, message, file, line);
+  LogEntry entry(level, message, file, line, function);
   const auto consoleMessage = LogFormatter::formatForConsole(entry);
   const auto fileMessage    = LogFormatter::formatForFile(entry);
 
@@ -170,13 +193,14 @@ void Logger::log(
     std::string_view message,
     const std::filesystem::path &outputPath,
     std::string_view file,
-    int line
+    int line,
+    std::string_view function
 ) noexcept {
   if (systemLogPath_.empty()) {
     systemLogPath_ = getSystemLogPath();
   }
 
-  LogEntry entry(level, message, file, line);
+  LogEntry entry(level, message, file, line, function);
   const auto consoleMessage = LogFormatter::formatForConsole(entry);
   const auto fileMessage    = LogFormatter::formatForFile(entry);
 

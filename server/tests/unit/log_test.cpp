@@ -43,10 +43,12 @@ protected:
   static bool logContainsEntry(
       const std::string &content,
       const std::string &level,
-      const std::string &message
+      const std::string &message,
+      const std::string &function = ".*"
   ) {
-    std::string patternStr =
-        R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[)" + level + R"(\] .+:\d+ - )" + message;
+    std::string patternStr = R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[)" + level + R"(\] .+:\d+ )"
+                             + function + R"( - )" + message;
+
     std::regex pattern(patternStr);
 
     std::cout << "Pattern: " << patternStr << '\n';
@@ -64,50 +66,52 @@ protected:
 };
 
 TEST_F(LoggerTest, BasicLogging) {
-  Logger::log(LogLevel::INFO, "test message", "test.cpp", 1);
+  Logger::log(LogLevel::INFO, "test message", "test.cpp", 1, "testFunction");
 
   std::string content = readLogFile(systemLogPath_);
-  EXPECT_TRUE(logContainsEntry(content, "INFO", "test message"));
+  EXPECT_TRUE(logContainsEntry(content, "INFO", "test message", "testFunction"));
 }
 
 TEST_F(LoggerTest, MultipleLogLevels) {
-  Logger::log(LogLevel::DEBUG, "debug message", "test.cpp", 1);
-  Logger::log(LogLevel::ERROR, "error message", "test.cpp", 2);
+  Logger::log(LogLevel::DEBUG, "debug message", "test.cpp", 1, "testFunction1");
+  Logger::log(LogLevel::ERROR, "error message", "test.cpp", 2, "testFunction2");
 
   std::string content = readLogFile(systemLogPath_);
-  EXPECT_TRUE(logContainsEntry(content, "DEBUG", "debug message"));
-  EXPECT_TRUE(logContainsEntry(content, "ERROR", "error message"));
+  EXPECT_TRUE(logContainsEntry(content, "DEBUG", "debug message", "testFunction1"));
+  EXPECT_TRUE(logContainsEntry(content, "ERROR", "error message", "testFunction2"));
 }
 
 TEST_F(LoggerTest, CustomLogPath) {
-  Logger::log(LogLevel::INFO, "custom path message", customLogPath_, "test.cpp", 1);
+  Logger::log(LogLevel::INFO, "custom path message", customLogPath_, "test.cpp", 1, "testFunction");
 
   std::string systemContent = readLogFile(systemLogPath_);
   std::string customContent = readLogFile(customLogPath_);
 
-  EXPECT_TRUE(logContainsEntry(systemContent, "INFO", "custom path message"));
-  EXPECT_TRUE(logContainsEntry(customContent, "INFO", "custom path message"));
+  EXPECT_TRUE(logContainsEntry(systemContent, "INFO", "custom path message", "testFunction"));
+  EXPECT_TRUE(logContainsEntry(customContent, "INFO", "custom path message", "testFunction"));
 }
 
 TEST_F(LoggerTest, DefaultOutputFile) {
   std::filesystem::path defaultPath = tempDir_ / "default.log";
   Logger::setDefaultOutputFile(defaultPath);
-  Logger::log(LogLevel::INFO, "default output message", "test.cpp", 1);
+  Logger::log(LogLevel::INFO, "default output message", "test.cpp", 1, "testFunction");
 
   std::string systemContent  = readLogFile(systemLogPath_);
   std::string defaultContent = readLogFile(defaultPath);
 
-  EXPECT_TRUE(logContainsEntry(systemContent, "INFO", "default output message"));
-  EXPECT_TRUE(logContainsEntry(defaultContent, "INFO", "default output message"));
+  EXPECT_TRUE(logContainsEntry(systemContent, "INFO", "default output message", "testFunction"));
+  EXPECT_TRUE(logContainsEntry(defaultContent, "INFO", "default output message", "testFunction"));
 }
 
 TEST_F(LoggerTest, ClearDefaultOutputFile) {
   std::filesystem::path defaultPath = tempDir_ / "default.log";
   Logger::setDefaultOutputFile(defaultPath);
   Logger::clearDefaultOutputFile();
-  Logger::log(LogLevel::INFO, "after clear message", "test.cpp", 1);
+  Logger::log(LogLevel::INFO, "after clear message", "test.cpp", 1, "testFunction");
 
-  EXPECT_TRUE(logContainsEntry(readLogFile(systemLogPath_), "INFO", "after clear message"));
+  EXPECT_TRUE(
+      logContainsEntry(readLogFile(systemLogPath_), "INFO", "after clear message", "testFunction")
+  );
   EXPECT_FALSE(std::filesystem::exists(defaultPath));
 }
 
@@ -119,12 +123,14 @@ TEST_F(LoggerTest, ConcurrentLogging) {
   threads.reserve(threadCount);
   for (int i = 0; i < threadCount; ++i) {
     threads.emplace_back([i]() {
+      std::string functionName = "ThreadFunction" + std::to_string(i);
       for (int j = 0; j < logsPerThread; ++j) {
         Logger::log(
             LogLevel::INFO,
             "thread " + std::to_string(i) + " message " + std::to_string(j),
             "test.cpp",
-            i
+            i,
+            functionName
         );
       }
     });
@@ -147,10 +153,11 @@ TEST_F(LoggerTest, ConcurrentLogging) {
 
 TEST_F(LoggerTest, LogFileCreation) {
   std::filesystem::path deepPath = tempDir_ / "deep" / "nested" / "dir" / "test.log";
-  Logger::log(LogLevel::INFO, "nested path message", deepPath, "test.cpp", 1);
+  Logger::log(LogLevel::INFO, "nested path message", deepPath, "test.cpp", 1, "testFunction");
 
   EXPECT_TRUE(std::filesystem::exists(deepPath));
-  EXPECT_TRUE(logContainsEntry(readLogFile(deepPath), "INFO", "nested path message"));
+  EXPECT_TRUE(logContainsEntry(readLogFile(deepPath), "INFO", "nested path message", "testFunction")
+  );
 }
 
 TEST_F(LoggerTest, MacroUsage) {
@@ -158,15 +165,35 @@ TEST_F(LoggerTest, MacroUsage) {
   LOG_ERROR("error macro message");
 
   std::string content = readLogFile(systemLogPath_);
-  EXPECT_TRUE(logContainsEntry(content, "INFO", "macro message"));
-  EXPECT_TRUE(logContainsEntry(content, "ERROR", "error macro message"));
+  EXPECT_TRUE(logContainsEntry(
+      content,
+      "INFO",
+      "macro message",
+      "server::testing::LoggerTest_MacroUsage_Test::TestBody"
+  ));
+  EXPECT_TRUE(logContainsEntry(
+      content,
+      "ERROR",
+      "error macro message",
+      "server::testing::LoggerTest_MacroUsage_Test::TestBody"
+  ));
 }
 
 TEST_F(LoggerTest, FilePathMacroUsage) {
   LOG_INFO_F("custom file message", customLogPath_);
 
-  EXPECT_TRUE(logContainsEntry(readLogFile(systemLogPath_), "INFO", "custom file message"));
-  EXPECT_TRUE(logContainsEntry(readLogFile(customLogPath_), "INFO", "custom file message"));
+  EXPECT_TRUE(logContainsEntry(
+      readLogFile(systemLogPath_),
+      "INFO",
+      "custom file message",
+      "server::testing::LoggerTest_FilePathMacroUsage_Test::TestBody"
+  ));
+  EXPECT_TRUE(logContainsEntry(
+      readLogFile(customLogPath_),
+      "INFO",
+      "custom file message",
+      "server::testing::LoggerTest_FilePathMacroUsage_Test::TestBody"
+  ));
 }
 
 } // namespace server::testing

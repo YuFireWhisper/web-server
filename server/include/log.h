@@ -11,13 +11,20 @@ enum class LogLevel : int8_t { TRACE, DEBUG, INFO, WARN, ERROR, FATAL };
 
 class LogEntry {
 public:
-  LogEntry(LogLevel level, std::string_view message, std::string_view file, int line) noexcept;
+  LogEntry(
+      LogLevel level,
+      std::string_view message,
+      std::string_view file,
+      int line,
+      std::string_view function
+  ) noexcept;
 
   [[nodiscard]] LogLevel getLevel() const noexcept { return level_; }
   [[nodiscard]] std::string_view getMessage() const noexcept { return message_; }
   [[nodiscard]] const auto &getTimestamp() const noexcept { return timestamp_; }
   [[nodiscard]] std::string_view getFile() const noexcept { return file_; }
   [[nodiscard]] int getLine() const noexcept { return line_; }
+  [[nodiscard]] std::string_view getFunction() const noexcept { return function_; }
 
 private:
   LogLevel level_;
@@ -25,6 +32,7 @@ private:
   std::chrono::system_clock::time_point timestamp_;
   std::string_view file_;
   int line_;
+  std::string_view function_;
 };
 
 class LogFormatter {
@@ -49,7 +57,7 @@ private:
 
 class FileHandle {
 public:
-  explicit FileHandle(const std::filesystem::path& path);
+  explicit FileHandle(const std::filesystem::path &path);
   ~FileHandle();
 
   void write(std::string_view message);
@@ -77,13 +85,18 @@ private:
 class Logger {
 public:
   static void
-  log(LogLevel level, std::string_view message, std::string_view file, int line) noexcept;
+  log(LogLevel level,
+      std::string_view message,
+      std::string_view file,
+      int line,
+      std::string_view function) noexcept;
   static void
   log(LogLevel level,
       std::string_view message,
       const std::filesystem::path &outputPath,
       std::string_view file,
-      int line) noexcept;
+      int line,
+      std::string_view function) noexcept;
 
   static void setDefaultOutputFile(const std::filesystem::path &path) noexcept;
   static void clearDefaultOutputFile() noexcept;
@@ -97,22 +110,28 @@ private:
 
 } // namespace server
 
-#define LOG_TRACE(message) server::Logger::log(server::LogLevel::TRACE, message, __FILE__, __LINE__)
-#define LOG_DEBUG(message) server::Logger::log(server::LogLevel::DEBUG, message, __FILE__, __LINE__)
-#define LOG_INFO(message) server::Logger::log(server::LogLevel::INFO, message, __FILE__, __LINE__)
-#define LOG_WARN(message) server::Logger::log(server::LogLevel::WARN, message, __FILE__, __LINE__)
-#define LOG_ERROR(message) server::Logger::log(server::LogLevel::ERROR, message, __FILE__, __LINE__)
-#define LOG_FATAL(message) server::Logger::log(server::LogLevel::FATAL, message, __FILE__, __LINE__)
+#define LOG_TRACE(message)                                                                         \
+  server::Logger::log(server::LogLevel::TRACE, message, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_DEBUG(message)                                                                         \
+  server::Logger::log(server::LogLevel::DEBUG, message, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_INFO(message)                                                                          \
+  server::Logger::log(server::LogLevel::INFO, message, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_WARN(message)                                                                          \
+  server::Logger::log(server::LogLevel::WARN, message, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_ERROR(message)                                                                         \
+  server::Logger::log(server::LogLevel::ERROR, message, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_FATAL(message)                                                                         \
+  server::Logger::log(server::LogLevel::FATAL, message, __FILE__, __LINE__, __FUNCTION__)
 
 #define LOG_TRACE_F(message, path)                                                                 \
-  server::Logger::log(server::LogLevel::TRACE, message, path, __FILE__, __LINE__)
+  server::Logger::log(server::LogLevel::TRACE, message, path, __FILE__, __LINE__, __FUNCTION__)
 #define LOG_DEBUG_F(message, path)                                                                 \
-  server::Logger::log(server::LogLevel::DEBUG, message, path, __FILE__, __LINE__)
+  server::Logger::log(server::LogLevel::DEBUG, message, path, __FILE__, __LINE__, __FUNCTION__)
 #define LOG_INFO_F(message, path)                                                                  \
-  server::Logger::log(server::LogLevel::INFO, message, path, __FILE__, __LINE__)
+  server::Logger::log(server::LogLevel::INFO, message, path, __FILE__, __LINE__, __FUNCTION__)
 #define LOG_WARN_F(message, path)                                                                  \
-  server::Logger::log(server::LogLevel::WARN, message, path, __FILE__, __LINE__)
+  server::Logger::log(server::LogLevel::WARN, message, path, __FILE__, __LINE__, __FUNCTION__)
 #define LOG_ERROR_F(message, path)                                                                 \
-  server::Logger::log(server::LogLevel::ERROR, message, path, __FILE__, __LINE__)
+  server::Logger::log(server::LogLevel::ERROR, message, path, __FILE__, __LINE__, __FUNCTION__)
 #define LOG_FATAL_F(message, path)                                                                 \
-  server::Logger::log(server::LogLevel::FATAL, message, path, __FILE__, __LINE__)
+  server::Logger::log(server::LogLevel::FATAL, message, path, __FILE__, __LINE__, __FUNCTION__)
