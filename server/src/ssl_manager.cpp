@@ -1,14 +1,13 @@
 #include "include/ssl_manager.h"
 
-#include "include/config_defaults.h"
-#include "include/key_pair_manager.h"
-#include "include/log.h"
 #include "include/acme_client.h"
 #include "include/certificate_manager.h"
+#include "include/config_defaults.h"
 #include "include/file_system.h"
+#include "include/key_pair_manager.h"
+#include "include/log.h"
 
 #include <curl/curl.h>
-#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -50,11 +49,11 @@ void SSLManager::addServer(ServerConfig &config) {
 
   serverConfigs_[config.serverName] = config;
 
-  const std::string priPath = config.sslPrivateKeyFile; 
+  const std::string priPath = config.sslPrivateKeyFile;
   const std::string pubPath = config.sslPublicKeyFile;
 
   const std::string certKeyPath = config.sslCertKeyFile;
-  const std::string certPath = config.sslCertFile;
+  const std::string certPath    = config.sslCertFile;
 
   if (!KeyPairManager::verifyKeyPair(pubPath, priPath)) {
     if (!config.sslEnableAutoGen) {
@@ -62,20 +61,20 @@ void SSLManager::addServer(ServerConfig &config) {
     }
 
     auto newKey = KeyPairManager::generateKeyPair(config.sslKeyType, config.sslKeyParam);
-    
+
     LOG_DEBUG("Saving key pair for server: " + config.address);
     KeyPairManager::savePublicKey(newKey.get(), pubPath);
     KeyPairManager::savePrivateKey(newKey.get(), priPath);
   }
 
-  int certStatus = CertificateManager::verifyCertificate(certPath, certKeyPath, config.sslRenewDays);
+  int certStatus =
+      CertificateManager::verifyCertificate(certPath, certKeyPath, config.sslRenewDays);
   LOG_DEBUG("Certificate status: " + std::to_string(certStatus));
 
   const int INIT_VALUE = 100;
-  int acmeStatus = INIT_VALUE;
+  int acmeStatus       = INIT_VALUE;
 
   if (certStatus == CERTIFICATE_VALID) {
-    isNotInitializedOne = false;
     return;
   }
 
@@ -127,36 +126,4 @@ int SSLManager::validateChallenge(const std::string &serverName, const std::stri
   return acmeClient.validateChallenge(type);
 }
 
-std::string SSLManager::getCertificatePath(std::string_view address) const {
-  const auto it = serverConfigs_.find(std::string(address));
-  if (it == serverConfigs_.end()) {
-    throw std::runtime_error("Server not found: " + std::string(address));
-  }
-  return it->second.sslCertFile;
-}
-
-std::string SSLManager::getPrivateKeyPath(std::string_view address) const {
-  const auto it = serverConfigs_.find(std::string(address));
-  if (it == serverConfigs_.end()) {
-    throw std::runtime_error("Server not found: " + std::string(address));
-  }
-  return it->second.sslPrivateKeyFile;
-}
-
-bool SSLManager::validateAndUpdateChallenge(const std::string &type) {
-  LOG_DEBUG("Validating and updating challenge for type: " + type);
-  if (!acmeClient_->requestChallengeCompletion(type)) {
-    return false;
-  }
-
-  try {
-    acmeClient_->requestFinalization();
-    std::filesystem::remove(currentConfig_->sslLocationUrlFile);
-    std::filesystem::remove(currentConfig_->sslChallengeUrlFile);
-    std::filesystem::remove(currentConfig_->sslFinalizeUrlFile);
-    return true;
-  } catch (const std::exception &e) {
-    return false;
-  }
-}
 } // namespace server
