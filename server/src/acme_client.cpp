@@ -349,157 +349,12 @@ std::string AcmeClient::loadUrlFromFile(std::string_view path) {
   return url;
 }
 
-void AcmeClient::registerAccount() {
-  auto key   = KeyPairManager::loadPrivateKey(config_.sslPrivateKeyFile);
-  auto jwk   = getJwk();
-  auto nonce = getNonce(urlCache_.at(config_.sslApiUrl).newNonce);
-
-  const auto header  = createAccountRequestHeader(jwk, nonce);
-  const auto payload = createAccountRequestPayload();
-  auto jwtToken      = signJwt(header, payload, key.get());
-
-  LOG_DEBUG("registerAccount Header: " + header.dump());
-  LOG_DEBUG("registerAccount Payload: " + payload.dump());
-  LOG_DEBUG("registerAccount JWT Token: " + jwtToken);
-
-  auto response = sendAccountRequest(jwtToken);
-  storeAccountUrl(response);
-}
-
-nlohmann::json
-AcmeClient::createAccountRequestHeader(const nlohmann::json &jwk, const std::string &nonce) const {
-  return { { "alg", getAlgorithmName(nid_) },
-           { "jwk", jwk },
-           { "nonce", nonce },
-           { "url", urlCache_.at(config_.sslApiUrl).newAccount } };
-}
-
 nlohmann::json AcmeClient::createAccountRequestPayload() const {
   return { { "contact", { "mailto:" + config_.sslEmail } }, { "termsOfServiceAgreed", true } };
 }
 
-std::string AcmeClient::sendAccountRequest(const std::string &jwtToken) const {
-  const nlohmann::json requestBody = createRequestBody(jwtToken);
-
-  std::string headerData;
-
-  sendRequest(
-      urlCache_.at(config_.sslApiUrl).newAccount,
-      requestBody.dump(),
-      nullptr,
-      &headerData,
-      { "Content-Type: application/jose+json" }
-  );
-
-  return extractHeaderValue(headerData, "Location");
-}
-
-void AcmeClient::storeAccountUrl(const std::string &url) const {
-  if (url.empty()) {
-    throw std::runtime_error("Empty account URL");
-  }
-
-  std::ofstream file(config_.sslAccountUrlFile);
-  if (!file) {
-    throw std::runtime_error("Failed to save account URL");
-  }
-  file << url;
-}
-
-void AcmeClient::requestNewOrder() {
-  const auto header  = createHeaderWithKid(acmeUrls_.newOrder);
-  const auto payload = createOrderRequestPayload();
-  auto jwtToken      = signJwt(header, payload, accountPriKey_.get());
-
-  std::string response;
-  std::string headerData;
-
-  sendRequest(
-      acmeUrls_.newOrder,
-      createRequestBody(jwtToken).dump(),
-      &response,
-      &headerData,
-      { "Content-Type: application/jose+json" }
-  );
-
-  const auto responseJson = nlohmann::json::parse(response);
-
-  if (!responseJson.contains("authorizations") || !responseJson.contains("finalize")) {
-    throw std::runtime_error("Invalid order response");
-  }
-
-  const auto orderUrl    = extractHeaderValue(headerData, "Location");
-  const auto authzUrl    = responseJson.at("authorizations")[0].get<std::string>();
-  const auto finalizeUrl = responseJson.at("finalize").get<std::string>();
-
-  FileSystem::addLineToFile(config_.sslUrlsFile, orderUrl, ORDER_URL_INDEX);
-  FileSystem::addLineToFile(config_.sslUrlsFile, authzUrl, AUTHZURL_INDEX);
-  FileSystem::addLineToFile(config_.sslUrlsFile, finalizeUrl, FINALIZE_URL_INDEX);
-
-  getChallengeAndDisplay(authzUrl);
-}
-
-nlohmann::json AcmeClient::createOrderRequestHeader(
-    const std::string &accountUrl,
-    const std::string &nonce
-) const {
-  return { { "alg", getAlgorithmName(getAlgorithmId(config_.sslKeyType)) },
-           { "kid", accountUrl },
-           { "nonce", nonce },
-           { "url", urlCache_.at(config_.sslApiUrl).newOrder } };
-}
-
 nlohmann::json AcmeClient::createOrderRequestPayload() const {
   return { { "identifiers", { { { "type", "dns" }, { "value", config_.serverName } } } } };
-}
-
-std::tuple<std::string, std::string, std::string>
-AcmeClient::sendOrderRequest(const std::string &jwtToken) const {
-  const nlohmann::json requestBody = createRequestBody(jwtToken);
-
-  std::string response;
-  std::string headerData;
-
-  sendRequest(
-      urlCache_.at(config_.sslApiUrl).newOrder,
-      requestBody.dump(),
-      &response,
-      &headerData,
-      { "Content-Type: application/jose+json" }
-  );
-
-  const auto responseJson = nlohmann::json::parse(response);
-  const auto location     = extractHeaderValue(headerData, "Location");
-  const auto challengeUrl = responseJson.at("authorizations")[0].get<std::string>();
-  const auto finalizeUrl  = responseJson.at("finalize").get<std::string>();
-
-  LOG_DEBUG("location: " + location);
-  LOG_DEBUG("challengeUrl: " + challengeUrl);
-  LOG_DEBUG("finalizeUrl: " + finalizeUrl);
-
-  if (location.empty() || responseJson.empty() || challengeUrl.empty() || finalizeUrl.empty()) {
-    throw std::runtime_error("Invalid order response");
-  }
-
-  return { location, challengeUrl, finalizeUrl };
-}
-
-void AcmeClient::storeUrls(
-    std::string_view location,
-    const std::string &challenge,
-    const std::string &finalize
-) const {
-  std::ofstream locationFile(config_.sslLocationUrlFile);
-  std::ofstream challengeFile(config_.sslChallengeUrlFile);
-  std::ofstream finalizeFile(config_.sslFinalizeUrlFile);
-
-  if (!locationFile || !challengeFile || !finalizeFile) {
-    throw std::runtime_error("Failed to create URL files");
-  }
-
-  locationFile << location;
-  challengeFile << challenge;
-  finalizeFile << finalize;
 }
 
 int AcmeClient::validateChallenge(const std::string &type) {
@@ -731,18 +586,6 @@ nlohmann::json AcmeClient::createHeaderWithKid(const std::string &url) {
            { "url", url } };
 }
 
-nlohmann::json AcmeClient::createHeaderWithKid_(
-    int algNid,
-    const std::string &kid,
-    const std::string &nonce,
-    const std::string &url
-) {
-  return { { "alg", getAlgorithmName(algNid) },
-           { "kid", kid },
-           { "nonce", nonce },
-           { "url", url } };
-}
-
 nlohmann::json AcmeClient::createFinalizationRequestPayload(EVP_PKEY *key) const {
   auto csr = generateCsr(key);
   return { { "csr", base64UrlEncode(csr) } };
@@ -870,126 +713,6 @@ AcmeClient::sendRequest(const std::string &url, const std::string &data, std::st
   return response;
 }
 
-void AcmeClient::sendRequest(
-    std::string_view url,
-    std::string_view data,
-    std::string *response,
-    std::string *headerData,
-    const std::vector<std::string> &headers = {}
-) {
-  auto curl = UniqueCurl(curl_easy_init(), curl_easy_cleanup);
-  if (!curl) {
-    throw std::runtime_error("Failed to initialize CURL");
-  }
-
-  std::string dataStr(data);
-
-  LOG_DEBUG("Sending request to: " + std::string(url));
-  LOG_DEBUG("Request data: " + dataStr);
-
-  curl_easy_setopt(curl.get(), CURLOPT_URL, std::string(url).c_str());
-  curl_easy_setopt(curl.get(), CURLOPT_VERBOSE, 1L);
-
-  if (response != nullptr) {
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, writeCallback);
-    curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, response);
-  }
-
-  if (headerData != nullptr) {
-    curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, writeCallback);
-    curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, headerData);
-  }
-
-  curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYHOST, 2L);
-
-  UniqueCurlList headerList(nullptr, curl_slist_free_all);
-  if (!headers.empty()) {
-    curl_slist *list = nullptr;
-    for (const auto &header : headers) {
-      auto *new_list = curl_slist_append(list, header.c_str());
-      if (new_list == nullptr) {
-        throw std::runtime_error("Failed to append header");
-      }
-      list = new_list;
-    }
-    headerList.reset(list);
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, list);
-  }
-
-  if (!data.empty()) {
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, dataStr.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, dataStr.size());
-  }
-
-  CURLcode res = curl_easy_perform(curl.get());
-  if (res != CURLE_OK) {
-    std::string errorMsg = "Curl error: ";
-    errorMsg += curl_easy_strerror(res);
-    throw std::runtime_error(errorMsg);
-  }
-
-  long http_code = 0;
-  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &http_code);
-  if (http_code >= 400) {
-    throw std::runtime_error("HTTP error: " + std::to_string(http_code));
-  }
-
-  if (response != nullptr) {
-    LOG_DEBUG("Response: " + *response);
-  }
-
-  if (headerData != nullptr) {
-    LOG_DEBUG("Response headers: " + *headerData);
-  }
-}
-
-std::string AcmeClient::sendRequest_(
-    std::string_view url,
-    std::string_view data,
-    const std::vector<std::string> &headers
-) {
-  auto curl = UniqueCurl(curl_easy_init(), curl_easy_cleanup);
-  if (!curl) {
-    throw std::runtime_error("Failed to initialize CURL");
-  }
-
-  std::string response;
-  std::string dataStr(data);
-
-  LOG_DEBUG("Sending request to: " + std::string(url));
-  LOG_DEBUG("Request data: " + dataStr);
-
-  curl_easy_setopt(curl.get(), CURLOPT_URL, std::string(url).c_str());
-  curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, writeCallback);
-  curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &response);
-  curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYHOST, 2L);
-
-  UniqueCurlList headerList(nullptr, curl_slist_free_all);
-  if (!headers.empty()) {
-    curl_slist *list = nullptr;
-    for (const auto &header : headers) {
-      list = curl_slist_append(list, header.c_str());
-    }
-    headerList.reset(list);
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, list);
-  }
-
-  if (!data.empty()) {
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, dataStr.c_str());
-    curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, dataStr.size());
-  }
-
-  if (curl_easy_perform(curl.get()) != CURLE_OK) {
-    throw std::runtime_error("Failed to perform HTTP request");
-  }
-
-  LOG_DEBUG("Response: " + response);
-
-  return response;
-}
-
 std::string AcmeClient::sendHeadRequest(const std::string &url) {
   auto curl = UniqueCurl(curl_easy_init(), curl_easy_cleanup);
   if (!curl) {
@@ -1006,49 +729,6 @@ std::string AcmeClient::sendHeadRequest(const std::string &url) {
   curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYHOST, 2L);
   curl_easy_setopt(curl.get(), CURLOPT_NOBODY, 1L);
   curl_easy_setopt(curl.get(), CURLOPT_CUSTOMREQUEST, "HEAD");
-
-  if (curl_easy_perform(curl.get()) != CURLE_OK) {
-    throw std::runtime_error("Failed to perform HTTP HEAD request");
-  }
-
-  long http_code = 0;
-  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &http_code);
-  if (http_code >= 400) {
-    throw std::runtime_error("HTTP error: " + std::to_string(http_code));
-  }
-
-  LOG_DEBUG("Response headers: " + headerData);
-
-  return headerData;
-}
-
-std::string
-AcmeClient::sendHeadRequest(std::string_view url, const std::vector<std::string> &headers) {
-  auto curl = UniqueCurl(curl_easy_init(), curl_easy_cleanup);
-  if (!curl) {
-    throw std::runtime_error("Failed to initialize CURL");
-  }
-
-  std::string headerData;
-
-  curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, writeCallback);
-  curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, &headerData);
-
-  curl_easy_setopt(curl.get(), CURLOPT_URL, std::string(url).c_str());
-  curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYPEER, 1L);
-  curl_easy_setopt(curl.get(), CURLOPT_SSL_VERIFYHOST, 2L);
-  curl_easy_setopt(curl.get(), CURLOPT_NOBODY, 1L);
-  curl_easy_setopt(curl.get(), CURLOPT_CUSTOMREQUEST, "HEAD");
-
-  UniqueCurlList headerList(nullptr, curl_slist_free_all);
-  if (!headers.empty()) {
-    curl_slist *list = nullptr;
-    for (const auto &header : headers) {
-      list = curl_slist_append(list, header.c_str());
-    }
-    headerList.reset(list);
-    curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, list);
-  }
 
   if (curl_easy_perform(curl.get()) != CURLE_OK) {
     throw std::runtime_error("Failed to perform HTTP HEAD request");
@@ -1128,19 +808,6 @@ std::string AcmeClient::getNonce() {
   return nonce;
 }
 
-std::string AcmeClient::getNonce(std::string_view nonceUrl) {
-  if (nonceUrl.empty()) {
-    throw std::runtime_error("Invalid nonce URL");
-  }
-
-  const auto response = sendHeadRequest(nonceUrl);
-  const auto nonce    = extractHeaderValue(response, "Replay-Nonce");
-  if (nonce.empty()) {
-    throw std::runtime_error("Failed to get nonce from ACME server");
-  }
-  return nonce;
-}
-
 std::string
 AcmeClient::extractHeaderValue(const std::string &response, const std::string &headerName) {
   std::string cleanHeaderName = headerName;
@@ -1169,18 +836,6 @@ AcmeClient::extractHeaderValue(const std::string &response, const std::string &h
     }
   }
   throw std::runtime_error("Header not found: " + headerName);
-}
-
-std::string AcmeClient::extractLocationHeader(const std::string &response) {
-  const std::string headerName = "Location: ";
-  std::istringstream stream(response);
-  std::string line;
-  while (std::getline(stream, line)) {
-    if (line.starts_with(headerName)) {
-      return line.substr(headerName.length());
-    }
-  }
-  throw std::runtime_error("Location header not found");
 }
 
 void AcmeClient::getChallengeAndDisplay(const std::string &authorizationUrl) {
