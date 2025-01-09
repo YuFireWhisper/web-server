@@ -16,6 +16,7 @@ constexpr int KEY_PAIR_NOT_EXIST   = 0;
 constexpr int KEY_PAIR_VALID       = 1;
 
 struct KeyInfo {
+  std::string fileName      = "UNKNOWN";
   std::string keyType       = "UNKNOWN";
   std::string algorithmName = "UNKNOWN";
   std::string keySize       = "UNKNOWN";
@@ -35,10 +36,10 @@ public:
   static int verifyKeyPair(const std::string &pubPath, const std::string &priPath);
   static int verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *privateKey);
 
-  static KeyInfo getKeyInfo(const EVP_PKEY *key);
-
   static UniqueEvpKey loadPublicKey(std::string_view path);
   static UniqueEvpKey loadPrivateKey(std::string_view path);
+
+  static KeyInfo getKeyInfo(const EVP_PKEY *key, const std::string &keyPath);
 };
 
 } // namespace server

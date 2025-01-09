@@ -184,8 +184,28 @@ int KeyPairManager::verifyKeyPair(const EVP_PKEY *publicKey, const EVP_PKEY *pri
   return KEY_PAIR_VALID;
 }
 
-KeyInfo KeyPairManager::getKeyInfo(const EVP_PKEY *key) {
+UniqueEvpKey KeyPairManager::loadPublicKey(std::string_view path) {
+  auto bio      = createBioFile(std::string(path), "r");
+  EVP_PKEY *key = PEM_read_bio_PUBKEY(bio.get(), nullptr, nullptr, nullptr);
+  if (key == nullptr) {
+    throw std::runtime_error("Failed to load public key from: " + std::string(path));
+  }
+  return { key, EVP_PKEY_free };
+}
+
+UniqueEvpKey KeyPairManager::loadPrivateKey(std::string_view path) {
+  auto bio      = createBioFile(std::string(path), "r");
+  EVP_PKEY *key = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);
+  if (key == nullptr) {
+    throw std::runtime_error("Failed to load private key from: " + std::string(path));
+  }
+  return { key, EVP_PKEY_free };
+}
+
+KeyInfo KeyPairManager::getKeyInfo(const EVP_PKEY *key, const std::string &keyPath) {
   KeyInfo info;
+
+  info.fileName = FileSystem::getFileName(keyPath);
 
   if (key == nullptr) {
     info.isValid = "FALSE";
@@ -232,23 +252,5 @@ KeyInfo KeyPairManager::getKeyInfo(const EVP_PKEY *key) {
   info.isValid = "TRUE";
 
   return info;
-}
-
-UniqueEvpKey KeyPairManager::loadPublicKey(std::string_view path) {
-  auto bio      = createBioFile(std::string(path), "r");
-  EVP_PKEY *key = PEM_read_bio_PUBKEY(bio.get(), nullptr, nullptr, nullptr);
-  if (key == nullptr) {
-    throw std::runtime_error("Failed to load public key from: " + std::string(path));
-  }
-  return { key, EVP_PKEY_free };
-}
-
-UniqueEvpKey KeyPairManager::loadPrivateKey(std::string_view path) {
-  auto bio      = createBioFile(std::string(path), "r");
-  EVP_PKEY *key = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);
-  if (key == nullptr) {
-    throw std::runtime_error("Failed to load private key from: " + std::string(path));
-  }
-  return { key, EVP_PKEY_free };
 }
 } // namespace server

@@ -52,7 +52,7 @@ int CertificateManager::verifyCertificate(
 
   auto key    = KeyPairManager::loadPrivateKey(keyPath);
   auto pubKey = UniqueEvpKey(X509_get_pubkey(certChain.leaf.get()), EVP_PKEY_free);
-  if (!key || !pubKey || !KeyPairManager::verifyKeyPair(pubKey.get(), key.get())) {
+  if (!key || !pubKey || (KeyPairManager::verifyKeyPair(pubKey.get(), key.get()) == 0)) {
     return KEY_PAIR_INVALID;
   }
 
@@ -116,6 +116,68 @@ CertChain CertificateManager::loadCertificateChain(const std::string &path) {
   }
 
   return { UniqueX509(cert, X509_free), std::move(intermediates) };
+}
+
+CertInfo CertificateManager::getCertInfo(const std::string &path) {
+  auto cert = loadCertificate(path);
+  CertInfo info;
+  if (!cert) {
+    return info;
+  }
+
+  info.fileName = FileSystem::getFileName(path);
+
+  if (X509_NAME *subject = X509_get_subject_name(cert.get())) {
+    char commonName[256];
+    if (X509_NAME_get_text_by_NID(subject, NID_commonName, commonName, sizeof(commonName)) > 0) {
+      info.domain = commonName;
+    }
+  }
+
+  if (X509_NAME *issuer = X509_get_issuer_name(cert.get())) {
+    char buffer[256];
+    int nid_priority[] = { NID_organizationName, NID_commonName, NID_countryName };
+
+    for (int nid : nid_priority) {
+      if (X509_NAME_get_text_by_NID(issuer, nid, buffer, sizeof(buffer)) > 0) {
+        info.issuer = buffer;
+        break;
+      }
+    }
+  }
+
+  auto formatTime = [](const ASN1_TIME *time) -> std::string {
+    if (!time) {
+      return "UNKNOWN";
+    }
+
+    struct tm timeinfo;
+    if (ASN1_TIME_to_tm(time, &timeinfo) != 1) {
+      return "UNKNOWN";
+    }
+
+    char buffer[37]; // YYYY/MM/DD + null terminator
+    snprintf(
+        buffer,
+        sizeof(buffer),
+        "%04d/%02d/%02d",
+        timeinfo.tm_year + 1900,
+        timeinfo.tm_mon + 1,
+        timeinfo.tm_mday
+    );
+
+    return { buffer };
+  };
+
+  if (const ASN1_TIME *not_before = X509_get_notBefore(cert.get())) {
+    info.validityStart = formatTime(not_before);
+  }
+
+  if (const ASN1_TIME *not_after = X509_get_notAfter(cert.get())) {
+    info.validityEnd = formatTime(not_after);
+  }
+
+  return info;
 }
 
 } // namespace server

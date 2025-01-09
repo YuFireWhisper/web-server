@@ -1,6 +1,8 @@
 #pragma once
 
+#include "include/certificate_manager.h"
 #include "include/key_pair_manager.h"
+
 #include <nlohmann/json_fwd.hpp>
 #include <openssl/evp.h>
 #include <string>
@@ -27,7 +29,9 @@ public:
 private:
   SSLManager();
 
-  static void logKeyInfo(const KeyInfo& info, const std::string& keyPath);
+  static void logInfo(const std::string &title, const std::vector<std::pair<std::string, std::string>> &fields);
+  static void logKeyInfo(const KeyInfo &info);
+  static void logCertInfo(const CertInfo &info);
 
   std::unordered_map<std::string, ServerConfig> serverConfigs_;
 };

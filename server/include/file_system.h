@@ -40,6 +40,8 @@ public:
   static void addLineToFile(const std::string &path, const std::string &line, size_t index);
   static std::string readLineFromFile(const std::string &path, size_t index);
   static void removeLineFromFile(const std::string &path, size_t index);
+
+  static std::string getFileName(const std::string &path);
 };
 
 } // namespace server

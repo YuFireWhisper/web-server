@@ -19,6 +19,36 @@
 #include <openssl/x509v3.h>
 #include <string>
 
+namespace {
+const int WIDTH                = 50;
+const std::string PADDING      = "  ";
+const std::string TOP_LEFT     = "╔";
+const std::string TOP_RIGHT    = "╗";
+const std::string BOTTOM_LEFT  = "╚";
+const std::string BOTTOM_RIGHT = "╝";
+const std::string HORIZONTAL   = "═";
+const std::string VERTICAL     = "║";
+const std::string LEFT_JOINT   = "╠";
+const std::string RIGHT_JOINT  = "╣";
+
+const std::string HORIZONTAL_LINE = []() {
+  std::string line;
+  line.reserve(WIDTH - 2);
+  for (int i = 0; i < WIDTH - 2; i++) {
+    line += HORIZONTAL;
+  }
+  return line;
+}();
+
+// VERITICAL is a wide character, it size is 3
+// But we just need 1 character to be used as a vertical line
+// So we need to calculate the difference between the size of VERITCAL and the size we need
+const size_t VERTICAL_SIZE      = 1;
+const size_t VERITCAL_SIZE_DIFF = VERTICAL.size() - VERTICAL_SIZE;
+const size_t CAN_USE_SPACE      = WIDTH - (PADDING.size() * 2) - (VERTICAL_SIZE * 2);
+
+} // namespace
+
 namespace server {
 
 SSLManager &SSLManager::getInstance() {
@@ -58,8 +88,7 @@ void SSLManager::addServer(ServerConfig &config) {
   const std::string priPath = config.sslPrivateKeyFile;
   const std::string pubPath = config.sslPublicKeyFile;
 
-  const std::string certKeyPath = config.sslCertKeyFile;
-  const std::string certPath    = config.sslCertFile;
+  const std::string certPath = config.sslCertFile;
 
   KeyInfo priInfo;
   KeyInfo pubInfo;
@@ -67,8 +96,8 @@ void SSLManager::addServer(ServerConfig &config) {
   int ret = KeyPairManager::verifyKeyPair(pubPath, priPath);
   switch (ret) {
     case KEY_PAIR_VALID:
-      priInfo = KeyPairManager::getKeyInfo(KeyPairManager::loadPrivateKey(priPath).get());
-      pubInfo = KeyPairManager::getKeyInfo(KeyPairManager::loadPublicKey(pubPath).get());
+      priInfo = KeyPairManager::getKeyInfo(KeyPairManager::loadPrivateKey(priPath).get(), priPath);
+      pubInfo = KeyPairManager::getKeyInfo(KeyPairManager::loadPublicKey(pubPath).get(), pubPath);
       break;
     case KEY_PAIR_ONLY_PRI:
       throw std::invalid_argument("Incomplete key pair: private key exists without public key");
@@ -82,8 +111,8 @@ void SSLManager::addServer(ServerConfig &config) {
       auto newKey = KeyPairManager::generateKeyPair(config.sslKeyType, config.sslKeyParam);
       KeyPairManager::savePublicKey(newKey.get(), pubPath);
       KeyPairManager::savePrivateKey(newKey.get(), priPath);
-      priInfo = KeyPairManager::getKeyInfo(newKey.get());
-      pubInfo = KeyPairManager::getKeyInfo(newKey.get());
+      priInfo = KeyPairManager::getKeyInfo(newKey.get(), priPath);
+      pubInfo = KeyPairManager::getKeyInfo(newKey.get(), pubPath);
       break;
     }
     case KEY_PAIR_SYSERROR:
@@ -94,51 +123,29 @@ void SSLManager::addServer(ServerConfig &config) {
       throw std::runtime_error("Unknown key pair verification error");
   }
 
-  logKeyInfo(priInfo, priPath);
-  logKeyInfo(pubInfo, pubPath);
+  logKeyInfo(priInfo);
+  logKeyInfo(pubInfo);
 
-  int certStatus =
-      CertificateManager::verifyCertificate(certPath, certKeyPath, config.sslRenewDays);
-  LOG_DEBUG("Certificate status: " + std::to_string(certStatus));
+  AcmeClient acmeClient(config);
+  int acmeStatus = acmeClient.createCertificate();
 
-  const int INIT_VALUE = 100;
-  int acmeStatus       = INIT_VALUE;
-
-  if (certStatus == CERTIFICATE_VALID) {
+  if (acmeStatus == CERTIFICATE_PENDING) {
+    LOG_WARN("Certificate is pending, server will not start");
+    LOG_WARN("Please validate the challenge for server: " + config.address);
     return;
   }
 
-  if (certStatus == CERTIFICATE_INVALID) {
-    if (!config.sslEnableAutoGen) {
-      throw std::runtime_error("Invalid certificate and auto-generation is disabled");
-    }
-
-    AcmeClient acmeClient(config);
-    acmeStatus = acmeClient.createCertificate();
+  if (acmeStatus == CERTIFICATE_PROCESSING) {
+    LOG_WARN("Certificate is processing, server will not start");
+    LOG_WARN("Please wait, it will take some time");
+    return;
   }
 
-  if (certStatus == CERTIFICATE_NEED_UPDATE) {
-    AcmeClient acmeClient(config);
-    acmeStatus = acmeClient.createCertificate();
-  }
-
-  if (acmeStatus != INIT_VALUE) {
-    if (acmeStatus == CERTIFICATE_PENDING) {
-      LOG_WARN("Certificate is pending, server will not start");
-      LOG_WARN("Please validate the challenge for server: " + config.address);
-      return;
-    }
-
-    if (acmeStatus == CERTIFICATE_PROCESSING) {
-      LOG_WARN("Certificate is processing, server will not start");
-      LOG_WARN("Please wait, it will take some time");
-      return;
-    }
-
-    if (acmeStatus == CERTIFICATE_CREATE_SUCCESS) {
-      LOG_INFO("Certificate created successfully");
-      return;
-    }
+  if (acmeStatus == CERTIFICATE_CREATE_SUCCESS) {
+    LOG_INFO("Certificate created successfully");
+    CertInfo info = CertificateManager::getCertInfo(certPath);
+    logCertInfo(info);
+    return;
   }
 
   throw std::runtime_error("Failed to create certificate for server: " + config.address);
@@ -156,61 +163,79 @@ int SSLManager::validateChallenge(const std::string &serverName, const std::stri
   return acmeClient.validateChallenge(type);
 }
 
-void SSLManager::logKeyInfo(const KeyInfo &info, const std::string &keyPath) {
-  const std::string TOP_LEFT     = "╔";
-  const std::string TOP_RIGHT    = "╗";
-  const std::string BOTTOM_LEFT  = "╚";
-  const std::string BOTTOM_RIGHT = "╝";
-  const std::string HORIZONTAL   = "═";
-  const std::string VERTICAL     = "║";
-  const std::string LEFT_JOINT   = "╠";
-  const std::string RIGHT_JOINT  = "╣";
-
-  const int width = 50;
-  std::string horizontalLine;
-  for (int i = 0; i < width - 2; i++) {
-    horizontalLine += HORIZONTAL;
+void SSLManager::logInfo(
+    const std::string &title,
+    const std::vector<std::pair<std::string, std::string>> &fields
+) {
+  int maxLabelLength = 0;
+  for (const auto &field : fields) {
+    maxLabelLength =
+        static_cast<int>(std::max(static_cast<size_t>(maxLabelLength), field.first.length()));
   }
 
-  const std::string padding(2, ' ');
+  const size_t titlePaddingSize = (CAN_USE_SPACE - title.size()) / 2;
+  LOG_DEBUG("titlePaddingSize: " + std::to_string(titlePaddingSize));
 
-  const std::string label = "Key Information";
-  const int labelWidth    = static_cast<int>(label.length()) + 2;
+  const std::string titlePadding(titlePaddingSize, ' ');
 
-  LOG_INFO(TOP_LEFT + horizontalLine + TOP_RIGHT);
-  LOG_INFO(
-      VERTICAL + padding + "Key Information" + std::string(width - labelWidth - (padding.length() * 2), ' ')
-      + padding + VERTICAL
-  );
-  LOG_INFO(LEFT_JOINT + horizontalLine + RIGHT_JOINT);
+  std::string titleLine =
+      VERTICAL + PADDING + titlePadding + title + titlePadding + PADDING + VERTICAL;
+
+  LOG_INFO(TOP_LEFT + HORIZONTAL_LINE + TOP_RIGHT);
+  LOG_INFO(titleLine);
+  LOG_INFO(LEFT_JOINT + HORIZONTAL_LINE + RIGHT_JOINT);
 
   auto formatLine = [&](const std::string &label, const std::string &value) {
     std::stringstream ss;
-    ss << VERTICAL << padding;
-    ss << std::setw(labelWidth) << std::left << label << ": ";
+    ss << VERTICAL << PADDING;
+    ss << std::setw(maxLabelLength) << std::left << label << ": ";
 
+    size_t maxValueLength      = CAN_USE_SPACE - maxLabelLength;
     std::string truncatedValue = value;
-    size_t maxValueLength = width - labelWidth - (padding.length() * 2) - 4; // 4 for ": " and "║"
     if (truncatedValue.length() > maxValueLength) {
       truncatedValue = truncatedValue.substr(0, maxValueLength - 3) + "...";
     }
-    ss << truncatedValue;
 
-    std::string line   = ss.str();
-    int remainingSpace = std::max(0, width - static_cast<int>(line.length()) + 1);
-    return line + std::string(remainingSpace, ' ') + VERTICAL;
+    ss << truncatedValue;
+    std::string line = ss.str();
+    size_t remaining = WIDTH - line.size();
+    remaining += VERITCAL_SIZE_DIFF; // We need VERIFICAL size to be 1
+    remaining -= PADDING.size();
+    remaining -= VERTICAL_SIZE;
+
+    std::string spaces(remaining, ' ');
+
+    return line + spaces + PADDING + VERTICAL;
   };
 
-  size_t pos           = keyPath.find_last_of("/\\");
-  std::string filename = (pos != std::string::npos) ? keyPath.substr(pos + 1) : keyPath;
+  for (const auto &field : fields) {
+    LOG_INFO(formatLine(field.first, field.second));
+  }
 
-  LOG_INFO(formatLine("Key File Name", filename));
-  LOG_INFO(formatLine("Key Type", info.keyType));
-  LOG_INFO(formatLine("Algorithm", info.algorithmName));
-  LOG_INFO(formatLine("Key Size", info.keySize));
-  LOG_INFO(formatLine("Is Valid", info.isValid));
-  LOG_INFO(formatLine("RSA-e", info.rsa_e));
+  LOG_INFO(BOTTOM_LEFT + HORIZONTAL_LINE + BOTTOM_RIGHT);
+}
 
-  LOG_INFO(BOTTOM_LEFT + horizontalLine + BOTTOM_RIGHT);
+void SSLManager::logKeyInfo(const KeyInfo &info) {
+  std::string title                                       = "Key  Information";
+  std::vector<std::pair<std::string, std::string>> fields = {
+    { "Key File Name", info.fileName },  { "Key Type", info.keyType },
+    { "Algorithm", info.algorithmName }, { "Key Size", info.keySize },
+    { "Is Valid", info.isValid },        { "RSA-e", info.rsa_e }
+  };
+
+  logInfo(title, fields);
+}
+
+void SSLManager::logCertInfo(const CertInfo &info) {
+  std::string title                                       = "Certificate  Information";
+  std::vector<std::pair<std::string, std::string>> fields = {
+    { "File Name", info.fileName },
+    { "Domain", info.domain },
+    { "Issuer", info.issuer },
+    { "Validity Start", info.validityStart },
+    { "Validity End", info.validityEnd }
+  };
+
+  logInfo(title, fields);
 }
 } // namespace server

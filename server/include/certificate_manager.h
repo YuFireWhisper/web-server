@@ -1,3 +1,5 @@
+#pragma once
+
 #include "include/types.h"
 
 namespace server {
@@ -11,6 +13,14 @@ struct CertChain {
   UniqueStack intermediates;
 };
 
+struct CertInfo {
+  std::string fileName      = "UNKNOWN";
+  std::string domain        = "UNKNOWN";
+  std::string issuer        = "UNKNOWN";
+  std::string validityStart = "UNKNOWN";
+  std::string validityEnd   = "UNKNOWN";
+};
+
 class CertificateManager {
 public:
   static int
@@ -18,6 +28,8 @@ public:
 
   static UniqueX509 loadCertificate(std::string_view path);
   static CertChain loadCertificateChain(const std::string &path);
+
+  static CertInfo getCertInfo(const std::string &path);
 };
 
 } // namespace server

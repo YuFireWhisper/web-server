@@ -125,4 +125,9 @@ void FileSystem::removeLineFromFile(const std::string &path, size_t index) {
 
   file.close();
 }
+
+std::string FileSystem::getFileName(const std::string &path) {
+  std::filesystem::path filePath(path);
+  return filePath.filename().string();
+}
 } // namespace server
