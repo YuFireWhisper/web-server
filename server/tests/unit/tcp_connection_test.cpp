@@ -257,7 +257,7 @@ TEST_F(TcpConnectionTest, ShouldHandleMessageReceiving) {
 TEST_F(TcpConnectionTest, ShouldHandleHighWaterMark) {
   std::promise<size_t> waterMarkReached;
   const size_t waterMark    = 64;
-  const size_t testDataSize = waterMark * 2;
+  const size_t testDataSize = waterMark * 10000;
 
   auto future = waterMarkReached.get_future();
 
