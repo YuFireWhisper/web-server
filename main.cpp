@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
 
     if (!ConfigManager::isCanRun()) {
       LOG_INFO("Server is not ready yet, exiting...");
-      return 1;
+      return 0;
     }
 
     mainApplication->startAllServers();

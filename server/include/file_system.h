@@ -1,6 +1,9 @@
 #include <filesystem>
 #include <string>
 
+#define TO_ABS_PATH(path) server::FileSystem::toAbsolutePath(path)
+#define GET_FILE_NAME(path) server::FileSystem::getFileName(path)
+
 namespace server {
 
 inline static constexpr size_t LINE_LENGTH = 256;
@@ -44,6 +47,5 @@ public:
   static std::string getFileName(const std::string &path);
 };
 
-#define GET_FILE_NAME(path) server::FileSystem::getFileName(path)
 
 } // namespace server

@@ -1,5 +1,6 @@
 #include "include/router.h"
 
+#include "include/file_system.h"
 #include "include/http_request.h"
 #include "include/http_response.h"
 #include "include/log.h"
@@ -70,7 +71,7 @@ void Router::addRoute(const LocationConfig &node) {
   }
 }
 
-size_t Router::splitPath(std::string_view path, std::string_view *segments) const noexcept {
+size_t Router::splitPath(std::string_view path, std::string_view *segments) noexcept {
   LOG_DEBUG("開始分割路徑: " + std::string(path));
   size_t count = 0;
 
@@ -188,7 +189,7 @@ bool Router::serveStaticFile(
   LOG_DEBUG("開始處理靜態文件: " + staticFilePath.string());
 
   try {
-    const auto normalizedPath = normalizePath(staticFilePath);
+    const std::filesystem::path normalizedPath = TO_ABS_PATH(staticFilePath);
     LOG_DEBUG("規範化後的路徑: " + normalizedPath.string());
 
     if (!std::filesystem::exists(normalizedPath)) {
@@ -292,7 +293,7 @@ void Router::handleError(StatusCode errorCode) const {
   handleError(errorCode, &resp);
 }
 
-std::string_view Router::getMimeType(std::string_view extension) const noexcept {
+std::string_view Router::getMimeType(std::string_view extension) noexcept {
   auto it = mimeTypes_.find(std::string(extension));
   return it != mimeTypes_.end() ? std::string_view(it->second) : "application/octet-stream";
 }
@@ -323,28 +324,4 @@ void Router::handleCaching(
     resp->setBody("");
   }
 }
-
-std::filesystem::path Router::normalizePath(const std::filesystem::path &path) const {
-  LOG_DEBUG("正在規範化路徑: " + path.string());
-
-  if (path.is_absolute() || path.string()[0] == '/') {
-    LOG_DEBUG("已經是絕對路徑，直接返回");
-    return path;
-  }
-
-  const std::string pathStr = path.string();
-  if (!pathStr.empty() && pathStr[0] == '~') {
-    LOG_DEBUG("處理波浪號路徑");
-    const char *homeDir = std::getenv("HOME");
-    if (homeDir == nullptr) {
-      throw std::runtime_error("無法獲取HOME目錄");
-    }
-    size_t skipLength = (pathStr.length() > 1 && pathStr[1] == '/') ? 2 : 1;
-    return std::filesystem::path(homeDir) / pathStr.substr(skipLength);
-  }
-
-  LOG_DEBUG("處理相對路徑");
-  return std::filesystem::absolute(path);
-}
-
 } // namespace server

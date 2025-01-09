@@ -29,7 +29,6 @@ public:
 private:
   SSLManager();
 
-  static void logInfo(const std::string &title, const std::vector<std::pair<std::string, std::string>> &fields);
   static void logKeyInfo(const KeyInfo &info);
   static void logCertInfo(const CertInfo &info);
 

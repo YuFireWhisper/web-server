@@ -33,17 +33,16 @@ private:
 
   void handleError(StatusCode errorCode) const;
   void handleError(StatusCode errorCode, HttpResponse *resp) const;
-  [[nodiscard]] std::string_view getMimeType(std::string_view extension) const noexcept;
+  static std::string_view getMimeType(std::string_view extension) noexcept;
   void
   handleCaching(const std::filesystem::path &filePath, const HttpRequest &req, HttpResponse *resp)
       const;
-  size_t splitPath(std::string_view path, std::string_view *segments) const noexcept;
+  static size_t splitPath(std::string_view path, std::string_view *segments)  noexcept;
   bool serveStaticFile(
       const std::filesystem::path &staticFilePath,
       const HttpRequest &req,
       HttpResponse *resp
   ) const;
-  [[nodiscard]] std::filesystem::path normalizePath(const std::filesystem::path &path) const;
   [[nodiscard]] const LocationConfig *findMatchingRoute(const HttpRequest &req) const noexcept;
 
   LocationConfig rootNode_;
