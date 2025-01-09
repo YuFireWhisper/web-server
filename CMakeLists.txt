@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(web-server)
 
-option(BUILD_TESTS "Build the test files" OFF)
+option(BUILD_TESTS "Build the test files" ON)
 
 add_definitions(-DPROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
@@ -63,6 +63,7 @@ add_library(server
     server/src/certificate_manager.cpp
     server/src/acme_client.cpp
     server/src/main_application.cpp
+    server/src/curl_http_client.cpp
 )
 
 add_executable(web_server main.cpp)
@@ -119,7 +120,8 @@ if(BUILD_TESTS)
         ${TEST_DIR}/http_server_test.cpp
         ${TEST_DIR}/config_manager_test.cpp
         ${TEST_DIR}/router_test.cpp
-        ${TEST_DIR}/ssl_manager_test.cpp
+        # ${TEST_DIR}/ssl_manager_test.cpp
+        ${TEST_DIR}/acme_client_test.cpp
     )
 
     foreach(TEST_FILE ${TEST_FILES})

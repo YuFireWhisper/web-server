@@ -77,7 +77,7 @@ std::string LogFormatter::formatForFile(const LogEntry &entry) noexcept {
   std::strftime(timestamp.data(), timestamp.size(), "%Y-%m-%d %H:%M:%S", localTime);
 
   return std::format(
-      "{} [{}] {}:{} {} - {}",
+      "{} [{}] {}:{} - {} - {}",
       timestamp.data(),
       getLevelName(entry.getLevel()),
       entry.getFile(),
@@ -183,9 +183,11 @@ FileHandle::~FileHandle() {
 }
 
 void FileHandle::write(std::string_view message) {
+  std::lock_guard<std::mutex> lock(writeMutex_);
   if (file_ != nullptr) {
     std::fwrite(message.data(), 1, message.size(), file_);
     std::fwrite("\n", 1, 1, file_);
+    std::fflush(file_);
   }
 }
 
@@ -205,6 +207,8 @@ void LogWriter::writeConsole(std::string_view message) noexcept {
 }
 
 void LogWriter::writeFile(std::string_view message, const std::filesystem::path &path) {
+  std::lock_guard<std::mutex> lock(writeMutex_);
+
   for (size_t i = 0; i < handleCount_; ++i) {
     if (fileHandles_[i] != nullptr && fileHandles_[i]->getPath() == path) {
       fileHandles_[i]->write(message);
@@ -225,7 +229,6 @@ void LogWriter::writeFile(std::string_view message, const std::filesystem::path 
 
 std::string Logger::systemLogPath_;
 std::filesystem::path Logger::defaultOutputPath_;
-thread_local LogWriter Logger::localWriter_;
 
 void Logger::log(
     LogLevel level,
@@ -243,10 +246,10 @@ void Logger::log(
   const auto fileMessage    = LogFormatter::formatForFile(entry);
 
   LogWriter::writeConsole(consoleMessage);
-  localWriter_.writeFile(fileMessage, systemLogPath_);
+  LogWriter::getInstance().writeFile(fileMessage, systemLogPath_);
 
   if (!defaultOutputPath_.empty()) {
-    localWriter_.writeFile(fileMessage, defaultOutputPath_);
+    LogWriter::getInstance().writeFile(fileMessage, defaultOutputPath_);
   }
 }
 
@@ -267,8 +270,8 @@ void Logger::log(
   const auto fileMessage    = LogFormatter::formatForFile(entry);
 
   LogWriter::writeConsole(consoleMessage);
-  localWriter_.writeFile(fileMessage, systemLogPath_);
-  localWriter_.writeFile(fileMessage, outputPath);
+  LogWriter::getInstance().writeFile(fileMessage, outputPath);
+  LogWriter::getInstance().writeFile(fileMessage, systemLogPath_);
 }
 
 void Logger::setDefaultOutputFile(const std::filesystem::path &path) noexcept {

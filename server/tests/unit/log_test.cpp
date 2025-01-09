@@ -46,18 +46,47 @@ protected:
       const std::string &message,
       const std::string &function = ".*"
   ) {
-    std::string patternStr = R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[)" + level + R"(\] .+:\d+ )"
-                             + function + R"( - )" + message;
+    const std::string dateTimePattern  = R"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})";
+    const std::string levelPattern     = R"(\[)" + level + R"(\])";
+    const std::string locationPattern  = R"([\w\/\-\.]+:\d+)";
+    const std::string &functionPattern = function;
+    const std::string &messagePattern  = message;
+
+    std::string patternStr = "(" + dateTimePattern + ")" +         // Group 1: DateTime
+                             " " + "(" + levelPattern + ")" +      // Group 2: Level
+                             " " + "(" + locationPattern + ")" +   // Group 3: Location
+                             " - " + "(" + functionPattern + ")" + // Group 4: Function
+                             " - " + "(" + messagePattern + ")";   // Group 5: Message
 
     std::regex pattern(patternStr);
+    std::smatch matches;
 
-    std::cout << "Pattern: " << patternStr << '\n';
+    std::cout << "\n=== Log Matcher Debug Info ===\n";
+    std::cout << "Pattern Components:\n";
+    std::cout << "- DateTime: " << dateTimePattern << '\n';
+    std::cout << "- Level: " << levelPattern << '\n';
+    std::cout << "- Location: " << locationPattern << '\n';
+    std::cout << "- Function: " << functionPattern << '\n';
+    std::cout << "- Message: " << messagePattern << '\n';
+    std::cout << "\nFull Pattern: " << patternStr << '\n';
     std::cout << "Content to match: " << content << '\n';
 
-    bool matches = std::regex_search(content, pattern);
-    std::cout << "Matches: " << (matches ? "true" : "false") << '\n';
+    bool found = std::regex_search(content, matches, pattern);
 
-    return matches;
+    std::cout << "\nMatch Results:\n";
+    std::cout << "Found match: " << (found ? "YES" : "NO") << '\n';
+
+    if (found) {
+      std::cout << "\nMatched Components:\n";
+      std::cout << "- DateTime: " << matches[1] << '\n';
+      std::cout << "- Level: " << matches[2] << '\n';
+      std::cout << "- Location: " << matches[3] << '\n';
+      std::cout << "- Function: " << matches[4] << '\n';
+      std::cout << "- Message: " << matches[5] << '\n';
+    }
+
+    std::cout << "===========================\n";
+    return found;
   }
 
   std::filesystem::path tempDir_;
@@ -165,35 +194,19 @@ TEST_F(LoggerTest, MacroUsage) {
   LOG_ERROR("error macro message");
 
   std::string content = readLogFile(systemLogPath_);
-  EXPECT_TRUE(logContainsEntry(
-      content,
-      "INFO",
-      "macro message",
-      "server::testing::LoggerTest_MacroUsage_Test::TestBody"
-  ));
-  EXPECT_TRUE(logContainsEntry(
-      content,
-      "ERROR",
-      "error macro message",
-      "server::testing::LoggerTest_MacroUsage_Test::TestBody"
-  ));
+  EXPECT_TRUE(logContainsEntry(content, "INFO", "macro message", "TestBody"));
+  EXPECT_TRUE(logContainsEntry(content, "ERROR", "error macro message", "TestBody"));
 }
 
 TEST_F(LoggerTest, FilePathMacroUsage) {
   LOG_INFO_F("custom file message", customLogPath_);
 
-  EXPECT_TRUE(logContainsEntry(
-      readLogFile(systemLogPath_),
-      "INFO",
-      "custom file message",
-      "server::testing::LoggerTest_FilePathMacroUsage_Test::TestBody"
-  ));
-  EXPECT_TRUE(logContainsEntry(
-      readLogFile(customLogPath_),
-      "INFO",
-      "custom file message",
-      "server::testing::LoggerTest_FilePathMacroUsage_Test::TestBody"
-  ));
+  EXPECT_TRUE(
+      logContainsEntry(readLogFile(systemLogPath_), "INFO", "custom file message", "TestBody")
+  );
+  EXPECT_TRUE(
+      logContainsEntry(readLogFile(customLogPath_), "INFO", "custom file message", "TestBody")
+  );
 }
 
 } // namespace server::testing

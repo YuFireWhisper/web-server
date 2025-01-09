@@ -1,6 +1,8 @@
 #pragma once
 
 #include "include/config_defaults.h"
+#include "include/curl_http_client.h"
+#include "include/http_client.h"
 
 #include <cstdint>
 #include <nlohmann/json.hpp>
@@ -45,15 +47,9 @@ public:
   static int32_t getAlgorithmId(std::string_view algorithm);
   static int32_t getAlgorithmId(const EVP_PKEY *key);
 
-  static std::string sendRequest(
-      const std::string &url,
-      const std::string &data = "",
-      std::string *headerData = nullptr
-  );
-
-  static std::string sendHeadRequest(const std::string &url);
-
   static AcmeUrls getUrls(const std::string &apiUrl);
+
+  static void setHttpClient(std::shared_ptr<HttpClient> client);
 
 private:
   std::string getAccountUrl();
@@ -100,10 +96,19 @@ private:
 
   void downloadCertificate(const std::string &certUrl) const;
 
+  static std::string sendRequest(
+      const std::string &url,
+      const std::string &data = "",
+      std::string *headerData = nullptr
+  );
+  static std::string sendHeadRequest(const std::string &url);
+
   const ServerConfig &config_;
   const UniqueEvpKey accountPriKey_;
   const int nid_;
   const AcmeUrls acmeUrls_;
   const std::string accountUrl_;
+  inline static std::mutex httpClientMutex_;
+  inline static std::shared_ptr<HttpClient> httpClient_ = std::make_shared<CurlHttpClient>();
 };
 } // namespace server

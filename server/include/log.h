@@ -3,6 +3,7 @@
 #include <array>
 #include <chrono>
 #include <filesystem>
+#include <mutex>
 #include <string_view>
 
 namespace server {
@@ -73,20 +74,32 @@ public:
 private:
   FILE *file_;
   std::filesystem::path path_;
+  std::mutex writeMutex_;
 };
 
 class LogWriter {
 public:
-  LogWriter() noexcept;
-  ~LogWriter();
-
+  static LogWriter &getInstance() noexcept {
+    static LogWriter instance;
+    return instance;
+  }
   static void writeConsole(std::string_view message) noexcept;
   void writeFile(std::string_view message, const std::filesystem::path &path);
 
+  LogWriter(const LogWriter &)            = delete;
+  LogWriter &operator=(const LogWriter &) = delete;
+  LogWriter(LogWriter &&)                 = delete;
+  LogWriter &operator=(LogWriter &&)      = delete;
+
 private:
+  LogWriter() noexcept;
+
+  ~LogWriter();
+
   static constexpr size_t MAX_FILES = 64;
   std::array<FileHandle *, MAX_FILES> fileHandles_;
   size_t handleCount_;
+  std::mutex writeMutex_;
 };
 
 class Logger {
@@ -119,7 +132,6 @@ public:
   ) noexcept;
 
 private:
-  static thread_local LogWriter localWriter_;
   static std::string systemLogPath_;
   static std::filesystem::path defaultOutputPath_;
 };
