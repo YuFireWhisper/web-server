@@ -389,11 +389,6 @@ int AcmeClient::validateChallenge(const std::string &type) {
       return CERTIFICATE_CREATE_SUCCESS;
     }
 
-    if (status == "processing") {
-      LOG_INFO("Certificate request is still processing");
-      return CERTIFICATE_PROCESSING;
-    }
-
     if (status == "pending") {
       handleOrderPending(orderJson.at("authorizations")[0].get<std::string>(), type);
     }
@@ -402,7 +397,7 @@ int AcmeClient::validateChallenge(const std::string &type) {
       handleOrderReady(orderJson.at("finalize").get<std::string>());
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(6000));
+    std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 }
 

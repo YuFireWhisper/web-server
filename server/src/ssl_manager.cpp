@@ -40,12 +40,12 @@ SSLManager::~SSLManager() {
   ERR_free_strings();
 }
 
-void SSLManager::addServer(ServerConfig &config) {
+bool SSLManager::addServer(ServerConfig &config) {
   LOG_TRACE("===== Adding server to SSL manager =====");
 
   if (!config.sslEnable) {
     LOG_TRACE("SSL Enbale: false");
-    return;
+    return true;
   }
 
   if (serverConfigs_.contains(config.serverName)) {
@@ -101,20 +101,20 @@ void SSLManager::addServer(ServerConfig &config) {
   if (acmeStatus == CERTIFICATE_PENDING) {
     LOG_WARN("Certificate is pending, server will not start");
     LOG_WARN("Please validate the challenge for server: " + config.address);
-    return;
+    return false;
   }
 
   if (acmeStatus == CERTIFICATE_PROCESSING) {
     LOG_WARN("Certificate is processing, server will not start");
     LOG_WARN("Please wait, it will take some time");
-    return;
+    return false;
   }
 
   if (acmeStatus == CERTIFICATE_CREATE_SUCCESS) {
     LOG_INFO("Certificate created successfully");
     CertInfo info = CertificateManager::getCertInfo(certPath);
     logCertInfo(info);
-    return;
+    return true;
   }
 
   throw std::runtime_error("Failed to create certificate for server: " + config.address);

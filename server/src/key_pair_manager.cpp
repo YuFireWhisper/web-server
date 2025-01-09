@@ -67,6 +67,10 @@ void KeyPairManager::savePublicKey(const EVP_PKEY *keyPair, const std::string &p
     throw std::runtime_error("Public key file already exists");
   }
 
+  if (!std::filesystem::exists(std::filesystem::path(path).parent_path())) {
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
+  }
+
   const auto bio = createBioFile(path, "w");
 
   if (PEM_write_bio_PUBKEY(bio.get(), const_cast<EVP_PKEY *>(keyPair)) != 1) {
@@ -77,6 +81,10 @@ void KeyPairManager::savePublicKey(const EVP_PKEY *keyPair, const std::string &p
 void KeyPairManager::savePrivateKey(const EVP_PKEY *keyPair, const std::string &path) {
   if (std::filesystem::exists(path)) {
     throw std::runtime_error("Private key file already exists");
+  }
+
+  if (!std::filesystem::exists(std::filesystem::path(path).parent_path())) {
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path());
   }
 
   const auto bio = createBioFile(path, "w");

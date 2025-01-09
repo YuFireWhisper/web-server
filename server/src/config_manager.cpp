@@ -362,7 +362,9 @@ void ConfigManager::handleServerEnd(ServerContext *ctx) {
   LOG_TRACE("Server address: " + conf->address);
   LOG_TRACE("Server port: " + std::to_string(conf->port));
 
-  SSLManager::getInstance().addServer(*conf);
+  if (SSLManager::getInstance().addServer(*conf)) {
+    canRun_ = true; 
+  }
 
   if (serverCallback_) {
     serverCallback_(*conf);

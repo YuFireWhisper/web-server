@@ -29,9 +29,6 @@ public:
 
   ~HttpServer() = default;
 
-  // HttpServer(const HttpServer &)            = delete;
-  // HttpServer &operator=(const HttpServer &) = delete;
-
   void start() { server_.start(); }
   void stop() { server_.stop(); }
   void setThreadNum(int numThreads) { server_.setThreadNum(numThreads); }

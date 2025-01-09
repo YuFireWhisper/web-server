@@ -25,6 +25,7 @@ public:
   void *getContextByOffset(size_t offset) const;
   void *getConfigByOffset(size_t offset) const;
 
+  static bool isCanRun() { return canRun_; }
   static void setServerCallback(ServerCallback callback) { serverCallback_ = std::move(callback); }
 
 private:
@@ -49,7 +50,8 @@ private:
   void processCommandField(const std::vector<std::string> &field, const ServerCommand &cmd) const;
 
   ConfigContext context_;
-  std::unordered_map<std::string, ServerCommand> commands_;
+  std::unordered_map<std::string, ServerCommand> commands_; 
+  inline static bool canRun_ = false;
   inline static ServerCallback serverCallback_;
 };
 

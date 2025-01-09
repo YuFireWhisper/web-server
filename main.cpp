@@ -42,7 +42,15 @@ int main(int argc, char *argv[]) {
 
     configManager.configParse(context.c_str(), context.length());
 
-    mainApplication->handleParam(argc, argv);
+    int ret = mainApplication->handleParam(argc, argv);
+    if (ret != 2) {
+      return ret;
+    }
+
+    if (!ConfigManager::isCanRun()) {
+      LOG_INFO("Server is not ready yet, exiting...");
+      return 1;
+    }
 
     mainApplication->startAllServers();
     mainLoop.loop();

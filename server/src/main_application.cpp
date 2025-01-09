@@ -126,7 +126,7 @@ int MainApplication::handleParam(int argc, char *argv[]) {
   if (argc <= 1) {
     LOG_TRACE("No Parameter");
     LOG_TRACE("===== Parameter parsing complete =====");
-    return 0;
+    return 2;
   }
 
   argc_ = argc;

@@ -23,7 +23,7 @@ public:
   SSLManager &operator=(const SSLManager &) = delete;
   ~SSLManager();
 
-  void addServer(ServerConfig &config);
+  bool addServer(ServerConfig &config);
   int validateChallenge(const std::string &serverName, const std::string &type);
 
 private:
@@ -34,6 +34,7 @@ private:
   static void logCertInfo(const CertInfo &info);
 
   std::unordered_map<std::string, ServerConfig> serverConfigs_;
+  bool canRun_ = false;
 };
 
 } // namespace server
