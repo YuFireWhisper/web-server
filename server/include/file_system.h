@@ -44,4 +44,6 @@ public:
   static std::string getFileName(const std::string &path);
 };
 
+#define GET_FILE_NAME(path) server::FileSystem::getFileName(path)
+
 } // namespace server

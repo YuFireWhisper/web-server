@@ -30,6 +30,28 @@ std::string getSystemLogPath() noexcept {
                           : std::string(kProjectRoot) + "logs/system.log";
 }
 
+const size_t WIDTH             = 50;
+const size_t PADDING_SIZE      = 2;
+const size_t CAN_USE_SPACE     = WIDTH - (PADDING_SIZE * 2);
+const std::string PADDING      = " ";
+const std::string TOP_LEFT     = "╔";
+const std::string TOP_RIGHT    = "╗";
+const std::string BOTTOM_LEFT  = "╚";
+const std::string BOTTOM_RIGHT = "╝";
+const std::string HORIZONTAL   = "═";
+const std::string VERTICAL     = "║";
+const std::string LEFT_JOINT   = "╠";
+const std::string RIGHT_JOINT  = "╣";
+
+const std::string HORIZONTAL_LINE = []() {
+  std::string line;
+  line.reserve(WIDTH - 2);
+  for (int i = 0; i < (int)WIDTH - 2; i++) {
+    line += HORIZONTAL;
+  }
+  return line;
+}();
+
 } // namespace
 
 LogEntry::LogEntry(
@@ -85,6 +107,46 @@ std::string LogFormatter::formatForConsole(const LogEntry &entry) noexcept {
   );
 }
 
+std::string
+LogFormatter::formatBox(const std::string &title, const std::vector<BoxLogField> &fields) noexcept {
+  std::stringstream result;
+
+  size_t maxLabelLength = 0;
+  for (const auto &field : fields) {
+    maxLabelLength = std::max(maxLabelLength, field.label.length());
+  }
+
+  const size_t titlePaddingSize = (CAN_USE_SPACE - title.length()) / 2;
+  const std::string titlePadding(titlePaddingSize, ' ');
+
+  result << TOP_LEFT << HORIZONTAL_LINE << TOP_RIGHT << "\n";
+  result << VERTICAL << PADDING << titlePadding << title << titlePadding
+         << (title.length() % 2 == 1 ? " " : "") << PADDING << VERTICAL << "\n";
+  result << LEFT_JOINT << HORIZONTAL_LINE << RIGHT_JOINT << "\n";
+
+  for (const auto &field : fields) {
+    std::stringstream line;
+    line << VERTICAL << PADDING;
+    line << std::setw((int)maxLabelLength) << std::left << field.label << ": ";
+
+    size_t maxValueLength = CAN_USE_SPACE - maxLabelLength - 2; // 2 for ": "
+    std::string value     = field.value;
+    if (value.length() > maxValueLength) {
+      value = value.substr(0, maxValueLength - 3) + "...";
+    }
+
+    line << value;
+    std::string lineStr = line.str();
+    size_t remaining    = WIDTH - lineStr.length() + 1; // +1 for VERTICAL(it is 3 characters)
+    lineStr += std::string(remaining, ' ');
+
+    result << lineStr << VERTICAL << "\n";
+  }
+
+  result << BOTTOM_LEFT << HORIZONTAL_LINE << BOTTOM_RIGHT;
+  return result.str();
+}
+
 FileHandle::FileHandle(const std::filesystem::path &path)
     : path_(path) {
   const auto expandedPath = expandTilde(path);
@@ -92,7 +154,7 @@ FileHandle::FileHandle(const std::filesystem::path &path)
 
   const auto &systemLogPath = getSystemLogPath();
   if (expandedPath == systemLogPath) {
-    const auto& backupPath = systemLogPath + ".bak"; 
+    const auto &backupPath = systemLogPath + ".bak";
 
     if (std::filesystem::exists(systemLogPath)) {
       try {
@@ -221,4 +283,20 @@ void Logger::setSystemLogPath(std::string_view path) noexcept {
   systemLogPath_ = std::string(path);
 }
 
+void Logger::logBox(
+    LogLevel level,
+    std::string_view title,
+    const std::vector<BoxLogField> &fields,
+    std::string_view file,
+    int line,
+    std::string_view function
+) noexcept {
+  const std::string formattedMessage = LogFormatter::formatBox(std::string(title), fields);
+
+  std::stringstream ss(formattedMessage);
+  std::string lineStr;
+  while (std::getline(ss, lineStr)) {
+    log(level, lineStr, file, line, function);
+  }
+}
 } // namespace server

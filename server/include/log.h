@@ -9,6 +9,11 @@ namespace server {
 
 enum class LogLevel : int8_t { TRACE, DEBUG, INFO, WARN, ERROR, FATAL };
 
+struct BoxLogField {
+  std::string label;
+  std::string value;
+};
+
 class LogEntry {
 public:
   LogEntry(
@@ -39,6 +44,8 @@ class LogFormatter {
 public:
   [[nodiscard]] static std::string formatForConsole(const LogEntry &entry) noexcept;
   [[nodiscard]] static std::string formatForFile(const LogEntry &entry) noexcept;
+  [[nodiscard]] static std::string
+  formatBox(const std::string &title, const std::vector<BoxLogField> &fields) noexcept;
 
 private:
   static constexpr std::array<const char *, 6> LEVEL_NAMES  = { "TRACE", "DEBUG", "INFO",
@@ -102,6 +109,15 @@ public:
   static void clearDefaultOutputFile() noexcept;
   static void setSystemLogPath(std::string_view path) noexcept;
 
+  static void logBox(
+      LogLevel level,
+      std::string_view title,
+      const std::vector<BoxLogField> &fields,
+      std::string_view file,
+      int line,
+      std::string_view function
+  ) noexcept;
+
 private:
   static thread_local LogWriter localWriter_;
   static std::string systemLogPath_;
@@ -135,3 +151,16 @@ private:
   server::Logger::log(server::LogLevel::ERROR, message, path, __FILE__, __LINE__, __FUNCTION__)
 #define LOG_FATAL_F(message, path)                                                                 \
   server::Logger::log(server::LogLevel::FATAL, message, path, __FILE__, __LINE__, __FUNCTION__)
+
+#define LOG_TRACE_BOX(title, fields)                                                               \
+  server::Logger::logBox(server::LogLevel::TRACE, title, fields, __FILE__, __LINE__, __FUNCTION__
+#define LOG_INFO_BOX(title, fields)                                                                \
+  server::Logger::logBox(server::LogLevel::INFO, title, fields, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_DEBUG_BOX(title, fields)                                                               \
+  server::Logger::logBox(server::LogLevel::DEBUG, title, fields, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_WARN_BOX(title, fields)                                                                \
+  server::Logger::logBox(server::LogLevel::WARN, title, fields, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_ERROR_BOX(title, fields)                                                               \
+  server::Logger::logBox(server::LogLevel::ERROR, title, fields, __FILE__, __LINE__, __FUNCTION__)
+#define LOG_FATAL_BOX(title, fields)                                                               \
+  server::Logger::logBox(server::LogLevel::FATAL, title, fields, __FILE__, __LINE__, __FUNCTION__)

@@ -7,7 +7,6 @@
 #include "include/key_pair_manager.h"
 #include "include/log.h"
 
-#include <algorithm>
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 #include <openssl/bio.h>
@@ -18,36 +17,6 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <string>
-
-namespace {
-const int WIDTH                = 50;
-const std::string PADDING      = "  ";
-const std::string TOP_LEFT     = "╔";
-const std::string TOP_RIGHT    = "╗";
-const std::string BOTTOM_LEFT  = "╚";
-const std::string BOTTOM_RIGHT = "╝";
-const std::string HORIZONTAL   = "═";
-const std::string VERTICAL     = "║";
-const std::string LEFT_JOINT   = "╠";
-const std::string RIGHT_JOINT  = "╣";
-
-const std::string HORIZONTAL_LINE = []() {
-  std::string line;
-  line.reserve(WIDTH - 2);
-  for (int i = 0; i < WIDTH - 2; i++) {
-    line += HORIZONTAL;
-  }
-  return line;
-}();
-
-// VERITICAL is a wide character, it size is 3
-// But we just need 1 character to be used as a vertical line
-// So we need to calculate the difference between the size of VERITCAL and the size we need
-const size_t VERTICAL_SIZE      = 1;
-const size_t VERITCAL_SIZE_DIFF = VERTICAL.size() - VERTICAL_SIZE;
-const size_t CAN_USE_SPACE      = WIDTH - (PADDING.size() * 2) - (VERTICAL_SIZE * 2);
-
-} // namespace
 
 namespace server {
 
@@ -163,79 +132,25 @@ int SSLManager::validateChallenge(const std::string &serverName, const std::stri
   return acmeClient.validateChallenge(type);
 }
 
-void SSLManager::logInfo(
-    const std::string &title,
-    const std::vector<std::pair<std::string, std::string>> &fields
-) {
-  int maxLabelLength = 0;
-  for (const auto &field : fields) {
-    maxLabelLength =
-        static_cast<int>(std::max(static_cast<size_t>(maxLabelLength), field.first.length()));
-  }
-
-  const size_t titlePaddingSize = (CAN_USE_SPACE - title.size()) / 2;
-  LOG_DEBUG("titlePaddingSize: " + std::to_string(titlePaddingSize));
-
-  const std::string titlePadding(titlePaddingSize, ' ');
-
-  std::string titleLine =
-      VERTICAL + PADDING + titlePadding + title + titlePadding + PADDING + VERTICAL;
-
-  LOG_INFO(TOP_LEFT + HORIZONTAL_LINE + TOP_RIGHT);
-  LOG_INFO(titleLine);
-  LOG_INFO(LEFT_JOINT + HORIZONTAL_LINE + RIGHT_JOINT);
-
-  auto formatLine = [&](const std::string &label, const std::string &value) {
-    std::stringstream ss;
-    ss << VERTICAL << PADDING;
-    ss << std::setw(maxLabelLength) << std::left << label << ": ";
-
-    size_t maxValueLength      = CAN_USE_SPACE - maxLabelLength;
-    std::string truncatedValue = value;
-    if (truncatedValue.length() > maxValueLength) {
-      truncatedValue = truncatedValue.substr(0, maxValueLength - 3) + "...";
-    }
-
-    ss << truncatedValue;
-    std::string line = ss.str();
-    size_t remaining = WIDTH - line.size();
-    remaining += VERITCAL_SIZE_DIFF; // We need VERIFICAL size to be 1
-    remaining -= PADDING.size();
-    remaining -= VERTICAL_SIZE;
-
-    std::string spaces(remaining, ' ');
-
-    return line + spaces + PADDING + VERTICAL;
-  };
-
-  for (const auto &field : fields) {
-    LOG_INFO(formatLine(field.first, field.second));
-  }
-
-  LOG_INFO(BOTTOM_LEFT + HORIZONTAL_LINE + BOTTOM_RIGHT);
-}
-
 void SSLManager::logKeyInfo(const KeyInfo &info) {
-  std::string title                                       = "Key  Information";
-  std::vector<std::pair<std::string, std::string>> fields = {
+  std::string title               = "Key Information";
+  std::vector<BoxLogField> fields = {
     { "Key File Name", info.fileName },  { "Key Type", info.keyType },
     { "Algorithm", info.algorithmName }, { "Key Size", info.keySize },
     { "Is Valid", info.isValid },        { "RSA-e", info.rsa_e }
   };
 
-  logInfo(title, fields);
+  LOG_INFO_BOX(title, fields);
 }
 
 void SSLManager::logCertInfo(const CertInfo &info) {
-  std::string title                                       = "Certificate  Information";
-  std::vector<std::pair<std::string, std::string>> fields = {
-    { "File Name", info.fileName },
-    { "Domain", info.domain },
-    { "Issuer", info.issuer },
-    { "Validity Start", info.validityStart },
-    { "Validity End", info.validityEnd }
-  };
+  std::string title               = "Certificate Information";
+  std::vector<BoxLogField> fields = { { "File Name", info.fileName },
+                                      { "Domain", info.domain },
+                                      { "Issuer", info.issuer },
+                                      { "Validity Start", info.validityStart },
+                                      { "Validity End", info.validityEnd } };
 
-  logInfo(title, fields);
+  LOG_INFO_BOX(title, fields);
 }
 } // namespace server
