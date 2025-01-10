@@ -77,6 +77,9 @@ void HttpServer::onRequestComplete(
     const TcpConnectionPtr &conn,
     TimeStamp receiveTime [[maybe_unused]]
 ) {
+  std::string clientIP = conn->peerAddress().getIp();
+  LOG_DEBUG("Request from " + clientIP);
+
   auto *context = std::any_cast<std::shared_ptr<HttpSessionContext>>(conn->getMutableContext());
   if ((context == nullptr) || !(*context)->request) {
     return;

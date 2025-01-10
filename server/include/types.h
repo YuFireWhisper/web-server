@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <openssl/evp.h>
+#include <openssl/ssl.h>
 #include <openssl/stack.h>
 #include <openssl/x509.h>
 #include <poll.h>
@@ -225,9 +226,27 @@ struct X509StackDeleter {
   }
 };
 
-using UniqueStore    = std::unique_ptr<X509_STORE, StoreDeleter>;
-using UniqueStoreCtx = std::unique_ptr<X509_STORE_CTX, StoreCtxDeleter>;
-using UniqueStack    = std::unique_ptr<STACK_OF(X509), X509StackDeleter>;
+struct SSLDeleter {
+  void operator()(SSL *ssl) const {
+    if (ssl != nullptr) {
+      SSL_free(ssl);
+    }
+  }
+};
+
+struct SSLCtxDeleter {
+  void operator()(SSL_CTX *ctx) {
+    if (ctx != nullptr) {
+      SSL_CTX_free(ctx);
+    }
+  }
+};
+
+using UniqueStore      = std::unique_ptr<X509_STORE, StoreDeleter>;
+using UniqueStoreCtx   = std::unique_ptr<X509_STORE_CTX, StoreCtxDeleter>;
+using UniqueStack      = std::unique_ptr<STACK_OF(X509), X509StackDeleter>;
+using UniqueSSL        = std::unique_ptr<SSL, SSLDeleter>;
+using SharedSslCtx     = std::shared_ptr<SSL_CTX>;
 
 inline UniqueBio createBioFile(const std::string &path, const char *mode) {
   BIO *bio = BIO_new_file(path.c_str(), mode);

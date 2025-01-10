@@ -266,11 +266,11 @@ int Socket::detachFd() {
 }
 
 void Socket::initializeSSLContext() {
-  if (sslContext_ != nullptr) {
+  SharedSslCtx current = sslContext_.load(std::memory_order_acquire);
+  if (current != nullptr) {
     return;
   }
 
-  LOG_INFO("Creating new SSL context");
   const SSL_METHOD *method = TLS_method();
   if (method == nullptr) {
     unsigned long err = ERR_get_error();
@@ -278,59 +278,68 @@ void Socket::initializeSSLContext() {
     throw SocketException("SSL method initialization", err);
   }
 
-  sslContext_ = SSL_CTX_new(method);
-  if (sslContext_ == nullptr) {
+  SSL_CTX *tempContext = SSL_CTX_new(method);
+  if (tempContext == nullptr) {
     unsigned long err = ERR_get_error();
     LOG_ERROR("Failed to create SSL context");
     throw SocketException("SSL context initialization", err);
   }
 
-  SSL_CTX_set_min_proto_version(sslContext_, TLS1_2_VERSION);
-  SSL_CTX_set_mode(sslContext_, SSL_MODE_AUTO_RETRY);
-  SSL_CTX_set_cipher_list(sslContext_, "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH");
+  SSL_CTX_set_min_proto_version(tempContext, TLS1_2_VERSION);
+  SSL_CTX_set_mode(tempContext, SSL_MODE_AUTO_RETRY);
+  SSL_CTX_set_cipher_list(tempContext, "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH");
 
   SSL_CTX_set_options(
-      sslContext_,
+      tempContext,
       SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION
           | SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION | SSL_OP_CIPHER_SERVER_PREFERENCE
   );
 
-  LOG_INFO("SSL context initialized successfully with TLS 1.2+ and strong ciphers");
+  SharedSslCtx newContext(tempContext, SSLCtxDeleter{});
+  SharedSslCtx expected(nullptr);
+
+  if (!sslContext_.compare_exchange_strong(
+          expected,
+          newContext,
+          std::memory_order_release,
+          std::memory_order_relaxed
+      )) {
+    return;
+  }
+
+  LOG_TRACE("SSL context initialized successfully");
 }
 
 void Socket::initializeSSL(const std::string &certFile, const std::string &keyFile) {
-  LOG_INFO(
-      "Initializing SSL for socket " + std::to_string(socketFd_) + " with cert: " + certFile
-      + " and key: " + keyFile
-  );
+  LOG_TRACE("Initializing SSL for socket " + std::to_string(socketFd_));
 
-  if (sslContext_ == nullptr) {
+  SharedSslCtx ctx = sslContext_.load(std::memory_order_acquire);
+  if (ctx == nullptr) {
     initializeSSLContext();
-    LOG_INFO("SSL context initialized");
+    ctx = sslContext_.load(std::memory_order_acquire);
   }
 
-  if (!loadCertificateAndKey(certFile, keyFile)) {
-    throw SocketException("Failed to load certificate and key");
-  }
-
-  ssl_.reset(SSL_new(sslContext_));
-  if (!ssl_) {
+  UniqueSSL tempSSL(SSL_new(ctx.get()));
+  if (tempSSL == nullptr) {
     unsigned long err = ERR_get_error();
     LOG_ERROR("Failed to create new SSL");
     throw SocketException("SSL initialization", err);
   }
 
-  if (SSL_set_fd(ssl_.get(), socketFd_) != 1) {
+  if (SSL_set_fd(tempSSL.get(), socketFd_) != 1) {
     unsigned long err = ERR_get_error();
     LOG_ERROR("Failed to set SSL fd");
     throw SocketException("SSL fd setting", err);
   }
 
-  setupSSLInfoCallback();
+  ssl_.reset(tempSSL.release());
 
-  LOG_DEBUG("Supported protocols: " + std::string(SSL_get_version(ssl_.get())));
-  LOG_DEBUG("Cipher list: " + std::string(SSL_get_cipher_list(ssl_.get(), 0)));
-  LOG_INFO("SSL initialization completed successfully");
+  if (!loadCertificateAndKey(certFile, keyFile)) {
+    throw SocketException("Failed to load certificate and key");
+  }
+
+  setupSSLInfoCallback();
+  LOG_TRACE("SSL initialized successfully");
 }
 
 bool Socket::trySSLAccept() {
@@ -439,7 +448,12 @@ void Socket::connectSSL() {
 }
 
 void Socket::setupSSLInfoCallback() {
-  SSL_CTX_set_info_callback(sslContext_, [](const SSL *ssl, int where, int ret) {
+  SharedSslCtx ctx = sslContext_.load(std::memory_order_acquire);
+  if (ctx == nullptr) {
+    throw SocketException("SSL context not initialized");
+  }
+
+  SSL_CTX_set_info_callback(ctx.get(), [](const SSL *ssl, int where, int ret) {
     const char *str;
     int w = where & ~SSL_ST_MASK;
     if (w & SSL_ST_CONNECT) {
@@ -463,29 +477,31 @@ void Socket::setupSSLInfoCallback() {
 }
 
 bool Socket::loadCertificateAndKey(const std::string &certFile, const std::string &keyFile) {
-  LOG_INFO("Loading certificate chain from: " + certFile);
-  if (SSL_CTX_use_certificate_chain_file(sslContext_, certFile.c_str()) != 1) {
+  static std::mutex configMutex;
+  std::lock_guard<std::mutex> lock(configMutex);
+
+  SharedSslCtx ctx = sslContext_.load(std::memory_order_acquire);
+  if (ctx == nullptr) {
+    throw SocketException("SSL context not initialized");
+  }
+
+  if (SSL_CTX_use_certificate_chain_file(ctx.get(), certFile.c_str()) != 1) {
     unsigned long err = ERR_get_error();
     LOG_ERROR("Failed to load certificate chain" + std::to_string(err));
     return false;
   }
-  LOG_INFO("Certificate chain loaded successfully");
 
-  LOG_INFO("Loading private key from: " + keyFile);
-  if (SSL_CTX_use_PrivateKey_file(sslContext_, keyFile.c_str(), SSL_FILETYPE_PEM) != 1) {
+  if (SSL_CTX_use_PrivateKey_file(ctx.get(), keyFile.c_str(), SSL_FILETYPE_PEM) != 1) {
     unsigned long err = ERR_get_error();
     LOG_ERROR("Failed to load private key" + std::to_string(err));
     return false;
   }
-  LOG_INFO("Private key loaded successfully");
 
-  LOG_INFO("Verifying private key");
-  if (SSL_CTX_check_private_key(sslContext_) != 1) {
+  if (SSL_CTX_check_private_key(ctx.get()) != 1) {
     unsigned long err = ERR_get_error();
     LOG_ERROR("Private key verification failed" + std::to_string(err));
     return false;
   }
-  LOG_INFO("Private key verified successfully");
 
   return true;
 }

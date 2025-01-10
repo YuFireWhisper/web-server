@@ -1,7 +1,8 @@
 #pragma once
 
+#include "include/types.h"
+
 #include <cstddef>
-#include <memory>
 #include <netinet/tcp.h>
 #include <openssl/ssl.h>
 #include <openssl/types.h>
@@ -79,19 +80,6 @@ public:
   [[nodiscard]] bool isSSLConnected() const;
 
 private:
-  int socketFd_;
-
-  struct SSLDeleter {
-    void operator()(SSL *ssl) const {
-      if (ssl != nullptr) {
-        SSL_free(ssl);
-      }
-    }
-  };
-
-  std::unique_ptr<SSL, SSLDeleter> ssl_;
-  inline static SSL_CTX *sslContext_ = nullptr;
-
   static int createTcpSocket();
   void setSocketFlag(int level, int flag, bool enabled) const;
   void configureBlockingMode(bool shouldBlock) const;
@@ -101,6 +89,11 @@ private:
   [[nodiscard]] bool waitForSSLOperation(int result, const std::string &operation) const;
   size_t handleSSLRead(Buffer &targetBuffer) const;
   size_t handleSSLWrite(const void *dataPtr, size_t dataLength) const;
+
+  int socketFd_;
+  UniqueSSL ssl_ = nullptr;
+  inline static std::atomic<SharedSslCtx> sslContext_;
+  inline static std::mutex sslContextMutex_;
 };
 
 } // namespace server

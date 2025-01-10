@@ -138,8 +138,19 @@ void TcpServer::initializeNewSSLConnection(const TcpConnectionPtr &conn) const {
   }
 
   try {
-    conn->enableSSL(sslConfig_.certFile, sslConfig_.keyFile);
-    conn->startSSLHandshake(true);
+    auto safeSSL = [conn, ioLoop](const std::string &certFile, const std::string &keyFile) {
+      if (ioLoop->isInLoopThread()) {
+        conn->enableSSL(certFile, keyFile);
+        conn->startSSLHandshake(true);
+      } else {
+        ioLoop->runInLoop([conn, certFile, keyFile]() {
+          conn->enableSSL(certFile, keyFile);
+          conn->startSSLHandshake(true);
+        });
+      }
+    };
+
+    safeSSL(sslConfig_.certFile, sslConfig_.keyFile);
   } catch (const std::exception &e) {
     LOG_ERROR("Failed to initialize SSL for connection " + conn->name() + ": " + e.what());
     conn->forceClose();

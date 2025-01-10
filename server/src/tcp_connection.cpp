@@ -37,11 +37,7 @@ TcpConnection::TcpConnection(
   socket_->enableKeepAlive();
 
   LOG_DEBUG("Setting up callbacks for " + name_);
-  channel_->setReadCallback([this](TimeStamp ts) {
-    LOG_DEBUG("準備執行 TcpConnection " + name_ + " 的 handleRead");
-    handleRead(ts);
-    LOG_DEBUG("完成執行 TcpConnection " + name_ + " 的 handleRead");
-  });
+  channel_->setReadCallback([this](TimeStamp ts) { handleRead(ts); });
   channel_->setWriteCallback([this] { handleWrite(); });
   channel_->setCloseCallback([this] { handleClose(); });
   channel_->setErrorCallback([this] { handleError(); });
