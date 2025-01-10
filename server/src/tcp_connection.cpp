@@ -389,6 +389,12 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
 
 void TcpConnection::handleClose() {
   LOG_DEBUG("開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd()));
+
+  if (!loop_->isInLoopThread()) {
+    loop_->runInLoop([guardThis = shared_from_this()] { guardThis->handleClose(); });
+    return;
+  }
+
   loop_->assertInLoopThread();
 
   if (state_ != State::kDisconnected) {
