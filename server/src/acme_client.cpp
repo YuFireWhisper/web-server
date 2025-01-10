@@ -214,12 +214,29 @@ int32_t AcmeClient::getAlgorithmId(const EVP_PKEY *key) {
 }
 
 int32_t AcmeClient::getAlgorithmId(std::string_view algorithm) {
-  const int32_t id = OBJ_txt2nid(std::string(algorithm).data());
-  if (id != EVP_PKEY_RSA && id != EVP_PKEY_ED25519) {
+  const std::array<int, 1> supportedAlgorithms     = { EVP_PKEY_RSA };
+  const std::array<std::string_view, 1> rsaAliases = { "RSA" };
+
+  int nid = OBJ_txt2nid(std::string(algorithm).data());
+  if (nid == NID_undef) {
+    for (size_t i = 0; i < supportedAlgorithms.size(); ++i) {
+      if (algorithm == rsaAliases[i]) {
+        nid = supportedAlgorithms[i];
+        break;
+      }
+    }
+  }
+
+  if (nid == NID_undef) {
     throw std::runtime_error("Unsupported algorithm: " + std::string(algorithm));
   }
 
-  return id;
+  const auto *found = std::ranges::find(supportedAlgorithms, nid);
+  if (found == supportedAlgorithms.end()) {
+    throw std::runtime_error("Unsupported algorithm: " + std::string(algorithm));
+  }
+
+  return nid;
 }
 
 nlohmann::json AcmeClient::getJwk() {
