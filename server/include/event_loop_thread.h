@@ -27,8 +27,7 @@ public:
 private:
   void threadFunc();
 
-  std::shared_ptr<EventLoop> loop_;
-  std::atomic<bool> exiting_;
+  EventLoop *loop_;
   std::thread thread_;
   std::mutex mutex_;
   std::condition_variable cond_;
