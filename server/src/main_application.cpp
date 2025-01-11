@@ -6,6 +6,7 @@
 #include "include/file_system.h"
 #include "include/http_server.h"
 #include "include/inet_address.h"
+#include "include/log.h"
 #include "include/ssl_manager.h"
 
 #include <csignal>
