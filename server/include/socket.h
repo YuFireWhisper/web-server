@@ -81,6 +81,7 @@ public:
 private:
   static constexpr size_t kIoVecCount = 16;
   static constexpr size_t kBufferSize = 16384;
+  static constexpr unsigned int ksessionCtxId = 1;
 
   [[nodiscard]] static int createTcpSocket();
   void setSocketOption(int level, int option, int value) const;

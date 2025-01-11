@@ -280,8 +280,11 @@ void Socket::initSSLContext() {
   }
 
   SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
-  SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
-  SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!kRSA:!PSK:!SRP:!MD5:!RC4");
+  SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+  SSL_CTX_set_cipher_list(ctx, "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256");
+
+  SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_SERVER);
+  SSL_CTX_set_session_id_context(ctx, (const unsigned char *)&ksessionCtxId, sizeof(ksessionCtxId));
 
   constexpr int sslOptions = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION
                              | SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION
@@ -314,9 +317,7 @@ void Socket::initSSL(std::string_view certFile, std::string_view keyFile) {
 
   ssl_ = std::move(tempSSL);
 
-  if (!loadCertAndKey(certFile, keyFile)) {
-    throw SocketError("Certificate and key loading failed");
-  }
+  loadCertAndKey(certFile, keyFile);
 
   setupSSLCallback();
   LOG_TRACE("SSL initialized successfully");
