@@ -1,6 +1,7 @@
 #include "include/channel.h"
 
 #include "include/event_loop.h"
+#include "include/log.h"
 #include "include/time_stamp.h"
 
 #include <sys/epoll.h>
@@ -45,34 +46,40 @@ void Channel::handleEventWithGuard(TimeStamp receiveTime) {
 }
 
 void Channel::processEvents(TimeStamp receiveTime) {
-  const int events = revents_;
+  try {
+    const int events = revents_;
 
-  if (((events & EPOLLHUP) != 0U) && ((events & EPOLLIN) == 0U)) {
-    if (closeCallback_) {
-      closeCallback_();
+    if (((events & EPOLLHUP) != 0U) && ((events & EPOLLIN) == 0U)) {
+      if (closeCallback_) {
+        closeCallback_();
+      }
+      return;
     }
-    return;
-  }
 
-  if ((events & EPOLLERR) != 0) {
-    if (errorCallback_) {
-      errorCallback_();
+    if ((events & EPOLLERR) != 0) {
+      if (errorCallback_) {
+        errorCallback_();
+      }
+      return;
     }
-    return;
-  }
 
-  if ((events & (EPOLLIN | EPOLLPRI)) != 0) {
-    if (fd_ == loop_->getWakeupFd()) {
-      loop_->handleWakeup();
-    } else if (readCallback_) {
-      readCallback_(receiveTime);
+    if ((events & (EPOLLIN | EPOLLPRI)) != 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      if (fd_ == loop_->getWakeupFd()) {
+        loop_->handleWakeup();
+      } else if (readCallback_) {
+        LOG_DEBUG("Channel::processEvents: calling readCallback_");
+        readCallback_(receiveTime);
+      }
     }
-  }
 
-  if ((events & EPOLLOUT) != 0) {
-    if (writeCallback_) {
-      writeCallback_();
+    if ((events & EPOLLOUT) != 0) {
+      if (writeCallback_) {
+        writeCallback_();
+      }
     }
+  } catch (const std::exception &e) {
+    LOG_ERROR("Error in Channel::processEvents: " + std::string(e.what()));
   }
 }
 

@@ -25,7 +25,7 @@ TimerQueue::TimerQueue(EventLoop *loop)
     : timerfd_(::timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC))
     , loop_(loop)
     , sequence_(0) {
-  Logger::setDefaultOutputFile("time_queue.log");
+  log_detail::Logger::setDefaultOutputFile("time_queue.log");
 
   if (timerfd_ < 0) {
     LOG_FATAL("Timerfd create error");

@@ -133,24 +133,23 @@ int SSLManager::validateChallenge(const std::string &serverName, const std::stri
 }
 
 void SSLManager::logKeyInfo(const KeyInfo &info) {
-  std::string title               = "Key Information";
-  std::vector<BoxLogField> fields = {
-    { "Key File Name", info.fileName },  { "Key Type", info.keyType },
-    { "Algorithm", info.algorithmName }, { "Key Size", info.keySize },
-    { "Is Valid", info.isValid },        { "RSA-e", info.rsa_e }
-  };
-
-  LOG_INFO_BOX(title, fields);
+  LOG_INFO << "===== Key Information =====";
+  LOG_INFO << "File Name: " << info.fileName;
+  LOG_INFO << "Key Type: " << info.keyType;
+  LOG_INFO << "Algorithm Name: " << info.algorithmName;
+  LOG_INFO << "Key Size: " << info.keySize;
+  LOG_INFO << "Is Valid: " << info.isValid;
+  LOG_INFO << "RSA e: " << info.rsa_e;
+  LOG_INFO << "===========================";
 }
 
 void SSLManager::logCertInfo(const CertInfo &info) {
-  std::string title               = "Certificate Information";
-  std::vector<BoxLogField> fields = { { "File Name", info.fileName },
-                                      { "Domain", info.domain },
-                                      { "Issuer", info.issuer },
-                                      { "Validity Start", info.validityStart },
-                                      { "Validity End", info.validityEnd } };
-
-  LOG_INFO_BOX(title, fields);
+  LOG_INFO << "===== Certificate Information =====";
+  LOG_INFO << "File Name: " << info.fileName;
+  LOG_INFO << "Domain: " << info.domain;
+  LOG_INFO << "Issuer: " << info.issuer;
+  LOG_INFO << "Validity Start: " << info.validityStart;
+  LOG_INFO << "Validity End: " << info.validityEnd;
+  LOG_INFO << "==================================";
 }
 } // namespace server

@@ -38,6 +38,8 @@ public:
   void handleWakeup();
   void assertInLoopThread() const;
 
+  [[nodiscard]] pthread_t getThreadId() const { return threadId_; }
+
 private:
   void doPendingFunctors();
   void writeToWakeupFd() const;

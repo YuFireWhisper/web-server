@@ -154,6 +154,9 @@ void EventLoop::handleWakeup() {
 
 void EventLoop::assertInLoopThread() const {
   if (!isInLoopThread()) {
+    LOG_ERROR("EventLoop was created in a different thread");
+    LOG_ERROR("EventLoop thread id: {}", threadId_);
+    LOG_ERROR("Current thread id: {}", pthread_self());
     throw std::runtime_error("EventLoop was created in a different thread");
   }
 }

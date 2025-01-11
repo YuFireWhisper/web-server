@@ -219,25 +219,16 @@ void MainApplication::createAutoConfig(const std::filesystem::path &projectRoot)
   autoConfig << "#define kProjectRoot \"" << projectRoot.string() << "/\"\n";
   autoConfig.close();
 
-  std::string title("Auto configuration created");
-  std::vector<BoxLogField> fields = { { "Auto Directory Name", GET_FILE_NAME(autoDir.string()) },
-                                      { "Auto Config File Name",
-                                        GET_FILE_NAME(autoConfigPath.string()) } };
-
-  LOG_INFO_BOX(title, fields);
+  LOG_INFO << "Auto configuration created";
+  LOG_INFO << "Auto Directory Name: " << GET_FILE_NAME(autoDir.string());
+  LOG_INFO << "Auto Config File Name: " << GET_FILE_NAME(autoConfigPath.string());
 }
 
 std::string MainApplication::loadConfig(const std::filesystem::path &configPath) {
   std::ifstream configFile(configPath, std::ios::binary);
 
-  std::string title("Configuration file loaded");
   if (!configFile) {
-    std::vector<BoxLogField> fields = { { "Status", "Not Found" },
-                                        { "Configuration File Name",
-                                          GET_FILE_NAME(configPath.string()) },
-                                        { "Configuration File Size", "UNKNOWN" } };
-
-    LOG_WARN_BOX(title, fields);
+    LOG_INFO << "Configuration file not found";
     return "";
   }
 
@@ -247,13 +238,9 @@ std::string MainApplication::loadConfig(const std::filesystem::path &configPath)
   );
   configFile.close();
 
-  std::vector<BoxLogField> fields = {
-    { "Status", "Found" },
-    { "Configuration File Name", GET_FILE_NAME(configPath.string()) },
-    { "Configuration File Size", std::to_string(content.size()) }
-  };
-
-  LOG_INFO_BOX(title, fields);
+  LOG_INFO << "Configuration file loaded";
+  LOG_INFO << "Configuration File Name: " << GET_FILE_NAME(configPath.string());
+  LOG_INFO << "Configuration File Size: " << content.size();
 
   return content;
 }

@@ -41,7 +41,6 @@ add_library(server
     server/src/epoll_poller.cpp
     server/src/time_stamp.cpp
     server/src/buffer.cpp
-    server/src/log.cpp
     server/src/event_loop.cpp
     server/src/channel.cpp
     server/src/timer_queue.cpp

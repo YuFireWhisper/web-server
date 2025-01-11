@@ -32,7 +32,7 @@ TcpConnection::TcpConnection(
     , localAddr_(localAddr)
     , peerAddr_(peerAddr) {
 
-  LOG_DEBUG("Creating TcpConnection " + name_);
+  LOG_DEBUG("Creating TcpConnection " + name_ + ", thread ID: " + std::to_string(pthread_self()));
   socket_->enableNonBlocking();
   socket_->enableKeepAlive();
 
@@ -360,6 +360,11 @@ void TcpConnection::handleWrite() {
 }
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
+  if (!loop_->isInLoopThread()) {
+    loop_->runInLoop([guardThis = shared_from_this(), receiveTime] { guardThis->handleRead(receiveTime); });
+    return;
+  }
+
   loop_->assertInLoopThread();
 
   if (state_ == State::kDisconnected) {
@@ -388,35 +393,44 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
 }
 
 void TcpConnection::handleClose() {
-  LOG_DEBUG("開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd()));
+  try {
+    LOG_DEBUG(
+        "開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd())
+        + ", current thread id: " + std::to_string(pthread_self())
+        + ", loop thread id: " + std::to_string(loop_->getThreadId())
+    );
 
-  if (!loop_->isInLoopThread()) {
-    loop_->runInLoop([guardThis = shared_from_this()] { guardThis->handleClose(); });
-    return;
+    if (!loop_->isInLoopThread()) {
+      loop_->runInLoop([guardThis = shared_from_this()] { guardThis->handleClose(); });
+      return;
+    }
+
+    loop_->assertInLoopThread();
+
+    if (state_ != State::kDisconnected) {
+      setState(State::kDisconnected);
+      channel_->disableAll();
+
+      auto guardThis = shared_from_this();
+
+      if (connectionCallback_) {
+        connectionCallback_(guardThis);
+      }
+
+      if (channel_) {
+        channel_->remove();
+      }
+
+      if (closeCallback_) {
+        loop_->queueInLoop([guardThis, cb = closeCallback_]() { cb(guardThis); });
+      }
+    }
+
+    LOG_DEBUG("完成關閉連接：" + name_);
+  } catch (const std::exception &e) {
+    LOG_ERROR("handleClose error: " + std::string(e.what()));
+    throw e;
   }
-
-  loop_->assertInLoopThread();
-
-  if (state_ != State::kDisconnected) {
-    setState(State::kDisconnected);
-    channel_->disableAll();
-
-    auto guardThis = shared_from_this();
-
-    if (connectionCallback_) {
-      connectionCallback_(guardThis);
-    }
-
-    if (channel_) {
-      channel_->remove();
-    }
-
-    if (closeCallback_) {
-      loop_->queueInLoop([guardThis, cb = closeCallback_]() { cb(guardThis); });
-    }
-  }
-
-  LOG_DEBUG("完成關閉連接：" + name_);
 }
 
 void TcpConnection::handleError() {
@@ -470,9 +484,7 @@ void TcpConnection::connectEstablished() {
   assert(state_ == State::kConnecting);
   setState(State::kConnected);
 
-  LOG_DEBUG("TcpConnection " + name_ + " 設置為已連接狀態");
   channel_->enableReading();
-  LOG_DEBUG("TcpConnection " + name_ + " 啟用讀取");
 
   if (connectionCallback_) {
     connectionCallback_(shared_from_this());
