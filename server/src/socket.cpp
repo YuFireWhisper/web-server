@@ -4,11 +4,9 @@
 #include "include/inet_address.h"
 #include "include/log.h"
 
-#include <asm-generic/socket.h>
+#include <cerrno>
 #include <cstring>
 #include <fcntl.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <openssl/err.h>
 #include <unistd.h>
 
@@ -17,17 +15,20 @@
 
 namespace server {
 
-SocketException::SocketException(const std::string &operation)
-    : std::runtime_error(operation + " failed") {}
+SocketError::SocketError(std::string_view operation)
+    : std::runtime_error(std::string(operation) + " failed") {}
 
-SocketException::SocketException(const std::string &operation, int errorCode)
-    : std::runtime_error(operation + " failed: " + std::strerror(errorCode)) {}
+SocketError::SocketError(std::string_view operation, std::string_view details)
+    : std::runtime_error(std::string(operation) + ": " + std::string(details)) {}
 
-SocketException::SocketException(const std::string &operation, unsigned long sslError)
+SocketError::SocketError(std::string_view operation, int errorCode)
+    : std::runtime_error(std::string(operation) + " failed: " + std::strerror(errorCode)) {}
+
+SocketError::SocketError(std::string_view operation, unsigned long sslError)
     : std::runtime_error([&operation, sslError]() {
       char errBuf[256];
       ERR_error_string_n(sslError, errBuf, sizeof(errBuf));
-      return operation + ": " + errBuf;
+      return std::string(operation) + ": " + errBuf;
     }()) {}
 
 Socket::Socket()
@@ -35,24 +36,26 @@ Socket::Socket()
 
 Socket::Socket(int socketFd)
     : socketFd_(socketFd) {
-  LOG_DEBUG("Creating new Socket, fd=" + std::to_string(socketFd_));
   if (socketFd_ < 0) {
-    throw SocketException("Socket creation");
+    throw SocketError("Socket creation", errno);
   }
+  LOG_DEBUG("Socket created with fd=" + std::to_string(socketFd_));
 }
 
 Socket::~Socket() {
   if (ssl_) {
     SSL_shutdown(ssl_.get());
   }
-  LOG_DEBUG("Closing socket " + std::to_string(socketFd_));
-  ::close(socketFd_);
+  if (socketFd_ >= 0) {
+    ::close(socketFd_);
+    LOG_DEBUG("Socket closed, fd=" + std::to_string(socketFd_));
+  }
 }
 
 int Socket::createTcpSocket() {
   int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP);
   if (fd < 0) {
-    throw SocketException("Socket creation", errno);
+    throw SocketError("Socket creation", errno);
   }
   return fd;
 }
@@ -63,22 +66,19 @@ void Socket::bindToPort(uint16_t port) const {
 }
 
 void Socket::bindToAddress(const InetAddress &address) const {
-  int result = ::bind(socketFd_, address.getSockAddr(), address.getSockLen());
-  if (result < 0) {
-    throw SocketException("Socket bind", errno);
+  if (::bind(socketFd_, address.getSockAddr(), address.getSockLen()) < 0) {
+    throw SocketError("Socket bind", errno);
   }
 }
 
 void Socket::startListening(int backlog) const {
-  int result = ::listen(socketFd_, backlog);
-  if (result < 0) {
-    throw SocketException("Socket listen", errno);
+  if (::listen(socketFd_, backlog) < 0) {
+    throw SocketError("Socket listen", errno);
   }
 }
 
-int Socket::acceptNewConnection(sockaddr_in &addr) const {
+int Socket::acceptConnection(sockaddr_in &addr) const {
   socklen_t len = sizeof(addr);
-
   return ::accept4(
       socketFd_,
       reinterpret_cast<sockaddr *>(&addr),
@@ -87,97 +87,73 @@ int Socket::acceptNewConnection(sockaddr_in &addr) const {
   );
 }
 
-Socket Socket::acceptNewConnection() const {
-  while (true) {
-    int newFd = ::accept4(socketFd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
-
-    if (newFd >= 0) {
-      return Socket(newFd);
-    }
-
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-      continue;
-    }
-
-    throw SocketException("Socket accept", errno);
+void Socket::setSocketOption(int level, int option, int value) const {
+  if (::setsockopt(socketFd_, level, option, &value, sizeof(value)) < 0) {
+    throw SocketError("setsockopt", errno);
   }
 }
 
-void Socket::setSocketFlag(int level, int flag, bool enabled) const {
-  int value  = enabled ? 1 : 0;
-  int result = ::setsockopt(socketFd_, level, flag, &value, sizeof(value));
-  if (result < 0) {
-    throw SocketException("Socket flag configuration", errno);
-  }
+void Socket::enableAddressReuse() const {
+  setSocketOption(SOL_SOCKET, SO_REUSEADDR, 1);
 }
 
-void Socket::enableAddressReuse() {
-  setSocketFlag(SOL_SOCKET, SO_REUSEADDR, true);
+void Socket::enablePortReuse() const {
+  setSocketOption(SOL_SOCKET, SO_REUSEPORT, 1);
 }
 
-void Socket::enablePortReuse() {
-  setSocketFlag(SOL_SOCKET, SO_REUSEPORT, true);
+void Socket::enableKeepAlive() const {
+  setSocketOption(SOL_SOCKET, SO_KEEPALIVE, 1);
 }
 
-void Socket::enableKeepAlive() {
-  setSocketFlag(SOL_SOCKET, SO_KEEPALIVE, true);
+void Socket::disableNagle() const {
+  setSocketOption(IPPROTO_TCP, TCP_NODELAY, 1);
 }
 
-void Socket::disableNagle() {
-  setSocketFlag(IPPROTO_TCP, TCP_NODELAY, true);
-}
-
-void Socket::configureBlockingMode(bool shouldBlock) const {
-  int flags = fcntl(socketFd_, F_GETFL, 0);
+void Socket::setBlockingMode(bool blocking) const {
+  int flags = ::fcntl(socketFd_, F_GETFL);
   if (flags < 0) {
-    throw SocketException("Get socket flags", errno);
+    throw SocketError("fcntl(F_GETFL)", errno);
   }
 
-  flags = shouldBlock ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
-
-  int result = fcntl(socketFd_, F_SETFL, flags);
-  if (result < 0) {
-    throw SocketException("Set socket flags", errno);
+  flags = blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
+  if (::fcntl(socketFd_, F_SETFL, flags) < 0) {
+    throw SocketError("fcntl(F_SETFL)", errno);
   }
 }
 
-void Socket::enableNonBlocking() {
-  configureBlockingMode(false);
+void Socket::enableNonBlocking() const {
+  setBlockingMode(false);
 }
 
 void Socket::closeWriteEnd() const {
-  int result = ::shutdown(socketFd_, SHUT_WR);
-  if (result < 0) {
-    throw SocketException("Socket shutdown", errno);
+  if (::shutdown(socketFd_, SHUT_WR) < 0) {
+    throw SocketError("Socket shutdown", errno);
   }
 }
 
-Socket::ConnectionInfo Socket::getConnectionInfo() const {
-  struct tcp_info rawInfo;
-  socklen_t len = sizeof(rawInfo);
+Socket::ConnInfo Socket::getConnInfo() const {
+  tcp_info info;
+  socklen_t len = sizeof(info);
 
-  int result = ::getsockopt(socketFd_, SOL_TCP, TCP_INFO, &rawInfo, &len);
-  if (result < 0) {
-    throw SocketException("Get connection info", errno);
+  if (::getsockopt(socketFd_, SOL_TCP, TCP_INFO, &info, &len) < 0) {
+    throw SocketError("Get connection info", errno);
   }
 
-  return ConnectionInfo{ .stateCode        = rawInfo.tcpi_state,
-                         .rtt              = rawInfo.tcpi_rtt,
-                         .rttVar           = rawInfo.tcpi_rttvar,
-                         .congestionWindow = rawInfo.tcpi_snd_cwnd,
-                         .retransmits      = rawInfo.tcpi_retransmits,
-                         .totalRetransmits = rawInfo.tcpi_total_retrans };
+  return ConnInfo{ .stateCode        = info.tcpi_state,
+                   .rtt              = info.tcpi_rtt,
+                   .rttVar           = info.tcpi_rttvar,
+                   .congestionWindow = info.tcpi_snd_cwnd,
+                   .retransmits      = info.tcpi_retransmits,
+                   .totalRetransmits = info.tcpi_total_retrans };
 }
 
 InetAddress Socket::getLocalAddress() const {
   sockaddr_in addr{};
   socklen_t len = sizeof(addr);
 
-  int result = ::getsockname(socketFd_, reinterpret_cast<sockaddr *>(&addr), &len);
-  if (result < 0) {
-    throw SocketException("Get local address", errno);
+  if (::getsockname(socketFd_, reinterpret_cast<sockaddr *>(&addr), &len) < 0) {
+    throw SocketError("Get local address", errno);
   }
-
   return InetAddress(addr);
 }
 
@@ -185,84 +161,93 @@ InetAddress Socket::getRemoteAddress() const {
   sockaddr_in addr{};
   socklen_t len = sizeof(addr);
 
-  int result = ::getpeername(socketFd_, reinterpret_cast<sockaddr *>(&addr), &len);
-  if (result < 0) {
-    throw SocketException("Get remote address", errno);
+  if (::getpeername(socketFd_, reinterpret_cast<sockaddr *>(&addr), &len) < 0) {
+    throw SocketError("Get remote address", errno);
   }
-
   return InetAddress(addr);
 }
 
-bool Socket::hasActiveConnection() const {
+bool Socket::hasActiveConnection() const noexcept {
   try {
-    return getConnectionInfo().stateCode == TCP_ESTABLISHED;
-  } catch (const SocketException &) {
+    return getConnInfo().stateCode == TCP_ESTABLISHED;
+  } catch (const SocketError &) {
     return false;
   }
 }
 
-int Socket::getLastError() const {
+int Socket::getLastError() const noexcept {
   int error     = 0;
   socklen_t len = sizeof(error);
   ::getsockopt(socketFd_, SOL_SOCKET, SO_ERROR, &error, &len);
   return error;
 }
 
-bool Socket::hasError() const {
+bool Socket::hasError() const noexcept {
   return getLastError() != 0;
 }
 
-size_t Socket::readData(Buffer &targetBuffer) const {
+size_t Socket::read(Buffer &buffer) const {
   if (ssl_) {
-    return handleSSLRead(targetBuffer);
+    return readWithSSL(buffer);
   }
 
-  int savedErrno    = 0;
-  ssize_t bytesRead = targetBuffer.readFromFd(socketFd_, &savedErrno);
+  constexpr size_t maxAttempts = 64;
+  size_t totalRead             = 0;
+  size_t attempts              = 0;
 
-  if (bytesRead < 0) {
-    if (savedErrno == EAGAIN || savedErrno == EWOULDBLOCK || savedErrno == EINTR) {
-      return 0;
+  while (attempts++ < maxAttempts) {
+    ssize_t n = ::read(socketFd_, readBuffer_.data(), readBuffer_.size());
+    if (n > 0) {
+      buffer.write(readBuffer_.data(), static_cast<size_t>(n));
+      totalRead += static_cast<size_t>(n);
+      if (static_cast<size_t>(n) < readBuffer_.size()) {
+        break;
+      }
+    } else if (n == 0) {
+      break;
+    } else if (errno != EINTR) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      throw SocketError("Socket read", errno);
     }
-    throw SocketException("Socket read", savedErrno);
   }
 
-  return bytesRead;
+  return totalRead;
 }
 
-size_t Socket::writeData(const Buffer &sourceBuffer) const {
-  size_t readable = sourceBuffer.readableSize();
-  return writeData(sourceBuffer.preview(readable).data(), readable);
+size_t Socket::write(const Buffer &buffer) const {
+  return write(buffer.preview(buffer.readableSize()).data(), buffer.readableSize());
 }
 
-size_t Socket::writeData(const void *dataPtr, size_t dataLength) const {
+size_t Socket::write(const void *data, size_t length) const {
   if (ssl_) {
-    return handleSSLWrite(dataPtr, dataLength);
+    return writeWithSSL(data, length);
   }
 
-  size_t bytesSent       = 0;
-  const char *currentPtr = static_cast<const char *>(dataPtr);
+  size_t remaining = length;
+  const char *ptr  = static_cast<const char *>(data);
 
-  while (bytesSent < dataLength) {
-    ssize_t result = ::write(socketFd_, currentPtr + bytesSent, dataLength - bytesSent);
-
-    if (result < 0) {
+  while (remaining > 0) {
+    ssize_t n = ::write(socketFd_, ptr, remaining);
+    if (n > 0) {
+      ptr += n;
+      remaining -= static_cast<size_t>(n);
+    } else if (n < 0) {
       if (errno == EINTR) {
         continue;
       }
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
       }
-      throw SocketException("Socket write", errno);
+      throw SocketError("Socket write", errno);
     }
-
-    bytesSent += result;
   }
 
-  return bytesSent;
+  return length - remaining;
 }
 
-void Socket::attachFd(int fd) {
+void Socket::attachFd(int fd) noexcept {
   if (socketFd_ >= 0) {
     ::close(socketFd_);
   }
@@ -270,13 +255,15 @@ void Socket::attachFd(int fd) {
   LOG_DEBUG("Socket attached to fd=" + std::to_string(socketFd_));
 }
 
-int Socket::detachFd() {
+int Socket::detachFd() noexcept {
   int fd    = socketFd_;
   socketFd_ = -1;
   return fd;
 }
 
-void Socket::initializeSSLContext() {
+void Socket::initSSLContext() {
+  std::lock_guard<std::mutex> lock(sslMutex_);
+
   SharedSslCtx current = sslContext_.load(std::memory_order_acquire);
   if (current != nullptr) {
     return;
@@ -284,78 +271,60 @@ void Socket::initializeSSLContext() {
 
   const SSL_METHOD *method = TLS_method();
   if (method == nullptr) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Failed to get TLS method");
-    throw SocketException("SSL method initialization", err);
+    throw SocketError("SSL method initialization", ERR_get_error());
   }
 
-  SSL_CTX *tempContext = SSL_CTX_new(method);
-  if (tempContext == nullptr) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Failed to create SSL context");
-    throw SocketException("SSL context initialization", err);
+  SSL_CTX *ctx = SSL_CTX_new(method);
+  if (ctx == nullptr) {
+    throw SocketError("SSL context initialization", ERR_get_error());
   }
 
-  SSL_CTX_set_min_proto_version(tempContext, TLS1_2_VERSION);
-  SSL_CTX_set_mode(tempContext, SSL_MODE_AUTO_RETRY);
-  SSL_CTX_set_cipher_list(tempContext, "ALL:!ADH:!LOW:!EXP:!MD5:@STRENGTH");
+  SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+  SSL_CTX_set_mode(ctx, SSL_MODE_AUTO_RETRY);
+  SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!kRSA:!PSK:!SRP:!MD5:!RC4");
 
-  SSL_CTX_set_options(
-      tempContext,
-      SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION
-          | SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION | SSL_OP_CIPHER_SERVER_PREFERENCE
-  );
+  constexpr int sslOptions = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION
+                             | SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION
+                             | SSL_OP_CIPHER_SERVER_PREFERENCE | SSL_OP_SINGLE_DH_USE
+                             | SSL_OP_SINGLE_ECDH_USE;
 
-  SharedSslCtx newContext(tempContext, SSLCtxDeleter{});
-  SharedSslCtx expected(nullptr);
+  SSL_CTX_set_options(ctx, sslOptions);
 
-  if (!sslContext_.compare_exchange_strong(
-          expected,
-          newContext,
-          std::memory_order_release,
-          std::memory_order_relaxed
-      )) {
-    return;
-  }
-
-  LOG_TRACE("SSL context initialized successfully");
+  SharedSslCtx newContext(ctx, SSLCtxDeleter{});
+  sslContext_.store(newContext, std::memory_order_release);
 }
 
-void Socket::initializeSSL(const std::string &certFile, const std::string &keyFile) {
+void Socket::initSSL(std::string_view certFile, std::string_view keyFile) {
   LOG_TRACE("Initializing SSL for socket " + std::to_string(socketFd_));
 
   SharedSslCtx ctx = sslContext_.load(std::memory_order_acquire);
   if (ctx == nullptr) {
-    initializeSSLContext();
+    initSSLContext();
     ctx = sslContext_.load(std::memory_order_acquire);
   }
 
   UniqueSSL tempSSL(SSL_new(ctx.get()));
   if (tempSSL == nullptr) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Failed to create new SSL");
-    throw SocketException("SSL initialization", err);
+    throw SocketError("SSL initialization", ERR_get_error());
   }
 
   if (SSL_set_fd(tempSSL.get(), socketFd_) != 1) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Failed to set SSL fd");
-    throw SocketException("SSL fd setting", err);
+    throw SocketError("SSL fd setting", ERR_get_error());
   }
 
-  ssl_.reset(tempSSL.release());
+  ssl_ = std::move(tempSSL);
 
-  if (!loadCertificateAndKey(certFile, keyFile)) {
-    throw SocketException("Failed to load certificate and key");
+  if (!loadCertAndKey(certFile, keyFile)) {
+    throw SocketError("Certificate and key loading failed");
   }
 
-  setupSSLInfoCallback();
+  setupSSLCallback();
   LOG_TRACE("SSL initialized successfully");
 }
 
-bool Socket::trySSLAccept() {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
+bool Socket::trySSLAccept() const {
+  if (ssl_ == nullptr) {
+    throw SocketError("SSL not initialized");
   }
 
   int result = SSL_accept(ssl_.get());
@@ -364,10 +333,8 @@ bool Socket::trySSLAccept() {
     return true;
   }
 
-  int ssl_err = SSL_get_error(ssl_.get(), result);
-  LOG_DEBUG("SSL accept result: " + std::to_string(result) + " error: " + std::to_string(ssl_err));
-
-  if (ssl_err == SSL_ERROR_WANT_READ || ssl_err == SSL_ERROR_WANT_WRITE) {
+  int sslError = SSL_get_error(ssl_.get(), result);
+  if (sslError == SSL_ERROR_WANT_READ || sslError == SSL_ERROR_WANT_WRITE) {
     return false;
   }
 
@@ -375,142 +342,153 @@ bool Socket::trySSLAccept() {
   return false;
 }
 
-size_t Socket::handleSSLWrite(const void *dataPtr, size_t dataLength) const {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
+size_t Socket::writeWithSSL(const void *data, size_t length) const {
+  if (ssl_ == nullptr) {
+    throw SocketError("SSL not initialized");
   }
 
-  size_t totalWritten = 0;
-  const char *ptr     = static_cast<const char *>(dataPtr);
+  size_t written  = 0;
+  const auto *ptr = static_cast<const char *>(data);
 
-  while (totalWritten < dataLength) {
-    int written =
-        SSL_write(ssl_.get(), ptr + totalWritten, static_cast<int>(dataLength - totalWritten));
-    if (written <= 0) {
-      int err = SSL_get_error(ssl_.get(), written);
+  while (written < length) {
+    int n = SSL_write(ssl_.get(), ptr + written, static_cast<int>(length - written));
+    if (n <= 0) {
+      int err = SSL_get_error(ssl_.get(), n);
       if (err == SSL_ERROR_WANT_WRITE || err == SSL_ERROR_WANT_READ) {
         break;
       }
-      handleSSLError("SSL write", written);
+      handleSSLError("SSL write", n);
     }
-    totalWritten += written;
+    written += static_cast<size_t>(n);
   }
 
-  return totalWritten;
+  return written;
 }
 
-size_t Socket::handleSSLRead(Buffer &buffer) const {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
+size_t Socket::readWithSSL(Buffer &buffer) const {
+  if (ssl_ == nullptr) {
+    throw SocketError("SSL not initialized");
   }
 
   size_t totalBytes = 0;
-  char tempBuffer[4096];
+  int n             = 0;
 
-  while (true) {
-    int bytes = SSL_read(ssl_.get(), tempBuffer, sizeof(tempBuffer));
-    if (bytes <= 0) {
-      int err = SSL_get_error(ssl_.get(), bytes);
-      if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) {
-        break;
-      }
-      if (bytes < 0) {
-        handleSSLError("SSL read", bytes);
+  do {
+    n = SSL_read(ssl_.get(), readBuffer_.data(), static_cast<int>(readBuffer_.size()));
+    if (n > 0) {
+      buffer.write(readBuffer_.data(), static_cast<size_t>(n));
+      totalBytes += static_cast<size_t>(n);
+    } else if (n < 0) {
+      int err = SSL_get_error(ssl_.get(), n);
+      if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+        handleSSLError("SSL read", n);
       }
       break;
     }
-
-    buffer.write(tempBuffer, bytes);
-    totalBytes += bytes;
-  }
+  } while (static_cast<size_t>(n) == readBuffer_.size());
 
   return totalBytes;
 }
 
-void Socket::handleSSLError(const std::string &operation, int result) const {
+void Socket::handleSSLError(std::string_view operation, int result) const {
   int sslError          = SSL_get_error(ssl_.get(), result);
   unsigned long errCode = ERR_get_error();
 
   if (sslError == SSL_ERROR_SYSCALL && result == 0) {
-    throw SocketException(operation + ": EOF occurred in violation of protocol");
+    throw SocketError(operation, "EOF occurred in violation of protocol");
   }
 
+  std::string errorDetails;
   char errBuf[256];
-  ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
-  std::string errorDetails = errBuf;
 
-  while ((errCode = ERR_get_error()) != 0) {
+  do {
     ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
-    errorDetails += ", " + std::string(errBuf);
-  }
+    if (!errorDetails.empty()) {
+      errorDetails += ", ";
+    }
+    errorDetails += errBuf;
+  } while ((errCode = ERR_get_error()) != 0);
 
-  throw SocketException(operation + ": " + errorDetails);
+  throw SocketError(operation, errorDetails);
 }
 
-void Socket::connectSSL() {
-  if (!ssl_) {
-    throw SocketException("SSL not initialized");
+void Socket::connectSSL() const {
+  if (ssl_ == nullptr) {
+    throw SocketError("SSL not initialized");
   }
 
-  int result = SSL_connect(ssl_.get());
-  if (result != 1) {
-    handleSSLError("SSL connect", result);
+  while (true) {
+    int result = SSL_connect(ssl_.get());
+    if (result == 1) {
+      return;
+    }
+
+    int err = SSL_get_error(ssl_.get(), result);
+    if (err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE) {
+      handleSSLError("SSL connect", result);
+    }
   }
 }
 
-void Socket::setupSSLInfoCallback() {
+void Socket::shutdownSSL() {
+  if (ssl_ != nullptr) {
+    SSL_shutdown(ssl_.get());
+    ssl_.reset();
+  }
+}
+
+bool Socket::isSSLConnected() const noexcept {
+  return ssl_ != nullptr && (SSL_is_init_finished(ssl_.get()) != 0);
+}
+
+void Socket::setupSSLCallback() {
   SharedSslCtx ctx = sslContext_.load(std::memory_order_acquire);
   if (ctx == nullptr) {
-    throw SocketException("SSL context not initialized");
+    throw SocketError("SSL context not initialized");
   }
 
   SSL_CTX_set_info_callback(ctx.get(), [](const SSL *ssl, int where, int ret) {
-    const char *str;
-    int w = where & ~SSL_ST_MASK;
-    if (w & SSL_ST_CONNECT) {
-      str = "SSL_connect";
-    } else if (w & SSL_ST_ACCEPT) {
-      str = "SSL_accept";
+    const char *operation;
+    if (where & SSL_ST_CONNECT) {
+      operation = "connect";
+    } else if (where & SSL_ST_ACCEPT) {
+      operation = "accept";
     } else {
-      str = "undefined";
+      operation = "undefined";
     }
 
     if (where & SSL_CB_LOOP) {
-      LOG_DEBUG(std::string(str) + ":" + SSL_state_string_long(ssl));
+      LOG_DEBUG(std::string(operation) + ": " + SSL_state_string_long(ssl));
     } else if (where & SSL_CB_ALERT) {
-      str = (where & SSL_CB_READ) ? "read" : "write";
+      const char *direction = (where & SSL_CB_READ) ? "read" : "write";
       LOG_DEBUG(
-          "SSL3 alert " + std::string(str) + ":" + SSL_alert_type_string_long(ret) + ":"
+          "SSL alert " + std::string(direction) + ": " + SSL_alert_type_string_long(ret) + ": "
           + SSL_alert_desc_string_long(ret)
       );
     }
   });
 }
 
-bool Socket::loadCertificateAndKey(const std::string &certFile, const std::string &keyFile) {
-  static std::mutex configMutex;
-  std::lock_guard<std::mutex> lock(configMutex);
+bool Socket::loadCertAndKey(std::string_view certFile, std::string_view keyFile) {
+  std::lock_guard<std::mutex> lock(sslMutex_);
 
   SharedSslCtx ctx = sslContext_.load(std::memory_order_acquire);
   if (ctx == nullptr) {
-    throw SocketException("SSL context not initialized");
+    throw SocketError("SSL context not initialized");
   }
 
-  if (SSL_CTX_use_certificate_chain_file(ctx.get(), certFile.c_str()) != 1) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Failed to load certificate chain" + std::to_string(err));
+  if (SSL_CTX_use_certificate_chain_file(ctx.get(), std::string(certFile).c_str()) != 1) {
+    LOG_ERROR("Failed to load certificate chain: " + std::to_string(ERR_get_error()));
     return false;
   }
 
-  if (SSL_CTX_use_PrivateKey_file(ctx.get(), keyFile.c_str(), SSL_FILETYPE_PEM) != 1) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Failed to load private key" + std::to_string(err));
+  if (SSL_CTX_use_PrivateKey_file(ctx.get(), std::string(keyFile).c_str(), SSL_FILETYPE_PEM) != 1) {
+    LOG_ERROR("Failed to load private key: " + std::to_string(ERR_get_error()));
     return false;
   }
 
   if (SSL_CTX_check_private_key(ctx.get()) != 1) {
-    unsigned long err = ERR_get_error();
-    LOG_ERROR("Private key verification failed" + std::to_string(err));
+    LOG_ERROR("Private key verification failed: " + std::to_string(ERR_get_error()));
     return false;
   }
 

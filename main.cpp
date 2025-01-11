@@ -14,6 +14,8 @@ using namespace server;
 
 int main(int argc, char *argv[]) {
   try {
+    LOG_INFO << "Size of Socket: " << sizeof(Socket) << " bytes";
+
     LOG_INFO("Server starting up");
     LOG_INFO("Process ID: " + std::to_string(getpid()));
 

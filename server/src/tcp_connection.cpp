@@ -28,7 +28,7 @@ TcpConnection::TcpConnection(
     , name_(std::move(name))
     , state_(State::kConnecting)
     , socket_(std::move(socket))
-    , channel_(std::make_unique<Channel>(loop, socket_->getSocketFd()))
+    , channel_(std::make_unique<Channel>(loop, socket_->fd()))
     , localAddr_(localAddr)
     , peerAddr_(peerAddr) {
 
@@ -58,7 +58,7 @@ void TcpConnection::enableSSL(const std::string &certFile, const std::string &ke
   if (!socket_) {
     return;
   }
-  socket_->initializeSSL(certFile, keyFile);
+  socket_->initSSL(certFile, keyFile);
 }
 
 void TcpConnection::startSSLHandshake(bool isServer) {
@@ -246,13 +246,13 @@ void TcpConnection::sendInLoop(const void *message, size_t len) {
 
   if (!channel_->isWriting() && outputBuffer_.readableSize() == 0) {
     try {
-      nwrote    = static_cast<ssize_t>(socket_->writeData(message, len));
+      nwrote    = static_cast<ssize_t>(socket_->write(message, len));
       remaining = len - nwrote;
 
       if (remaining == 0 && writeCompleteCallback_) {
         loop_->queueInLoop([this] { writeCompleteCallback_(shared_from_this()); });
       }
-    } catch (const SocketException &e) {
+    } catch (const SocketError &e) {
       nwrote = 0;
       LOG_ERROR("Write error: " + std::string(e.what()));
       if (errno != EWOULDBLOCK) {
@@ -382,13 +382,13 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
   auto guardThis = shared_from_this();
 
   try {
-    auto n = static_cast<ssize_t>(socket_->readData(inputBuffer_));
+    auto n = static_cast<ssize_t>(socket_->read(inputBuffer_));
     if (n > 0) {
       messageCallback_(guardThis, &inputBuffer_, receiveTime);
     } else if (n == 0) {
       loop_->queueInLoop([guardThis] { guardThis->handleClose(); });
     }
-  } catch (const SocketException &e) {
+  } catch (const SocketError &e) {
     LOG_ERROR("Read error: " + std::string(e.what()));
     handleError();
   }
@@ -397,7 +397,7 @@ void TcpConnection::handleRead(TimeStamp receiveTime) {
 void TcpConnection::handleClose() {
   try {
     LOG_DEBUG(
-        "開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->getSocketFd())
+        "開始關閉連接：" + name_ + ", fd=" + std::to_string(socket_->fd())
         + ", current thread id: " + std::to_string(pthread_self())
         + ", loop thread id: " + std::to_string(loop_->getThreadId())
     );

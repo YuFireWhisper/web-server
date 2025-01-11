@@ -55,7 +55,7 @@ private:
   std::unique_ptr<Channel> serverChannel_;
   ConnectionHandler connectionHandler_;
   bool isListening_;
-  ObjectPool<Socket> socketPool_;
+  ObjectPool<Socket, 32768> socketPool_;
 
   std::atomic<int> connectionCount_;
   const int maxAcceptsPerCall_;

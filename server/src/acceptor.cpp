@@ -20,7 +20,7 @@ Acceptor::Acceptor(
 )
     : eventLoop_(eventLoop)
     , serverSocket_(std::make_unique<Socket>())
-    , serverChannel_(std::make_unique<Channel>(eventLoop, serverSocket_->getSocketFd()))
+    , serverChannel_(std::make_unique<Channel>(eventLoop, serverSocket_->fd()))
     , isListening_(false)
     , maxAcceptsPerCall_(config.maxAcceptPerCall)
     , maxConnections_(config.maxConnections) {
@@ -45,7 +45,7 @@ void Acceptor::handleConnection() {
   sockaddr_in addr;
 
   for (int i = 0; i < maxAcceptsPerCall_; ++i) {
-    int connfd = serverSocket_->acceptNewConnection(addr);
+    int connfd = serverSocket_->acceptConnection(addr);
 
     if (connfd < 0) {
       break;
@@ -67,7 +67,7 @@ void Acceptor::handleConnection() {
 }
 
 void Acceptor::processConnection(Socket &&connection, const InetAddress &peerAddress) {
-  int fd = connection.getSocketFd();
+  int fd = connection.fd();
   connection.detachFd();
   if (connectionHandler_) {
     connectionHandler_(fd, peerAddress);
