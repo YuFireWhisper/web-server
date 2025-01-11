@@ -76,6 +76,17 @@ void Socket::startListening(int backlog) const {
   }
 }
 
+int Socket::acceptNewConnection(sockaddr_in &addr) const {
+  socklen_t len = sizeof(addr);
+
+  return ::accept4(
+      socketFd_,
+      reinterpret_cast<sockaddr *>(&addr),
+      &len,
+      SOCK_NONBLOCK | SOCK_CLOEXEC
+  );
+}
+
 Socket Socket::acceptNewConnection() const {
   while (true) {
     int newFd = ::accept4(socketFd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);

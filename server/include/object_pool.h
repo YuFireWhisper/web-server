@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <mutex>
+
 namespace server {
 
 template <typename T, size_t BlockSize = 4096>
@@ -14,7 +15,7 @@ public:
   ObjectPool(size_t initialSize = 1024) { reserve(initialSize); }
 
   ~ObjectPool() {
-    Block *current = pool_.blocks;
+    Block *current = pool_.block;
     while (current != nullptr) {
       Block *next = current->next;
       delete current;
@@ -84,8 +85,8 @@ private:
   void allocateBlock() {
     std::lock_guard lock(pool_.mutex);
     auto *newBlock = new Block();
-    newBlock->next = pool_.blocks;
-    pool_.blocks   = newBlock;
+    newBlock->next = pool_.block;
+    pool_.block    = newBlock;
 
     char *start  = reinterpret_cast<char *>(newBlock->data.data());
     size_t count = BlockSize / sizeof(T);

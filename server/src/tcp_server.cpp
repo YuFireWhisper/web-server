@@ -28,6 +28,7 @@ TcpServer::TcpServer(
     , started_(false)
     , nextConnId_(1) {
   acceptor_->setConnectionHandler([this](int sockfd, const InetAddress &addr) {
+    acceptor_->incrementConnection();
     newConnection(sockfd, addr);
   });
 
@@ -118,8 +119,10 @@ void TcpServer::newConnection(int sockfd, const InetAddress &peerAddr) {
   conn->setConnectionCallback(connectionCallback_);
   conn->setMessageCallback(messageCallback_);
   conn->setWriteCompleteCallback(writeCompleteCallback_);
-  conn->setCloseCallback([this](auto &&PH1) { removeConnection(std::forward<decltype(PH1)>(PH1)); }
-  );
+  conn->setCloseCallback([this](auto &&PH1) {
+    removeConnection(std::forward<decltype(PH1)>(PH1));
+    acceptor_->decrementConnection();
+  });
 
   connections_[connName] = conn;
   ioLoop->runInLoop([conn] { conn->connectEstablished(); });

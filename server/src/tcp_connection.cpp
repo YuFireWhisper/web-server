@@ -361,7 +361,9 @@ void TcpConnection::handleWrite() {
 
 void TcpConnection::handleRead(TimeStamp receiveTime) {
   if (!loop_->isInLoopThread()) {
-    loop_->runInLoop([guardThis = shared_from_this(), receiveTime] { guardThis->handleRead(receiveTime); });
+    loop_->runInLoop([guardThis = shared_from_this(), receiveTime] {
+      guardThis->handleRead(receiveTime);
+    });
     return;
   }
 

@@ -50,6 +50,8 @@ struct ServerConfig {
   int keepAliveIdle       = 60;
   int keepAliveInterval   = 30;
   int keepAliveCount      = 3;
+  int maxConnections      = 1024;
+  int maxAcceptPerCall    = 16;
   bool sslEnable          = false;
   bool sslEnableAutoGen   = true;
   std::string sslKeyType  = "rsaEncryption";

@@ -3,6 +3,7 @@
 #include "include/types.h"
 
 #include <cstddef>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <openssl/ssl.h>
 #include <openssl/types.h>
@@ -33,7 +34,8 @@ public:
   void bindToPort(uint16_t port) const;
   void bindToAddress(const InetAddress &address) const;
   void startListening(int backlog) const;
-  [[nodiscard]] Socket acceptNewConnection() const;
+  [[nodiscard]] int acceptNewConnection(sockaddr_in &addr) const;
+  [[deprecated]] [[nodiscard]] Socket acceptNewConnection() const;
 
   void enableAddressReuse();
   void enablePortReuse();

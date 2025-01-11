@@ -13,11 +13,17 @@
 
 namespace server {
 
-Acceptor::Acceptor(EventLoop *eventLoop, const InetAddress &listenAddress)
+Acceptor::Acceptor(
+    EventLoop *eventLoop,
+    const InetAddress &listenAddress,
+    const ServerConfig &config
+)
     : eventLoop_(eventLoop)
     , serverSocket_(std::make_unique<Socket>())
     , serverChannel_(std::make_unique<Channel>(eventLoop, serverSocket_->getSocketFd()))
-    , isListening_(false) {
+    , isListening_(false)
+    , maxAcceptsPerCall_(config.maxAcceptPerCall)
+    , maxConnections_(config.maxConnections) {
   serverSocket_->enableAddressReuse();
   serverSocket_->enablePortReuse();
   serverSocket_->bindToAddress(listenAddress);
@@ -36,17 +42,27 @@ void Acceptor::startListen() {
 }
 
 void Acceptor::handleConnection() {
-  LOG_DEBUG("Acceptor::handleConnection");
+  sockaddr_in addr;
 
-  try {
-    Socket newConnection    = serverSocket_->acceptNewConnection();
-    InetAddress peerAddress = newConnection.getRemoteAddress();
-    processConnection(std::move(newConnection), peerAddress);
-  } catch (const SocketException &error) {
-    if (errno == EMFILE || errno == ENFILE) {
-      handleResourceLimit(error.what());
+  for (int i = 0; i < maxAcceptsPerCall_; ++i) {
+    int connfd = serverSocket_->acceptNewConnection(addr);
+
+    if (connfd < 0) {
+      break;
     }
-    LOG_ERROR("Accept failed: " + std::string(error.what()));
+
+    if (!handleConnectionLimit()) {
+      ::close(connfd);
+      LOG_WARN("Max connections reached, new connection rejected");
+      break;
+    }
+
+    Socket *sock = socketPool_.acquire();
+    sock->attachFd(connfd);
+
+    if (connectionHandler_) {
+      connectionHandler_(connfd, InetAddress(addr));
+    }
   }
 }
 
@@ -58,9 +74,9 @@ void Acceptor::processConnection(Socket &&connection, const InetAddress &peerAdd
   }
 }
 
-void Acceptor::handleResourceLimit(const std::string &errorMessage) {
-  LOG_FATAL("Resource limit reached: " + errorMessage);
-  abort();
+bool Acceptor::handleConnectionLimit() {
+  int currentConnections = connectionCount_.load();
+  return currentConnections < maxConnections_;
 }
 
 void Acceptor::enablePortReuse() {
