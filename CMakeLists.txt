@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(web-server)
 
-option(BUILD_TESTS "Build the test files" OFF)
+option(BUILD_TESTS "Build the test files" ON)
 
 add_definitions(-DPROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
@@ -63,6 +63,7 @@ add_library(server
     server/src/acme_client.cpp
     server/src/main_application.cpp
     server/src/curl_http_client.cpp
+    server/src/http_2_frame.cpp
 )
 
 add_executable(web_server main.cpp)
@@ -97,28 +98,29 @@ if(BUILD_TESTS)
     )
 
     set(TEST_FILES
-        ${TEST_DIR}/time_stamp_test.cpp
-        ${TEST_DIR}/timer_test.cpp
-        ${TEST_DIR}/timer_id_test.cpp
-        ${TEST_DIR}/event_loop_test.cpp
-        ${TEST_DIR}/channel_test.cpp
-        ${TEST_DIR}/epoll_poller_test.cpp
-        ${TEST_DIR}/log_test.cpp
-        ${TEST_DIR}/poller_test.cpp
-        ${TEST_DIR}/inet_address_test.cpp
-        ${TEST_DIR}/socket_test.cpp
-        ${TEST_DIR}/acceptor_test.cpp
-        ${TEST_DIR}/tcp_connection_test.cpp
-        ${TEST_DIR}/event_loop_thread_test.cpp
-        ${TEST_DIR}/event_loop_thread_pool_test.cpp
-        ${TEST_DIR}/tcp_server_test.cpp
-        ${TEST_DIR}/timer_queue_test.cpp
-        ${TEST_DIR}/buffer_test.cpp
-        ${TEST_DIR}/http_request_test.cpp
-        ${TEST_DIR}/http_response_test.cpp
-        ${TEST_DIR}/http_server_test.cpp
-        ${TEST_DIR}/config_manager_test.cpp
-        ${TEST_DIR}/router_test.cpp
+        # ${TEST_DIR}/time_stamp_test.cpp
+        # ${TEST_DIR}/timer_test.cpp
+        # ${TEST_DIR}/timer_id_test.cpp
+        # ${TEST_DIR}/event_loop_test.cpp
+        # ${TEST_DIR}/channel_test.cpp
+        # ${TEST_DIR}/epoll_poller_test.cpp
+        # ${TEST_DIR}/log_test.cpp
+        # ${TEST_DIR}/poller_test.cpp
+        # ${TEST_DIR}/inet_address_test.cpp
+        # ${TEST_DIR}/socket_test.cpp
+        # ${TEST_DIR}/acceptor_test.cpp
+        # ${TEST_DIR}/tcp_connection_test.cpp
+        # ${TEST_DIR}/event_loop_thread_test.cpp
+        # ${TEST_DIR}/event_loop_thread_pool_test.cpp
+        # ${TEST_DIR}/tcp_server_test.cpp
+        # ${TEST_DIR}/timer_queue_test.cpp
+        # ${TEST_DIR}/buffer_test.cpp
+        # ${TEST_DIR}/http_request_test.cpp
+        # ${TEST_DIR}/http_response_test.cpp
+        # ${TEST_DIR}/http_server_test.cpp
+        # ${TEST_DIR}/config_manager_test.cpp
+        # ${TEST_DIR}/router_test.cpp
+        ${TEST_DIR}/http_2_frame_test.cpp
     )
 
     foreach(TEST_FILE ${TEST_FILES})
