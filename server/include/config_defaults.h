@@ -76,6 +76,26 @@ struct ServerConfig {
   uint16_t sslRenewDays = 30;
   std::string sslEmail;
   int nid = 0;
+
+  uint32_t headerTableSize      = 4 * kKib;
+  bool enablePush               = true;
+  uint32_t maxConcurrentStreams = 100;
+  uint32_t initialWindowSize    = (64 * kKib) - 1;
+  uint32_t maxFrameSize         = 16 * kKib;
+  uint32_t maxHeaderListSize    = 8 * kKib;
+  uint32_t connectionTimeout    = 30 * kMillisecondPerSecond;
+  uint32_t streamTimeout        = 5 * kMillisecondPerSecond;
+  uint32_t writeTimeout         = 1 * kMillisecondPerSecond;
+  uint32_t readTimeout          = 1 * kMillisecondPerSecond;
+
+  uint32_t readBufferSize  = 8 * kKib;
+  uint32_t writeBufferSize = 8 * kKib;
+
+  uint32_t maxHeaderTableSize      = 4 * kKib;
+  uint32_t maxCompressedHeaderSize = 4 * kKib;
+
+  uint32_t maxStreamBufferSize     = 64 * kKib;
+  uint32_t initialStreamWindowSize = 64 * kKib;
 };
 
 struct LocationConfig {
