@@ -22,8 +22,8 @@ protected:
     systemLogPath_ = tempDir_ / "system.log";
     customLogPath_ = tempDir_ / "custom.log";
 
-    Logger::setSystemLogPath(systemLogPath_.string());
-    Logger::clearDefaultOutputFile();
+    log_detail::Logger::setSystemLogPath(systemLogPath_.string());
+    log_detail::Logger::clearDefaultOutputFile();
   }
 
   void TearDown() override { std::filesystem::remove_all(tempDir_); }

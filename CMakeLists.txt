@@ -64,6 +64,7 @@ add_library(server
     server/src/main_application.cpp
     server/src/curl_http_client.cpp
     server/src/http_2_frame.cpp
+    server/src/http_2_flow_controller.cpp
 )
 
 add_executable(web_server main.cpp)
@@ -121,6 +122,7 @@ if(BUILD_TESTS)
         # ${TEST_DIR}/config_manager_test.cpp
         # ${TEST_DIR}/router_test.cpp
         ${TEST_DIR}/http_2_frame_test.cpp
+        ${TEST_DIR}/http_2_flow_controller_test.cpp
     )
 
     foreach(TEST_FILE ${TEST_FILES})

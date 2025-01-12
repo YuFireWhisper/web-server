@@ -56,11 +56,11 @@ private:
         serverSocket_->bindToPort(NetworkTestHelper::allocatePort());
         serverSocket_->startListening(NetworkTestConfig::LISTEN_BACKLOG);
         return;
-      } catch (const SocketException &) {
+      } catch (const SocketError &) {
         if (attempt < NetworkTestConfig::MAX_BIND_ATTEMPTS - 1) {
           std::this_thread::sleep_for(NetworkTestConfig::RETRY_DELAY);
         } else {
-          throw SocketException("Server socket binding failed after maximum attempts");
+          throw SocketError("Server socket binding failed after maximum attempts");
         }
       }
     }

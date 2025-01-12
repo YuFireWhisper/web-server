@@ -42,7 +42,7 @@ public:
 
   std::unique_ptr<Socket> releaseServer() { return std::move(serverSocket); }
 
-  [[nodiscard]] int getClientFd() const { return clientSocket ? clientSocket->getSocketFd() : -1; }
+  [[nodiscard]] int getClientFd() const { return clientSocket ? clientSocket->fd() : -1; }
 
 private:
   std::unique_ptr<Socket> serverSocket;
